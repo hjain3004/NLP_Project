@@ -1,0 +1,15 @@
+{
+  "artifact_type": "preflight",
+  "git_version": "git version 2.50.1 (Apple Git-155)",
+  "nested_branch": "main",
+  "nested_head": "441a6f877409c6abf55a8afdb616b9dd51c528e6",
+  "nested_tracked_clean": true,
+  "nested_untracked": [
+    "?? AppleBooks.xcodeproj/xcuserdata/"
+  ],
+  "python3_version": "Python 3.14.6",
+  "recorded_at": "2026-09-01T19:07:11.033900+00:00",
+  "repository_root": "/Users/himanshu_jain/cashguard",
+  "rg_present": true,
+  "root_was_a_repository": false
+}

@@ -1,0 +1,40 @@
+.DS_Store
+**/.DS_Store
+
+# Xcode user and build state
+**/xcuserdata/
+*.xcuserstate
+DerivedData/
+*.moved-aside
+
+# Swift build output
+.build/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local research source files and generated extraction artifacts
+docs/*.pdf
+docs/pics/
+
+# Large local research extracts — classified level 7, never in a context pack
+docs/ach.md
+docs/ebook.md
+docs/money1.md
+docs/silo.md
+docs/22365_19_Agents_v8.md
+
+# Control-plane runtime state (never authoritative; rebuildable from Git artifacts)
+agent-system/runtime/
+agent-system/work/**/dispatch/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Python development tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
