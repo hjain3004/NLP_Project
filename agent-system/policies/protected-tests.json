@@ -1,0 +1,43 @@
+{
+  "policy_id": "protected-tests-v1",
+  "version": 1,
+  "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a723",
+  "note": "Empty at P0. Entries appear at P2-H, when oracles exist.",
+  "entry_shape": {
+    "path": "string",
+    "sha256": "string",
+    "owning_invariant_ids": [
+      "string"
+    ],
+    "subject_tasks_forbidden": [
+      "string"
+    ],
+    "discovery_assertions": {
+      "target_membership": "string",
+      "scheme_membership": "string",
+      "expected_test_count": "integer"
+    }
+  },
+  "discovery_rationale": "Stops a worker leaving a protected test file untouched while preventing it from running.",
+  "change_protocol": [
+    "a separate task",
+    "explicit rationale",
+    "stronger independent review",
+    "a control-plane hash update",
+    "human approval when an invariant changes"
+  ],
+  "verifier_checks": [
+    "deletion",
+    "renaming",
+    "skipping",
+    "weakened assertions",
+    "broadened tolerances",
+    "changed fixture labels",
+    "test discovery",
+    "target membership",
+    "scheme configuration",
+    "package manifests",
+    "expected test counts"
+  ],
+  "entries": []
+}

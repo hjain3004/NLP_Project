@@ -1,0 +1,65 @@
+{
+  "policy_id": "concurrency-v1",
+  "version": 1,
+  "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a715.1, \u00a717.1",
+  "note": "Operational defaults, not architecture constants. Tune from measurement (P1-D).",
+  "limits": {
+    "active_implementation_workers_global": {
+      "value": 4,
+      "tunable": true
+    },
+    "integration_operations": {
+      "value": 1,
+      "tunable": true
+    },
+    "apple_platform_harness_leases": {
+      "value": 1,
+      "tunable": true
+    },
+    "live_foundation_models_evaluations": {
+      "value": 1,
+      "tunable": true
+    },
+    "concurrent_core_test_jobs": {
+      "value": 2,
+      "tunable": true
+    },
+    "concurrent_full_app_builds": {
+      "value": 1,
+      "tunable": true
+    }
+  },
+  "provider_caps": {},
+  "enforcement_classes": {
+    "proposal_only": {
+      "filesystem_access": false,
+      "shell_access": false,
+      "concurrent": true,
+      "description": "Model returns a patch or typed artifact; agentctl validates paths, hashes, scope, and shape before applying it to the assigned worktree."
+    },
+    "sandboxed_tools": {
+      "filesystem_access": true,
+      "shell_access": true,
+      "concurrent": true,
+      "requires_capability_probe": true,
+      "description": "Enforced read/write and process boundaries scoped to the worktree. Denies other worktrees, the integration checkout, runtime state, and credentials."
+    },
+    "unsandboxed_tools": {
+      "filesystem_access": true,
+      "shell_access": true,
+      "concurrent": false,
+      "global_cap": 1,
+      "forbidden_risk_levels": [
+        "high",
+        "critical"
+      ],
+      "denied_paths": [
+        "integration checkout",
+        "agent-system/runtime",
+        "credentials"
+      ],
+      "description": "Postcondition checks only. Globally serialized and secret-free."
+    }
+  },
+  "postcondition_diff_checks": "mandatory in all classes; supplements rather than replaces containment"
+}

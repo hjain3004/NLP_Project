@@ -1,0 +1,32 @@
+{
+  "policy_id": "budgets-v1",
+  "version": 1,
+  "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a730, \u00a714",
+  "scopes": [
+    "phase",
+    "provider",
+    "model",
+    "work_package",
+    "task",
+    "attempt"
+  ],
+  "attempt_ladder": [
+    "initial implementation",
+    "one local evidence-driven repair",
+    "one capability-escalated attempt"
+  ],
+  "default_maximum_attempts": 3,
+  "raising_ceiling_requires": "a recorded budget decision; an agent cannot extend its own allowance",
+  "work_package_planning_limit": {
+    "planning_passes": 1,
+    "evidence_driven_replans": 1
+  },
+  "architectural_authority_invocation": [
+    "foundational architecture",
+    "invariant changes",
+    "multi-work-package architectural failures",
+    "phase audits",
+    "unrecoverable planning conflicts"
+  ],
+  "retry_without_new_evidence": "forbidden"
+}

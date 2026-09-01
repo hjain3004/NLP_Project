@@ -1,0 +1,48 @@
+{
+  "policy_id": "product-data-boundary-v1",
+  "version": 1,
+  "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a750",
+  "may_receive": [
+    "source code",
+    "synthetic fixtures",
+    "architecture documents",
+    "task contracts",
+    "redacted test output"
+  ],
+  "may_never_receive": [
+    "customer PDFs",
+    "imported document text",
+    "real payment instructions",
+    "account or routing numbers",
+    "production credentials",
+    "persisted application databases",
+    "unredacted model prompts from user documents"
+  ],
+  "independent_of": "the application's runtime local-only guarantee; both hold simultaneously",
+  "enforcement": {
+    "context_compiler": "refuses to include a path outside the allowed roots",
+    "fixture_paths": "a fixture path outside the synthetic fixture roots is a validation error, not a warning",
+    "allowed_context_roots": [
+      "AGENTS.md",
+      "docs/product",
+      "docs/security",
+      "docs/architecture",
+      "docs/decisions",
+      "docs/program",
+      "agent-system",
+      "CashBooksCore",
+      "AppleBooks"
+    ],
+    "excluded_by_default": [
+      "docs/archive",
+      "docs/cashguard_prd_v0.2.md",
+      "docs/pics",
+      "docs/*.pdf",
+      "docs/ach.md",
+      "docs/ebook.md",
+      "docs/money1.md",
+      "docs/silo.md",
+      "docs/22365_19_Agents_v8.md"
+    ]
+  }
+}

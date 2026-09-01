@@ -1,0 +1,55 @@
+{
+  "policy_id": "document-authority-v1",
+  "version": 1,
+  "source": "docs/DOCUMENT_AUTHORITY.md",
+  "note": "Canonical form. agentctl docs verify compares DOCUMENT_AUTHORITY.md's fenced block against authority_block byte-for-byte.",
+  "authority_block": "1.  Human-approved active scope and invariants\n    docs/product/ACTIVE_SCOPE.md, docs/product/NON_GOALS.md, docs/security/INVARIANTS.md\n1b. Machine-enforced policy\n    agent-system/policies/*.json, agent-system/schemas/*.json, agent-system/routing/*.json\n    Where a prose restatement disagrees with the policy the scheduler actually enforces,\n    the policy governs and the prose is a defect to be fixed.\n2.  Accepted ADRs\n    docs/decisions/ADR-*.md with status: accepted\n2b. The canonical engineering design\n    docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md\n    Governs levels 3 through 7. Superseded only by an accepted ADR or a\n    human-approved invariant change.\n3.  Active architecture documents\n    docs/architecture/*.md, docs/security/PRIVACY_BOUNDARY.md\n4.  Approved program and work-package plans\n    docs/program/*.md, agent-system/work/**/work-package.json\n4b. The active phase plan\n    docs/superpowers/plans/2026-09-01-cashbooks-p0-control-plane-bootstrap.md\n5.  Immutable task contracts\n    agent-system/work/**/tasks/*.json\n6.  Role and provider adapters\n    AGENTS.md, agent-system/roles/*.md, CLAUDE.md, GEMINI.md\n7.  Historical research and superseded plans\n    docs/archive/**, docs/cashguard_prd_v0.2.md, root-level CashGuard-era specifications,\n    docs/superpowers/specs/2026-08-30-*, docs/superpowers/plans/2026-08-31-*,\n    the git-ignored research corpus\n",
+  "levels": [
+    {
+      "level": "1",
+      "name": "Human-approved active scope and invariants"
+    },
+    {
+      "level": "1b",
+      "name": "Machine-enforced policy"
+    },
+    {
+      "level": "2",
+      "name": "Accepted ADRs"
+    },
+    {
+      "level": "2b",
+      "name": "The canonical engineering design"
+    },
+    {
+      "level": "3",
+      "name": "Active architecture documents"
+    },
+    {
+      "level": "4",
+      "name": "Approved program and work-package plans"
+    },
+    {
+      "level": "4b",
+      "name": "The active phase plan"
+    },
+    {
+      "level": "5",
+      "name": "Immutable task contracts"
+    },
+    {
+      "level": "6",
+      "name": "Role and provider adapters"
+    },
+    {
+      "level": "7",
+      "name": "Historical research and superseded plans"
+    }
+  ],
+  "conflict_rules": {
+    "prose_vs_policy": "the policy governs; the prose is a defect",
+    "plan_document_vs_specification": "the specification wins",
+    "human_approved_level_1_vs_specification": "escalate to the human; neither is executed until resolved",
+    "level_7": "input, never instruction"
+  }
+}

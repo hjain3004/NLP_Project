@@ -1,0 +1,167 @@
+{
+  "policy_id": "permissions-v1",
+  "version": 1,
+  "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a713.6, \u00a717.1",
+  "note": "No class receives destructive_commands by default. A destructive operation always requires a human-approval reference in the task contract.",
+  "command_classes": {
+    "read": [
+      "cat",
+      "head",
+      "tail",
+      "ls",
+      "find",
+      "rg",
+      "wc"
+    ],
+    "build": [
+      "swift build",
+      "xcodebuild build"
+    ],
+    "test": [
+      "swift test",
+      "xcodebuild test",
+      "python3 -m unittest"
+    ],
+    "git_read": [
+      "git status",
+      "git diff",
+      "git log",
+      "git show",
+      "git rev-parse"
+    ],
+    "git_write_worktree": [
+      "git add",
+      "git commit",
+      "git checkout"
+    ]
+  },
+  "by_capability_class": {
+    "architectural_authority": {
+      "tool_allowlist": [
+        "read",
+        "search"
+      ],
+      "command_allowlist": [
+        "read",
+        "git_read"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "none",
+      "destructive_commands": false,
+      "external_side_effects": false
+    },
+    "work_package_planning": {
+      "tool_allowlist": [
+        "read",
+        "search"
+      ],
+      "command_allowlist": [
+        "read",
+        "git_read"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "none",
+      "destructive_commands": false,
+      "external_side_effects": false
+    },
+    "complex_implementation": {
+      "tool_allowlist": [
+        "read",
+        "search",
+        "edit",
+        "write",
+        "shell"
+      ],
+      "command_allowlist": [
+        "read",
+        "build",
+        "test",
+        "git_read",
+        "git_write_worktree"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "task_owned_only",
+      "destructive_commands": false,
+      "external_side_effects": false
+    },
+    "standard_implementation": {
+      "tool_allowlist": [
+        "read",
+        "search",
+        "edit",
+        "write",
+        "shell"
+      ],
+      "command_allowlist": [
+        "read",
+        "build",
+        "test",
+        "git_read",
+        "git_write_worktree"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "task_owned_only",
+      "destructive_commands": false,
+      "external_side_effects": false
+    },
+    "mechanical_execution": {
+      "tool_allowlist": [
+        "read",
+        "search",
+        "edit",
+        "write"
+      ],
+      "command_allowlist": [
+        "read",
+        "git_read",
+        "git_write_worktree"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "none",
+      "destructive_commands": false,
+      "external_side_effects": false
+    },
+    "verifier": {
+      "tool_allowlist": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "command_allowlist": [
+        "read",
+        "build",
+        "test",
+        "git_read"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "none",
+      "destructive_commands": false,
+      "external_side_effects": false
+    },
+    "integrator": {
+      "tool_allowlist": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "command_allowlist": [
+        "read",
+        "build",
+        "test",
+        "git_read",
+        "git_write_worktree"
+      ],
+      "network": false,
+      "secret_access": false,
+      "may_modify_tests": "none",
+      "destructive_commands": false,
+      "external_side_effects": false
+    }
+  }
+}
