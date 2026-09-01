@@ -1,3 +1,7 @@
+> **Authority: Reference (2026-09-01).** July 2026 product invariants. The authoritative catalogue is docs/security/INVARIANTS.md; decisions here are re-adopted only by explicit incorporation.
+> The active authority order is defined in [docs/DOCUMENT_AUTHORITY.md](docs/DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # DESIGN_SPEC.md — CashGuard Visual & UX System (v1.0)
 
 Authority: this document governs all UI decisions. `TECH_SPEC.md` governs code structure; this governs what the user sees. Where they touch (view names, screen list), TECH_SPEC wins on naming, this wins on appearance and copy.

@@ -1,3 +1,7 @@
+> **Authority: Deferred (2026-09-01).** No infrastructure work is authorized before the recruiter-release program, which is itself deferred past G3.
+> The active authority order is defined in [docs/DOCUMENT_AUTHORITY.md](docs/DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # CashGuard Infrastructure Plan — from laptop to App Store
 
 Written for an infra beginner. Three stages. Each stage is complete on its own; do not start a stage until the previous one is genuinely needed. The governing principle: **boring infrastructure, sized to reality.** CashGuard's backend is one small stateless-ish API plus one small database. Nothing about it needs Kubernetes, service meshes, or multi-region anything.

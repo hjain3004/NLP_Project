@@ -1,3 +1,7 @@
+> **Authority: Historical / future context (2026-09-01).** The full CashGuard PRD, describing a substantially wider product than the authorized milestone.
+> The active authority order is defined in [DOCUMENT_AUTHORITY.md](DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # CashGuard PRD
 
 **Project:** CashGuard  

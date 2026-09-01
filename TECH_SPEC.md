@@ -1,3 +1,7 @@
+> **Authority: Reference (2026-09-01).** July 2026 technical decisions, re-adopted only by explicit incorporation into a current document.
+> The active authority order is defined in [docs/DOCUMENT_AUTHORITY.md](docs/DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # TECH_SPEC.md — CashGuard Technical Specification (v1.0)
 
 Companion to `cashguard_prd_v0_2.md`. Every decision here is FINAL unless it contradicts the PRD's Authority Matrix or security sections. The implementing agent follows this without re-deliberating. PRD section references are given as (PRD §x).

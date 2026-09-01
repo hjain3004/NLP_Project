@@ -1,3 +1,7 @@
+> **Authority: Historical (2026-09-01).** A serial task inventory. The active program is a dependency DAG with gates, not a list.
+> The active authority order is defined in [docs/DOCUMENT_AUTHORITY.md](docs/DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # TASKS.md — CashGuard Gated Task Breakdown
 
 Execute in order. Each task lists: spec references → deliverables → GATE (commands that must pass + criteria). Do not start a task until the previous task's gate is green or the task is formally BLOCKED per CLAUDE.md. Tasks marked ∥ may be done in either order within their phase.

@@ -1,3 +1,7 @@
+> **Authority: Historical (2026-09-01).** CashGuard-era bootstrap sequence, describing a project start that has since happened differently.
+> The active authority order is defined in [docs/DOCUMENT_AUTHORITY.md](docs/DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # BOOTSTRAP.md — Before the first line of code
 
 This is the only document written for **you** (Himanshu), not for the implementing agent. It covers the things an agent cannot do for you, the exact first-session sequence, and the review protocol that keeps you out of the weeds.
