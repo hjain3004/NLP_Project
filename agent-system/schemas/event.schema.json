@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "event.schema.json",
+  "title": "Event",
+  "description": "Append-only record written in the same transaction as the state change. REJECTED if any key matches the denylist [text, content, body, transcript, reasoning, raw, pii, prompt] or any string value exceeds 2048 bytes. No document contents, secrets, hidden reasoning, or raw PII \u2014 concise rationales and evidence references only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_type",
+    "event_id",
+    "trace_id",
+    "occurred_at",
+    "actor_role",
+    "repository_commits",
+    "artifact_refs",
+    "reason_code",
+    "event_type"
+  ],
+  "properties": {
+    "artifact_type": {
+      "const": "event",
+      "description": "Discriminator. agentctl selects the schema from this value."
+    },
+    "event_id": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "task_id": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "attempt_id": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "work_package_id": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "phase_id": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "actor_role": {
+      "type": "string"
+    },
+    "provider": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model_version": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prior_state": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "next_state": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "contract_hash": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "context_hash": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "repository_commits": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{40}$"
+      }
+    },
+    "artifact_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reason_code": {
+      "type": "string",
+      "description": "e.g. path_lock_conflict, semantic_lock_conflict, stale_fencing_token, self_review_rejected, context_stale, permission_violation."
+    },
+    "event_type": {
+      "type": "string"
+    }
+  }
+}

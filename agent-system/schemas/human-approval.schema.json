@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "human-approval.schema.json",
+  "title": "Human approval",
+  "description": "The only mechanism by which a human decision enters the system. See ADR-0005: the seal is an HMAC-SHA256 keyed MAC, not a digital signature.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_type",
+    "approval_id",
+    "schema_version",
+    "approver_principal",
+    "machine_identity",
+    "authentication_method",
+    "authenticated_at",
+    "authorized_action",
+    "target_type",
+    "target_id",
+    "target_hash",
+    "scope",
+    "reason",
+    "issued_at",
+    "expires_at",
+    "single_use",
+    "nonce",
+    "control_plane_seal"
+  ],
+  "properties": {
+    "artifact_type": {
+      "const": "human-approval",
+      "description": "Discriminator. agentctl selects the schema from this value."
+    },
+    "approval_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer"
+    },
+    "approver_principal": {
+      "type": "string"
+    },
+    "machine_identity": {
+      "type": "string"
+    },
+    "authentication_method": {
+      "type": "string",
+      "enum": [
+        "interactive_tty_with_key_unlock",
+        "keychain_backed",
+        "local_authentication"
+      ]
+    },
+    "authenticated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authorized_action": {
+      "type": "string",
+      "enum": [
+        "phase_authorization",
+        "work_package_authorization",
+        "scope_authorization",
+        "invariant_change",
+        "protected_test_change",
+        "schema_commitment",
+        "destructive_operation",
+        "release_or_public_claim"
+      ]
+    },
+    "target_type": {
+      "type": "string"
+    },
+    "target_id": {
+      "type": "string"
+    },
+    "target_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scope": {
+      "type": "string"
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reason": {
+      "type": "string"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "single_use": {
+      "type": "boolean"
+    },
+    "consumed_at": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revoked_at": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revocation_reason": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "control_plane_seal": {
+      "type": "string",
+      "description": "HMAC-SHA256, hex. Not a digital signature (ADR-0005).",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

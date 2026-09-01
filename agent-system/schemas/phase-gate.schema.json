@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "phase-gate.schema.json",
+  "title": "Phase gate",
+  "description": "Criteria and result for one gate. The criteria file carries no results; agentctl gate writes a separate result file so an approval can bind an immutable target.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_type",
+    "gate_id",
+    "phase_id",
+    "criteria"
+  ],
+  "properties": {
+    "artifact_type": {
+      "const": "phase-gate",
+      "description": "Discriminator. agentctl selects the schema from this value."
+    },
+    "gate_id": {
+      "type": "string"
+    },
+    "phase_id": {
+      "type": "string"
+    },
+    "evaluated_at": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "evaluated_against_commit": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "criterion_id": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "derived_from": {
+            "type": "string",
+            "description": "Set when one design criterion is split into sub-criteria."
+          },
+          "evidence_type": {
+            "type": "string",
+            "enum": [
+              "deterministic_check",
+              "artifact",
+              "manual_attestation",
+              "human_approval"
+            ]
+          },
+          "evidence_command": {
+            "type": "string",
+            "description": "Re-executed by agentctl gate from the trusted base."
+          },
+          "expected_exit_code": {
+            "type": "integer"
+          },
+          "evidence_ref": {
+            "type": "string"
+          },
+          "evidence_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "not_applicable",
+              "open"
+            ],
+            "description": "Written by agentctl gate. Discarded and recomputed if supplied."
+          }
+        },
+        "required": [
+          "criterion_id",
+          "statement",
+          "evidence_type"
+        ]
+      },
+      "minItems": 1
+    },
+    "architecture_audit_ref": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "human_approval_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gate_result": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "open"
+      ]
+    }
+  }
+}

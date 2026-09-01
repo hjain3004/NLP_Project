@@ -1,0 +1,470 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-contract.schema.json",
+  "title": "Task contract",
+  "description": "The immutable unit of dispatched work. Nine sections, all required.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_type",
+    "identity",
+    "intent",
+    "dependencies",
+    "scope",
+    "routing",
+    "permissions",
+    "verification",
+    "budgets",
+    "escalation"
+  ],
+  "properties": {
+    "artifact_type": {
+      "const": "task-contract",
+      "description": "Discriminator. agentctl selects the schema from this value."
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "string"
+        },
+        "work_package_id": {
+          "type": "string"
+        },
+        "contract_version": {
+          "type": "integer"
+        },
+        "contract_hash": {
+          "type": "string",
+          "description": "sha256_of_json over this contract with contract_hash removed.",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "base_commit": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "const": "unbound"
+            }
+          ],
+          "description": "'unbound' permitted only while status is 'proposed'."
+        },
+        "execution_mode": {
+          "type": "string",
+          "enum": [
+            "control_plane",
+            "bootstrap_retrospective"
+          ],
+          "description": "bootstrap_retrospective records intent only: no lease, attempt, or review is asserted."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "proposed",
+            "validated",
+            "authorized",
+            "active",
+            "complete",
+            "canceled"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "task_id",
+        "work_package_id",
+        "contract_version",
+        "contract_hash",
+        "base_commit",
+        "execution_mode",
+        "status",
+        "created_at"
+      ]
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "objective": {
+          "type": "string",
+          "description": "Exactly one objective."
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "non_goals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptance_behavior": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "relevant_decisions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "objective",
+        "rationale",
+        "non_goals",
+        "acceptance_behavior"
+      ]
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "consumes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]+:[a-z0-9-]+@[0-9]+$"
+          }
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "integration_order": {
+          "type": "integer"
+        },
+        "invalidation_triggers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "requires",
+        "consumes",
+        "produces"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "readable_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+          }
+        },
+        "writable_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+          }
+        },
+        "prohibited_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+          }
+        },
+        "semantic_locks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expected_change_shape": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "readable_paths",
+        "writable_paths",
+        "prohibited_paths",
+        "semantic_locks"
+      ]
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capability_class": {
+          "type": "string",
+          "enum": [
+            "architectural_authority",
+            "work_package_planning",
+            "complex_implementation",
+            "standard_implementation",
+            "mechanical_execution"
+          ]
+        },
+        "complexity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "risk": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "required_skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preferred_worker": {
+          "type": "string"
+        },
+        "minimum_reviewer_class": {
+          "type": "string"
+        },
+        "required_provider_diversity": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "capability_class",
+        "complexity",
+        "risk",
+        "minimum_reviewer_class"
+      ]
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "boolean",
+          "default": false
+        },
+        "secret_access": {
+          "const": false,
+          "description": "No task contract grants secret access."
+        },
+        "may_modify_tests": {
+          "type": "string",
+          "enum": [
+            "none",
+            "task_owned_only",
+            "protected_with_approval"
+          ]
+        },
+        "destructive_commands": {
+          "type": "boolean"
+        },
+        "external_side_effects": {
+          "type": "boolean"
+        },
+        "enforcement_class": {
+          "type": "string",
+          "enum": [
+            "proposal_only",
+            "sandboxed_tools",
+            "unsandboxed_tools"
+          ],
+          "description": "risk 'critical' forbids unsandboxed_tools (enforced in validate.py)."
+        },
+        "required_human_approval_action": {
+          "type": "string"
+        },
+        "human_approval_ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_allowlist",
+        "command_allowlist",
+        "network",
+        "secret_access",
+        "may_modify_tests",
+        "destructive_commands",
+        "external_side_effects",
+        "enforcement_class"
+      ]
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deterministic_checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "behavioral_requirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protected_checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "manual_checkpoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expected_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "definition_of_done": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "deterministic_checks",
+        "behavioral_requirements",
+        "protected_checks",
+        "expected_artifacts",
+        "definition_of_done"
+      ]
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maximum_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 3
+        },
+        "maximum_repair_cycles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "maximum_artifact_corrections": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "wall_clock_class": {
+          "type": "string"
+        },
+        "token_class": {
+          "type": "string"
+        },
+        "context_size_ceiling": {
+          "type": "integer"
+        },
+        "tool_call_ceiling": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "maximum_attempts",
+        "maximum_repair_cycles",
+        "maximum_artifact_corrections",
+        "wall_clock_class",
+        "token_class"
+      ]
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local_repair_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "capability_escalation_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "replan_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "architecture_escalation_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "human_approval_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "local_repair_conditions",
+        "capability_escalation_conditions",
+        "replan_conditions",
+        "architecture_escalation_conditions",
+        "human_approval_conditions"
+      ]
+    }
+  }
+}
