@@ -1,0 +1,19 @@
+{
+  "policy_id": "champion-challenger-v1",
+  "version": 1,
+  "source": "design \u00a729",
+  "sample_scope": [
+    "low_risk",
+    "medium_risk"
+  ],
+  "challenger_merge_eligible": false,
+  "challenger_mode": "frozen shadow attempt, compared by a deterministic evaluator",
+  "promotion_requires": [
+    "a representative sample",
+    "zero critical violations",
+    "acceptable review burden"
+  ],
+  "demotion_trigger": "any critical violation, immediately",
+  "duplicate_execution": "evaluation_tool_not_routine",
+  "budgeted": true
+}

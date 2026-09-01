@@ -1,0 +1,123 @@
+{
+  "policy_id": "metrics-v1",
+  "version": 1,
+  "source": "design \u00a728",
+  "note": "Definitions only. Every baseline is null and stays null until real task data exists. An invented baseline is indistinguishable from a measured one downstream.",
+  "evaluated_separately": [
+    "planner quality",
+    "implementation quality",
+    "reviewer defect detection",
+    "integration correctness"
+  ],
+  "metrics": {
+    "first_pass_acceptance": {
+      "definition": "Fraction of attempts accepted with no repair",
+      "unit": "ratio",
+      "source_events": [
+        "attempt_completed",
+        "review_verdict"
+      ],
+      "baseline": null
+    },
+    "success_after_one_repair": {
+      "definition": "Fraction accepted after exactly one repair",
+      "unit": "ratio",
+      "source_events": [
+        "attempt_completed",
+        "repair_started"
+      ],
+      "baseline": null
+    },
+    "blocking_findings": {
+      "definition": "Blocking findings per accepted task",
+      "unit": "count",
+      "source_events": [
+        "review_verdict"
+      ],
+      "baseline": null
+    },
+    "escaped_defects": {
+      "definition": "Defects found after integration",
+      "unit": "count",
+      "source_events": [
+        "integration_completed",
+        "gate_failed"
+      ],
+      "baseline": null
+    },
+    "protected_test_violations": {
+      "definition": "Attempts that modified or de-registered a protected test",
+      "unit": "count",
+      "source_events": [
+        "permission_violation"
+      ],
+      "baseline": null
+    },
+    "scope_violations": {
+      "definition": "Attempts writing outside the declared write set",
+      "unit": "count",
+      "source_events": [
+        "permission_violation"
+      ],
+      "baseline": null
+    },
+    "integration_conflicts": {
+      "definition": "Candidates conflicting at fan-in",
+      "unit": "count",
+      "source_events": [
+        "integration_conflict"
+      ],
+      "baseline": null
+    },
+    "accepted_result_latency": {
+      "definition": "Wall-clock from dispatch to completed",
+      "unit": "seconds",
+      "source_events": [
+        "task_dispatched",
+        "task_completed"
+      ],
+      "baseline": null
+    },
+    "tokens": {
+      "definition": "Input plus output tokens per accepted task",
+      "unit": "tokens",
+      "source_events": [
+        "model_run"
+      ],
+      "baseline": null
+    },
+    "monetary_cost": {
+      "definition": "Provider cost per accepted task",
+      "unit": "usd",
+      "source_events": [
+        "model_run"
+      ],
+      "baseline": null
+    },
+    "cost_per_accepted_task": {
+      "definition": "Total cost divided by accepted tasks",
+      "unit": "usd",
+      "source_events": [
+        "model_run",
+        "task_completed"
+      ],
+      "baseline": null
+    },
+    "human_review_minutes": {
+      "definition": "Human attention spent per accepted task",
+      "unit": "minutes",
+      "source_events": [
+        "human_gate"
+      ],
+      "baseline": null
+    },
+    "failure_distribution": {
+      "definition": "Failures by error-taxonomy category",
+      "unit": "distribution",
+      "source_events": [
+        "attempt_failed"
+      ],
+      "baseline": null
+    }
+  }
+}
