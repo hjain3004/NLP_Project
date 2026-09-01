@@ -1,0 +1,13 @@
+{
+  "applebooks_subtree": "a8a08f8f928233100790ba84d73b8c550491eace",
+  "artifact_type": "migration",
+  "bundle_sha256": "981c7d14bcc5a0cf88ed343053ba5d5e8d7030a1c4075efd8f5e655803c41f36",
+  "import_commit": "6a203324f46e26edccf4da258e9210695bbef3aa",
+  "import_second_parent": "441a6f877409c6abf55a8afdb616b9dd51c528e6",
+  "imported_tree": "a8a08f8f928233100790ba84d73b8c550491eace",
+  "nested_git_removed": true,
+  "nested_head": "441a6f877409c6abf55a8afdb616b9dd51c528e6",
+  "recorded_at": "2026-09-01T19:19:54.204906+00:00",
+  "recoverable_bundle": "/Users/himanshu_jain/cashbooks-migration-backup-2026-09-01/applebooks.bundle",
+  "subtree_identical": true
+}
