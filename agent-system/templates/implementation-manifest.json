@@ -1,0 +1,54 @@
+{
+  "artifact_type": "implementation-manifest",
+  "task_id": "REPLACE:task identifier",
+  "attempt_id": "REPLACE:attempt identifier",
+  "lease_id": "REPLACE:lease identifier",
+  "lease_epoch": "REPLACE:integer lease epoch",
+  "fencing_token": "REPLACE:opaque fencing token",
+  "worker_role": "REPLACE:worker role",
+  "provider": "REPLACE:provider",
+  "model": "REPLACE:model",
+  "model_version": "REPLACE:exact model version",
+  "contract_hash": "REPLACE:64-character contract SHA-256",
+  "context_hash": "REPLACE:64-character context SHA-256",
+  "base_commit": "REPLACE:40-character base commit SHA",
+  "result_commit": "REPLACE:40-character result commit SHA",
+  "files_changed": [
+    {
+      "path": "REPLACE:changed relative path",
+      "change_type": "REPLACE:added, modified, deleted, or renamed"
+    }
+  ],
+  "commands_executed": [
+    {
+      "command": "REPLACE:executed command",
+      "exit_code": "REPLACE:integer exit code",
+      "duration_ms": "REPLACE:integer duration in milliseconds"
+    }
+  ],
+  "acceptance_criteria_addressed": [
+    "REPLACE:addressed criterion"
+  ],
+  "assumptions": [
+    "REPLACE:assumption or remove this entry"
+  ],
+  "decisions": [
+    "REPLACE:bounded decision or remove this entry"
+  ],
+  "deviations": [
+    "REPLACE:deviation or remove this entry"
+  ],
+  "discovered_dependencies": [
+    "REPLACE:dependency or remove this entry"
+  ],
+  "unresolved_risks": [
+    "REPLACE:risk or remove this entry"
+  ],
+  "usage": {
+    "input_tokens": "REPLACE:integer input token count",
+    "output_tokens": "REPLACE:integer output token count",
+    "latency_ms": "REPLACE:integer latency in milliseconds",
+    "cost_usd": "REPLACE:numeric cost in USD"
+  },
+  "termination_reason": "REPLACE:allowed termination reason"
+}

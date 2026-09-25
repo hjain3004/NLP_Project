@@ -1,0 +1,40 @@
+{
+  "artifact_type": "architecture-audit",
+  "audit_id": "REPLACE:audit identifier",
+  "gate_id": "REPLACE:gate identifier",
+  "pass_id": "REPLACE:pass identifier",
+  "auditor_role": "REPLACE:auditor role",
+  "auditor_provider": "REPLACE:auditor provider",
+  "auditor_model": "REPLACE:auditor model",
+  "auditor_session_id": "REPLACE:fresh auditor session identifier",
+  "auditor_run_id": "REPLACE:fresh auditor run identifier",
+  "audited_commit": "REPLACE:40-character audited commit SHA",
+  "audited_tree_hash": "REPLACE:40-character audited tree hash",
+  "artifact_families": [
+    "REPLACE:audited artifact family"
+  ],
+  "decision_coverage": [
+    {
+      "decision_id": "REPLACE:decision identifier",
+      "assessment": "REPLACE:implemented, deviates, or deferred",
+      "evidence_ref": "REPLACE:evidence reference"
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "REPLACE:finding identifier",
+      "severity": "REPLACE:critical, important, minor, or nit",
+      "violated_criterion": "REPLACE:violated criterion",
+      "reproducible_evidence": "REPLACE:reproducible evidence",
+      "observed_behavior": "REPLACE:observed behavior",
+      "required_behavior": "REPLACE:required behavior",
+      "required_outcome": "REPLACE:required outcome",
+      "blocking": "REPLACE:true or false"
+    }
+  ],
+  "verdict": "REPLACE:allowed audit verdict",
+  "independence_attestation": {
+    "fresh_session": "REPLACE:true only for a fresh session",
+    "distinct": "REPLACE:true only when independent"
+  }
+}

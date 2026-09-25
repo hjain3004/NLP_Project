@@ -1,0 +1,31 @@
+{
+  "artifact_type": "implementation-manifest",
+  "task_id": "FIXTURE-TASK",
+  "attempt_id": "FIXTURE-ATTEMPT-1",
+  "lease_id": "FIXTURE-LEASE-1",
+  "lease_epoch": 1,
+  "fencing_token": "superseded-fixture-token",
+  "worker_role": "mechanical_execution",
+  "provider": "fixture-provider",
+  "model": "fixture-model",
+  "model_version": "fixture-version",
+  "contract_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "context_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "base_commit": "0000000000000000000000000000000000000000",
+  "result_commit": "3333333333333333333333333333333333333333",
+  "files_changed": [],
+  "commands_executed": [],
+  "acceptance_criteria_addressed": [],
+  "assumptions": [],
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "unresolved_risks": [],
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "latency_ms": 0,
+    "cost_usd": 0
+  },
+  "termination_reason": "completed"
+}

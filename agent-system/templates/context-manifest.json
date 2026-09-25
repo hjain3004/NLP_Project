@@ -1,0 +1,71 @@
+{
+  "artifact_type": "context-manifest",
+  "context_hash": "REPLACE:64-character canonical SHA-256",
+  "task_id": "REPLACE:task identifier",
+  "attempt_id": "REPLACE:attempt identifier",
+  "compiled_at": "REPLACE:RFC 3339 timestamp",
+  "role": "REPLACE:worker role",
+  "inputs": {
+    "authority_excerpt": {
+      "path": "REPLACE:authority excerpt path",
+      "sha256": "REPLACE:64-character SHA-256",
+      "bytes": "REPLACE:integer byte count"
+    },
+    "role_contract": {
+      "path": "REPLACE:role contract path",
+      "sha256": "REPLACE:64-character SHA-256",
+      "bytes": "REPLACE:integer byte count"
+    },
+    "task_contract": {
+      "path": "REPLACE:task contract path",
+      "sha256": "REPLACE:64-character SHA-256",
+      "bytes": "REPLACE:integer byte count"
+    },
+    "decisions": [
+      {
+        "path": "REPLACE:decision path",
+        "sha256": "REPLACE:64-character SHA-256",
+        "bytes": "REPLACE:integer byte count"
+      }
+    ],
+    "consumed_interfaces": [
+      {
+        "path": "REPLACE:consumed interface path",
+        "sha256": "REPLACE:64-character SHA-256",
+        "bytes": "REPLACE:integer byte count"
+      }
+    ],
+    "dependency_manifests": [
+      {
+        "path": "REPLACE:dependency manifest path",
+        "sha256": "REPLACE:64-character SHA-256",
+        "bytes": "REPLACE:integer byte count"
+      }
+    ],
+    "failure_lessons": [
+      {
+        "path": "REPLACE:failure lesson path",
+        "sha256": "REPLACE:64-character SHA-256",
+        "bytes": "REPLACE:integer byte count"
+      }
+    ],
+    "base_commit_summary": {
+      "path": "REPLACE:base commit summary path",
+      "sha256": "REPLACE:64-character SHA-256",
+      "bytes": "REPLACE:integer byte count"
+    },
+    "permissions": {
+      "path": "REPLACE:permissions path",
+      "sha256": "REPLACE:64-character SHA-256",
+      "bytes": "REPLACE:integer byte count"
+    },
+    "budgets_and_output_schema": {
+      "path": "REPLACE:budget and output schema path",
+      "sha256": "REPLACE:64-character SHA-256",
+      "bytes": "REPLACE:integer byte count"
+    }
+  },
+  "excluded_by_policy": [
+    "REPLACE:each excluded policy class"
+  ]
+}

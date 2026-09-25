@@ -1,0 +1,23 @@
+{
+  "artifact_type": "phase-gate",
+  "gate_id": "REPLACE:gate identifier",
+  "phase_id": "REPLACE:phase identifier",
+  "evaluated_at": null,
+  "evaluated_against_commit": null,
+  "criteria": [
+    {
+      "criterion_id": "REPLACE:criterion identifier",
+      "statement": "REPLACE:criterion statement",
+      "evidence_type": "REPLACE:allowed evidence type",
+      "evidence_command": "REPLACE:trusted evidence command when deterministic",
+      "expected_exit_code": "REPLACE:integer expected exit code",
+      "evidence_ref": "REPLACE:evidence reference when applicable",
+      "evidence_hash": "REPLACE:64-character evidence SHA-256 when applicable"
+    }
+  ],
+  "architecture_audit_ref": null,
+  "human_approval_refs": [
+    "REPLACE:human approval reference when applicable"
+  ],
+  "gate_result": "REPLACE:passed, failed, or open"
+}

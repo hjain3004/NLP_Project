@@ -1,0 +1,27 @@
+{
+  "artifact_type": "integration-manifest",
+  "integration_id": "REPLACE:integration identifier",
+  "task_id": "REPLACE:task identifier",
+  "integrator_role": "REPLACE:integrator role",
+  "integrator_session_id": "REPLACE:integrator session identifier",
+  "candidate_result_commit": "REPLACE:40-character candidate commit SHA",
+  "reviewed_diff_hash": "REPLACE:64-character reviewed diff SHA-256",
+  "review_id": "REPLACE:review identifier",
+  "integration_base_commit": "REPLACE:40-character integration base SHA",
+  "integration_commit": "REPLACE:40-character integration commit SHA",
+  "merge_strategy": "conflict_free_preserving_candidate",
+  "candidate_patch_unchanged": true,
+  "dependency_interface_hashes": [
+    {
+      "interface": "REPLACE:interface name and version",
+      "hash": "REPLACE:64-character interface SHA-256"
+    }
+  ],
+  "affected_gates_rerun": [
+    {
+      "gate": "REPLACE:gate identifier",
+      "result": "REPLACE:pass or fail"
+    }
+  ],
+  "completed_at": "REPLACE:RFC 3339 timestamp"
+}
