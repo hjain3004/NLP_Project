@@ -1,0 +1,22 @@
+{
+  "artifact_type": "phase-gate",
+  "gate_id": "EX-GATE-001",
+  "phase_id": "P0",
+  "evaluated_at": "2026-09-01T00:25:00Z",
+  "evaluated_against_commit": "623601c1937612a14f0cf247b316f42e909f598c",
+  "criteria": [
+    {
+      "criterion_id": "EX-GATE-001-01",
+      "statement": "The standalone example artifacts are structurally valid",
+      "evidence_type": "artifact",
+      "evidence_ref": "agent-system/examples/valid/06-integration-manifest.json",
+      "evidence_hash": "e80e120a5d26cc0b89cc31200549ac2625cfcb1b858265f31a1982596a3b2481",
+      "result": "pass"
+    }
+  ],
+  "architecture_audit_ref": null,
+  "human_approval_refs": [
+    "agent-system/examples/valid/08-human-approval.json"
+  ],
+  "gate_result": "passed"
+}

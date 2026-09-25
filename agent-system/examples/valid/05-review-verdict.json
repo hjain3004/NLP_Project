@@ -1,0 +1,25 @@
+{
+  "artifact_type": "review-verdict",
+  "review_id": "EX-DOC-001-R1",
+  "task_id": "EX-DOC-001",
+  "attempt_id": "EX-DOC-001-A1",
+  "reviewer_role": "verifier",
+  "reviewer_provider": "independent-fixture-provider",
+  "reviewer_model": "independent-fixture-model",
+  "reviewer_session_id": "independent-fixture-session",
+  "reviewer_run_id": "independent-fixture-run",
+  "reviewed_result_commit": "623601c1937612a14f0cf247b316f42e909f598c",
+  "tree_hash": "666243f31e5c901584bfb541bd2f241123ada862",
+  "diff_hash": "99008b9bf8e6e50c35e5c989a3cb5e45ac5f3783b621472a4f7b7fcd9749c73a",
+  "declared_base_commit": "3e49a7a082b263bf0682b766e49f47633e242ee2",
+  "contract_hash": "c460f2b334ed96f0d78d59826eb97b6f50655003473b855fb61a9ca7f51bb7af",
+  "context_hash": "b814f7079de33fdb6a9f0f656c51292f7a9a76624a560da811abcc66be582952",
+  "verification_evidence_hash": "f526902047eb39156699938fba24a11b6cab256c27a76ffb29386f6806e2233f",
+  "findings": [],
+  "verdict": "no_blocking_findings",
+  "independence_attestation": {
+    "author_session_id": "fixture-author-session",
+    "author_run_id": "fixture-author-run",
+    "distinct": true
+  }
+}

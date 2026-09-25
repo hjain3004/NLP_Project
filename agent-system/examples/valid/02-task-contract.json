@@ -1,0 +1,117 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "EX-DOC-001",
+    "work_package_id": "EX-WP-DOC",
+    "contract_version": 1,
+    "contract_hash": "c460f2b334ed96f0d78d59826eb97b6f50655003473b855fb61a9ca7f51bb7af",
+    "base_commit": "3e49a7a082b263bf0682b766e49f47633e242ee2",
+    "execution_mode": "control_plane",
+    "status": "complete",
+    "created_at": "2026-09-01T00:00:00Z",
+    "expires_at": "2099-09-01T00:00:00Z"
+  },
+  "intent": {
+    "objective": "Append one synthetic documentation line to the examples index",
+    "rationale": "Exercise the complete artifact lifecycle without touching application code",
+    "non_goals": [
+      "Application source changes",
+      "Product or architecture decisions"
+    ],
+    "acceptance_behavior": [
+      "The documentation-only candidate is independently reviewed and integrated"
+    ],
+    "relevant_decisions": [
+      "ADR-0001"
+    ]
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "artifact:documentation-example"
+    ],
+    "integration_order": 1,
+    "invalidation_triggers": []
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "agent-system/examples/README.md"
+    ],
+    "writable_paths": [
+      "agent-system/examples/README.md"
+    ],
+    "prohibited_paths": [
+      "AppleBooks/**",
+      "agent-system/schemas/**",
+      "agent-system/policies/**"
+    ],
+    "semantic_locks": [],
+    "expected_change_shape": "One appended documentation line"
+  },
+  "routing": {
+    "capability_class": "mechanical_execution",
+    "complexity": "low",
+    "risk": "low",
+    "required_skills": [],
+    "preferred_worker": "fixture-worker",
+    "minimum_reviewer_class": "standard_implementation",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": [
+      "read",
+      "write"
+    ],
+    "command_allowlist": [
+      "read",
+      "git_read",
+      "git_write_worktree"
+    ],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "none",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "sandboxed_tools"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "python3 -m agentctl validate agent-system/examples/valid/02-task-contract.json"
+    ],
+    "behavioral_requirements": [
+      "Only the documentation index is changed"
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "review-verdict",
+      "integration-manifest"
+    ],
+    "definition_of_done": [
+      "The candidate is committed, independently reviewed, and integrated"
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 1,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 1,
+    "wall_clock_class": "short",
+    "token_class": "small",
+    "context_size_ceiling": 32000,
+    "tool_call_ceiling": 20
+  },
+  "escalation": {
+    "local_repair_conditions": [
+      "One recoverable artifact schema error"
+    ],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [
+      "The examples index path changes"
+    ],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
+  }
+}

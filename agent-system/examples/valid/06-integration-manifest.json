@@ -1,0 +1,21 @@
+{
+  "artifact_type": "integration-manifest",
+  "integration_id": "EX-DOC-001-I1",
+  "task_id": "EX-DOC-001",
+  "integrator_role": "integrator",
+  "integrator_session_id": "independent-fixture-integrator-session",
+  "candidate_result_commit": "623601c1937612a14f0cf247b316f42e909f598c",
+  "reviewed_diff_hash": "99008b9bf8e6e50c35e5c989a3cb5e45ac5f3783b621472a4f7b7fcd9749c73a",
+  "review_id": "EX-DOC-001-R1",
+  "integration_base_commit": "3e49a7a082b263bf0682b766e49f47633e242ee2",
+  "integration_commit": "623601c1937612a14f0cf247b316f42e909f598c",
+  "merge_strategy": "conflict_free_preserving_candidate",
+  "candidate_patch_unchanged": true,
+  "dependency_interface_hashes": [
+    {"interface": "schema:agent-artifacts-v1", "hash": "0ab0945786b4e6ef8bc236e73822d80eb58ad1d175856d0bddbd9813694b17a7"}
+  ],
+  "affected_gates_rerun": [
+    {"gate": "G0", "result": "pass"}
+  ],
+  "completed_at": "2026-09-01T00:20:00Z"
+}

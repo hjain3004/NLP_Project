@@ -1,0 +1,32 @@
+{
+  "artifact_type": "implementation-manifest",
+  "task_id": "EX-DOC-001",
+  "attempt_id": "EX-DOC-001-A1",
+  "lease_id": "EX-DOC-001-L1",
+  "lease_epoch": 1,
+  "fencing_token": "example-fencing-token-1",
+  "worker_role": "mechanical_execution",
+  "provider": "fixture-provider",
+  "model": "fixture-model",
+  "model_version": "fixture-version-1",
+  "contract_hash": "c460f2b334ed96f0d78d59826eb97b6f50655003473b855fb61a9ca7f51bb7af",
+  "context_hash": "b814f7079de33fdb6a9f0f656c51292f7a9a76624a560da811abcc66be582952",
+  "base_commit": "3e49a7a082b263bf0682b766e49f47633e242ee2",
+  "result_commit": "623601c1937612a14f0cf247b316f42e909f598c",
+  "files_changed": [
+    {"path": "agent-system/examples/README.md", "change_type": "modified"}
+  ],
+  "commands_executed": [
+    {"command": "python3 -m agentctl validate", "exit_code": 0, "duration_ms": 1, "log_ref": "fixture://validation"}
+  ],
+  "acceptance_criteria_addressed": [
+    "Documentation-only artifact lifecycle"
+  ],
+  "assumptions": [],
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "unresolved_risks": [],
+  "usage": {"input_tokens": 0, "output_tokens": 0, "latency_ms": 1, "cost_usd": 0},
+  "termination_reason": "completed"
+}
