@@ -386,21 +386,21 @@
       "properties": {
         "maximum_attempts": {
           "type": "integer",
-          "minimum": 1,
           "maximum": 3,
-          "default": 3
+          "default": 3,
+          "description": "Must be at least 1; the lower bound is enforced in validate.py because minimum is outside ADR-0003."
         },
         "maximum_repair_cycles": {
           "type": "integer",
-          "minimum": 0,
           "maximum": 1,
-          "default": 1
+          "default": 1,
+          "description": "Must be at least 0; the lower bound is enforced in validate.py because minimum is outside ADR-0003."
         },
         "maximum_artifact_corrections": {
           "type": "integer",
-          "minimum": 0,
           "maximum": 1,
-          "default": 1
+          "default": 1,
+          "description": "Must be at least 0; the lower bound is enforced in validate.py because minimum is outside ADR-0003."
         },
         "wall_clock_class": {
           "type": "string"
