@@ -30,7 +30,7 @@ SEAL_KEY_ENV = "AGENTCTL_SEAL_KEY"
 
 #: Default seal-key location when the environment does not name one. Kept in the
 #: operator's home, deliberately far from any repository tree.
-DEFAULT_SEAL_KEY = Path.home() / ".config" / "cashbooks" / "agentctl-seal.key"
+DEFAULT_SEAL_KEY = Path.home() / ".cashbooks" / "agentctl-seal.key"
 
 _RUNTIME_RELATIVE = Path("agent-system") / "runtime"
 
