@@ -81,6 +81,15 @@ class ValidArtifactTests(unittest.TestCase):
                         validate_artifact(path, repository_root=self.root)
                 self.assertEqual(caught.exception.code, "budget_below_floor")
 
+    def test_retry_manifest_may_reuse_an_identical_compiled_context(self) -> None:
+        source = json.loads((self.valid_dir / "04-implementation-manifest.json").read_text())
+        source["attempt_id"] = "EX-DOC-001-A2"
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "retry-manifest.json"
+            path.write_text(json.dumps(source), encoding="utf-8")
+            result = validate_artifact(path, repository_root=self.root)
+        self.assertEqual(result["attempt_id"], "EX-DOC-001-A2")
+
 
 if __name__ == "__main__":
     unittest.main()

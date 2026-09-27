@@ -1,0 +1,25 @@
+{
+  "artifact_type": "review-verdict",
+  "review_id": "DRY-001-independent-review",
+  "task_id": "DRY-001",
+  "attempt_id": "DRY-001-attempt-2",
+  "reviewer_role": "verifier",
+  "reviewer_provider": "independent-fixture-provider",
+  "reviewer_model": "independent-fixture-reviewer",
+  "reviewer_session_id": "independent-session-DRY-001",
+  "reviewer_run_id": "independent-run-DRY-001",
+  "reviewed_result_commit": "56c44d4c889e46176cd1b09fb80c8d26f6a7ce22",
+  "tree_hash": "75605a2b844275903202ff50bfd8b91246a28591",
+  "diff_hash": "5aafedc1a6f8e8a39d9e096478afa598d469972f7f2c53c757e238eb10349a9b",
+  "declared_base_commit": "56c44d4c889e46176cd1b09fb80c8d26f6a7ce22",
+  "contract_hash": "30aeaef5b73aaea21ce1d872053a3f9660be7969becf4a8677c80576ee4761c9",
+  "context_hash": "d79cbd80030e13cb24e42ba95902d4d3e81eefbf0518a324be43412d8d4ff826",
+  "verification_evidence_hash": "5aafedc1a6f8e8a39d9e096478afa598d469972f7f2c53c757e238eb10349a9b",
+  "findings": [],
+  "verdict": "no_blocking_findings",
+  "independence_attestation": {
+    "author_session_id": "manual-operator",
+    "author_run_id": "DRY-001-attempt-2",
+    "distinct": true
+  }
+}

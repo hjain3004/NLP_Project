@@ -134,13 +134,23 @@ class GateEvaluator:
             if isinstance(reference, str) and reference:
                 path = self._path(reference)
                 expected_hash = criterion.get("evidence_hash")
-                result = (
-                    "pass"
-                    if path.is_file()
-                    and isinstance(expected_hash, str)
-                    and sha256_of_file(path) == expected_hash
-                    else "fail"
-                )
+                if not path.is_file():
+                    result = "open"
+                else:
+                    try:
+                        artifact = validate_artifact(path, repository_root=self.root)
+                    except InvalidArtifact:
+                        result = "fail"
+                    else:
+                        identity_bound = any(
+                            key in artifact
+                            for key in ("task_id", "gate_id", "audit_id", "integration_id")
+                        )
+                        hash_ok = expected_hash is None or (
+                            isinstance(expected_hash, str)
+                            and sha256_of_file(path) == expected_hash
+                        )
+                        result = "pass" if identity_bound and hash_ok else "fail"
             else:
                 result = "fail"
         elif evidence_type == "manual_attestation":
@@ -196,6 +206,7 @@ class GateEvaluator:
         *,
         result_path: str | os.PathLike[str] | None = None,
         write_result: bool = True,
+        evidence_types: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         source_path = Path(criteria_path)
         if not source_path.is_absolute():
@@ -203,13 +214,18 @@ class GateEvaluator:
         else:
             source_path = source_path.resolve()
         source = json.loads(source_path.read_text(encoding="utf-8"))
+        selected_criteria = [
+            item
+            for item in source.get("criteria", [])
+            if evidence_types is None or item.get("evidence_type") in evidence_types
+        ]
         criteria = [
             self._evaluate_criterion(
                 item,
                 gate_id=str(source.get("gate_id", "")),
                 criteria_path=source_path,
             )
-            for item in source.get("criteria", [])
+            for item in selected_criteria
         ]
         if not criteria:
             raise PlanningError("phase gate has no criteria", path=str(source_path))
@@ -235,7 +251,7 @@ class GateEvaluator:
         }
         if gate_result == "passed" and self.store is not None:
             approval_requests: list[dict[str, str]] = []
-            for criterion in source.get("criteria", []):
+            for criterion in selected_criteria:
                 if criterion.get("evidence_type") != "human_approval":
                     continue
                 reference = criterion.get("evidence_ref")

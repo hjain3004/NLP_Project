@@ -18,6 +18,7 @@ def run(argv: list[str]) -> int:
     scheduler = Scheduler(EventStore())
     scheduler.leases.expire_dead()
     rows = scheduler.ready()
+    scheduler.record_ready_snapshot(rows)
     snapshot = {
         "ready": [
             {key: row[key] for key in ("task_id", "capability_class", "risk", "locks")}

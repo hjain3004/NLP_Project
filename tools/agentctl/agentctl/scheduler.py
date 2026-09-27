@@ -353,6 +353,25 @@ class Scheduler:
         )
         decision = admission_decision(facts)
         if not decision.allowed:
+            event = make_event(
+                event_type="admission_rejected",
+                reason_code=str(decision.reason_code),
+                actor_role="scheduler",
+                task_id=spec.task_id,
+                work_package_id=spec.work_package_id,
+                prior_state=self.store.status(spec.task_id)["state"],
+                next_state=self.store.status(spec.task_id)["state"],
+                contract_hash=spec.contract_hash,
+                context_hash=spec.context_hash,
+            )
+            self.store.execute(
+                f"admission-rejected:{spec.task_id}:{decision.reason_code}:{uuid.uuid4()}",
+                event,
+                lambda _connection: {
+                    "task_id": spec.task_id,
+                    "reason_code": decision.reason_code,
+                },
+            )
             if decision.reason_code == "budget_exhausted":
                 raise BudgetExhausted("task was not admitted", task_id=task_id)
             raise PlanningError("task was not admitted", task_id=task_id, reason_code=decision.reason_code)
@@ -389,6 +408,34 @@ class Scheduler:
                 ),
             })
         return result
+
+    def record_ready_snapshot(self, rows: Sequence[Mapping[str, Any]]) -> None:
+        ready_ids = sorted(str(row["task_id"]) for row in rows if row.get("ready") is True)
+        if len(ready_ids) < 2:
+            return
+        work_packages = {
+            str(self._spec(task_id).work_package_id) for task_id in ready_ids
+        }
+        for work_package_id in sorted(work_packages):
+            selected = [
+                task_id
+                for task_id in ready_ids
+                if self._spec(task_id).work_package_id == work_package_id
+            ]
+            if len(selected) < 2:
+                continue
+            event = make_event(
+                event_type="ready_set_computed",
+                reason_code="multiple_ready_tasks",
+                actor_role="scheduler",
+                work_package_id=work_package_id,
+                artifact_refs=selected,
+            )
+            self.store.execute(
+                f"ready-snapshot:{work_package_id}:{','.join(selected)}",
+                event,
+                lambda _connection, tasks=selected: {"ready": tasks},
+            )
 
     def bump_interface(self, interface_id: str) -> tuple[str, ...]:
         """Invalidate direct consumers and their dependency descendants."""

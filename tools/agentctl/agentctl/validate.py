@@ -394,16 +394,21 @@ def _validate_hashes(artifact_type: str, document: Mapping[str, Any], root: Path
 
 
 def _find_context(
-    index: Iterable[Mapping[str, Any]], task_id: str, attempt_id: str
+    index: Iterable[Mapping[str, Any]], task_id: str, context_hash: str
 ) -> Mapping[str, Any] | None:
+    task_context: Mapping[str, Any] | None = None
     for candidate in index:
-        if (
-            candidate.get("artifact_type") == "context-manifest"
-            and candidate.get("task_id") == task_id
-            and candidate.get("attempt_id") == attempt_id
-        ):
+        if candidate.get("artifact_type") != "context-manifest":
+            continue
+        if candidate.get("task_id") != task_id:
+            continue
+        task_context = task_context or candidate
+        if candidate.get("context_hash") == context_hash:
             return candidate
-    return None
+    # Returning another context for the task lets the caller report the more
+    # precise hash-link violation instead of misclassifying tampering as a
+    # missing dependency.
+    return task_context
 
 
 def _require_linked(
@@ -447,10 +452,10 @@ def _validate_cross_artifact_links(
             task_id=task_id,
         )
         context = _require_linked(
-            _find_context(index, task_id, attempt_id),
+            _find_context(index, task_id, document["context_hash"]),
             description="context manifest",
             task_id=task_id,
-            attempt_id=attempt_id,
+            context_hash=document["context_hash"],
         )
         _assert_link(
             document["contract_hash"], task["identity"]["contract_hash"], "contract_hash"

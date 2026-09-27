@@ -1,0 +1,32 @@
+{
+  "artifact_type": "implementation-manifest",
+  "task_id": "DRY-001",
+  "attempt_id": "DRY-001-attempt-1",
+  "lease_id": "14779718-cc9d-4cff-a937-cf10e22ebd4e",
+  "lease_epoch": 1,
+  "fencing_token": "w0DX6FUTjq1hc_2GpQxFhtGxoUGNdx0uhXXz_H97lcI",
+  "worker_role": "mechanical_execution",
+  "provider": "manual-proposal-adapter",
+  "model": "manual-dry-run",
+  "model_version": "p0",
+  "contract_hash": "30aeaef5b73aaea21ce1d872053a3f9660be7969becf4a8677c80576ee4761c9",
+  "context_hash": "d79cbd80030e13cb24e42ba95902d4d3e81eefbf0518a324be43412d8d4ff826",
+  "base_commit": "56c44d4c889e46176cd1b09fb80c8d26f6a7ce22",
+  "result_commit": "56c44d4c889e46176cd1b09fb80c8d26f6a7ce22",
+  "files_changed": [
+    {"path": "agent-system/examples/README.md", "change_type": "modified"}
+  ],
+  "commands_executed": [
+    {"command": "git diff -- agent-system/examples/README.md", "exit_code": 0, "duration_ms": 1, "log_ref": "dry-run://attempt-1"}
+  ],
+  "acceptance_criteria_addressed": [
+    "Exercise stale fencing-token rejection using a schema-valid artifact"
+  ],
+  "assumptions": [],
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "unresolved_risks": [],
+  "usage": {"input_tokens": 0, "output_tokens": 0, "latency_ms": 1, "cost_usd": 0},
+  "termination_reason": "completed"
+}

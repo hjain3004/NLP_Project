@@ -1,0 +1,60 @@
+{
+  "artifact_type": "context-manifest",
+  "context_hash": "d79cbd80030e13cb24e42ba95902d4d3e81eefbf0518a324be43412d8d4ff826",
+  "task_id": "DRY-001",
+  "attempt_id": "DRY-001-attempt-1",
+  "compiled_at": "2026-09-26T00:00:00Z",
+  "role": "mechanical_execution",
+  "inputs": {
+    "authority_excerpt": {
+      "path": "AGENTS.md",
+      "sha256": "4c5e2c2bb1cdb31e23d3835b3eb8343e9be8fa640bcb2c55080e1cbed30a44f5",
+      "bytes": 13913
+    },
+    "role_contract": {
+      "path": "agent-system/roles/mechanical-executor.md",
+      "sha256": "88a20a311a6a7bfb78aed0a6a130196cae3bcf31c9b38be9539b545f6f424026",
+      "bytes": 1392
+    },
+    "task_contract": {
+      "path": "agent-system/work/DRY-RUN/tasks/DRY-001.json",
+      "sha256": "81be3a8a55d128466183918632521c7ec8d87644b8ecd51cf68a8ecc9ef1ba63",
+      "bytes": 2621
+    },
+    "decisions": [
+      {
+        "path": "docs/decisions/ADR-0001-deterministic-multi-model-control-plane.md",
+        "sha256": "712f2d2bafc951d7886f526e5214c4a694f6ce8401e21bec7e21102bbbb57b4a",
+        "bytes": 4007
+      }
+    ],
+    "consumed_interfaces": [],
+    "dependency_manifests": [],
+    "failure_lessons": [],
+    "base_commit_summary": {
+      "path": "agent-system/work/P0/evidence/migration.json",
+      "sha256": "9934b82d17491e8ccca3c3e100a262e2ba3283d0f6da0cc9f28ff804654feada",
+      "bytes": 663
+    },
+    "permissions": {
+      "path": "agent-system/policies/permissions.json",
+      "sha256": "eaca781d3baea7a0547711924aafd9a19f59ece7698c48993eab6f3cc08043d0",
+      "bytes": 3674
+    },
+    "budgets_and_output_schema": {
+      "path": "agent-system/schemas/implementation-manifest.schema.json",
+      "sha256": "8a849e370a72f7a18d2a09ff41ba4a5f0b44d310c616baf9b325295b668832aa",
+      "bytes": 4344
+    }
+  },
+  "excluded_by_policy": [
+    "prd",
+    "conversation_history",
+    "research_documents",
+    "other_worker_reasoning",
+    "secrets",
+    "customer_documents",
+    "obsolete_plans",
+    "raw_logs"
+  ]
+}
