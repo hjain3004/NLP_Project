@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from agentctl.approval import ApprovalManager, ApprovalRejected, create_approval
 from agentctl.errors import PermissionViolation
@@ -154,6 +156,29 @@ class GateTests(unittest.TestCase):
             with self.assertRaises(ApprovalRejected) as raised:
                 evaluator.evaluate(source)
             self.assertEqual(raised.exception.code, "approval_consumed")
+
+    def test_repository_root_check_accepts_a_logical_symlink_pwd(self) -> None:
+        repository = _repo_root()
+        g0 = json.loads(
+            (repository / "agent-system/work/P0/gates/G0-criteria.json").read_text()
+        )
+        root_check = next(
+            criterion
+            for criterion in g0["criteria"]
+            if criterion["criterion_id"] == "G0-01"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            physical = directory / "physical-repository"
+            physical.mkdir()
+            subprocess.run(["git", "init", "-q", str(physical)], check=True)
+            logical = directory / "logical-repository"
+            logical.symlink_to(physical, target_is_directory=True)
+            source = physical / "TEST-GATE-criteria.json"
+            source.write_text(json.dumps(self._criteria(root_check)), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"PWD": str(logical)}):
+                result = GateEvaluator(physical).evaluate(source, write_result=False)
+        self.assertEqual(result["criteria"][0]["result"], "pass")
 
 
 class AuditTests(unittest.TestCase):

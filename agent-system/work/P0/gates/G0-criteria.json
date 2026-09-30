@@ -7,7 +7,7 @@
       "criterion_id": "G0-01",
       "statement": "The root is one Git repository",
       "evidence_type": "deterministic_check",
-      "evidence_command": "test \"$(git rev-parse --show-toplevel)\" = \"$PWD\" && test ! -f \"$(git rev-parse --git-path MERGE_HEAD)\"",
+      "evidence_command": "test \"$(git rev-parse --show-toplevel)\" = \"$(pwd -P)\" && test ! -f \"$(git rev-parse --git-path MERGE_HEAD)\"",
       "expected_exit_code": 0
     },
     {
