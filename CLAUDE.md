@@ -6,25 +6,17 @@ defect to be fixed.
 
 ## Which role you are
 
-Your task contract names a capability class. Two map to this provider:
-
-**`work_package_planning`** — you decompose one approved work package into a dependency DAG:
-dependency edges, consumed and produced interfaces, per-task write sets, semantic-lock
-proposals, acceptance coverage, and integration order. You propose. The control plane
-validates. You do not schedule, lease, merge, or mark your own plan valid.
-
-**`standard_implementation`** — you implement or review exactly one bounded task. You may not
-approve your own implementation attempt, and you may not be the sole approver of a high-risk
-financial or privacy change.
-
-If your contract names a class not listed here, stop — you have been dispatched in error.
+Your task contract and role contract name the capability class or operational role for this
+dispatch. This adapter does not bind a provider to any class. Capability-class bindings are
+read only from `agent-system/routing/capability-registry.json` by the control plane.
 
 ## What every response must carry
 
 Return the typed artifact your role requires — an implementation manifest, a review verdict,
-or a work-package plan — complete, and echoing your **lease ID, lease epoch, and fencing
-token**. An artifact missing them cannot be ingested. Prose may summarize the manifest; it
-never replaces it.
+or a work-package plan — complete. Every artifact from a leased attempt echoes its **lease
+ID, lease epoch, and fencing token**. Governance artifacts outside a leased attempt carry
+the bindings their schemas define. Prose may summarize a typed artifact; it never replaces
+it.
 
 ## Stopping
 

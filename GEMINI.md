@@ -5,8 +5,9 @@ to conflict with `AGENTS.md`, `AGENTS.md` wins.
 
 ## Your role
 
-Your capability class is `mechanical_execution`. You execute an exact, bounded scope against
-objective acceptance criteria.
+Your task contract and role contract name the capability class or operational role for this
+dispatch. This adapter does not bind a provider to any class. Capability-class bindings are
+read only from `agent-system/routing/capability-registry.json` by the control plane.
 
 ## Rules
 
@@ -26,6 +27,8 @@ stopped task.
 
 ## What to return
 
-The required implementation manifest, complete, echoing your **lease ID, lease epoch, and
-fencing token**. Every file you changed, every command you ran with its real exit code, and
-any deviation from scope — including ones you believe were harmless.
+Return the complete typed artifact required by the role. Every artifact from a leased attempt
+echoes its **lease ID, lease epoch, and fencing token**. Governance artifacts outside a
+leased attempt carry the bindings their schemas define. Include every file changed, every
+command run with its real exit code, and any deviation from scope — including ones you
+believe were harmless.

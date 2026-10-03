@@ -205,12 +205,17 @@ def verify_approval(
     if not hmac.compare_digest(supplied, expected_seal):
         raise ApprovalRejected("approval_unsigned", "approval seal does not verify")
 
+    if approval.get("single_use") is not True:
+        raise ApprovalRejected(
+            "approval_not_single_use", "reusable human approvals are forbidden"
+        )
+
     current = (now or _utc_now()).astimezone(dt.timezone.utc)
     if _parse_time(approval.get("expires_at"), field="expires_at") <= current:
         raise ApprovalRejected("approval_expired", "approval has expired")
     if approval.get("revoked_at") is not None:
         raise ApprovalRejected("approval_revoked", "approval has been revoked")
-    if approval.get("single_use") is True and approval.get("consumed_at") is not None:
+    if approval.get("consumed_at") is not None:
         raise ApprovalRejected("approval_consumed", "single-use approval was already consumed")
     return approval
 

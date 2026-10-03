@@ -181,6 +181,18 @@ def _validate_local_semantics(artifact_type: str, document: Mapping[str, Any], r
     if artifact_type == "integration-manifest" and not document["candidate_patch_unchanged"]:
         _fail("patch_altered", "integration manifest reports an altered candidate patch")
 
+    if artifact_type == "context-manifest":
+        from .context import EXCLUDED_BY_POLICY
+
+        exclusions = document["excluded_by_policy"]
+        if tuple(exclusions) != EXCLUDED_BY_POLICY:
+            _fail(
+                "context_exclusions_invalid",
+                "context manifest must record the exact ordered exclusion policy",
+                expected=EXCLUDED_BY_POLICY,
+                actual=tuple(exclusions),
+            )
+
     if artifact_type != "task-contract":
         return
 
@@ -194,6 +206,28 @@ def _validate_local_semantics(artifact_type: str, document: Mapping[str, Any], r
         _fail("unbound_base_commit", "base_commit may be unbound only while status is proposed")
     if routing["risk"] == "critical" and permissions["enforcement_class"] == "unsandboxed_tools":
         _fail("critical_unsandboxed", "critical tasks cannot use unsandboxed_tools")
+
+    approval_requirements: list[str] = []
+    if permissions["destructive_commands"]:
+        approval_requirements.append("destructive_operation")
+    if permissions["may_modify_tests"] == "protected_with_approval":
+        approval_requirements.append("protected_test_change")
+    if approval_requirements:
+        approval_ref = permissions.get("human_approval_ref")
+        if not isinstance(approval_ref, str) or not approval_ref.strip():
+            _fail(
+                "human_approval_required",
+                "task permission requires a bound human approval reference",
+                required_actions=approval_requirements,
+            )
+        actual_action = permissions.get("required_human_approval_action")
+        if len(approval_requirements) != 1 or actual_action != approval_requirements[0]:
+            _fail(
+                "human_approval_wrong_action",
+                "task permission is not bound to its required approval action",
+                required_actions=approval_requirements,
+                actual=actual_action,
+            )
 
     floors = {
         "maximum_attempts": 1,

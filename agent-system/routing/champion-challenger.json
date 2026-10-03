@@ -3,8 +3,8 @@
   "version": 1,
   "source": "design \u00a729",
   "sample_scope": [
-    "low_risk",
-    "medium_risk"
+    "low",
+    "medium"
   ],
   "challenger_merge_eligible": false,
   "challenger_mode": "frozen shadow attempt, compared by a deterministic evaluator",

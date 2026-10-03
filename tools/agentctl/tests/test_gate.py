@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from agentctl.approval import ApprovalManager, ApprovalRejected, create_approval
-from agentctl.errors import PermissionViolation
+from agentctl.errors import InvalidArtifact, PermissionViolation
 from agentctl.gate import GateEvaluator, ingest_audit
 from agentctl.hashing import sha256_hex, sha256_of_file
 from agentctl.store import EventStore
@@ -184,7 +184,18 @@ class GateTests(unittest.TestCase):
 class AuditTests(unittest.TestCase):
     root = _repo_root()
 
+    @classmethod
+    def _head(cls) -> tuple[str, str]:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=cls.root, text=True
+        ).strip()
+        tree = subprocess.check_output(
+            ["git", "rev-parse", "HEAD^{tree}"], cwd=cls.root, text=True
+        ).strip()
+        return commit, tree
+
     def _audit(self, session: str = "fresh-session", run: str = "fresh-run") -> dict:
+        commit, tree = self._head()
         return {
             "artifact_type": "architecture-audit",
             "audit_id": "AUDIT-1",
@@ -195,10 +206,16 @@ class AuditTests(unittest.TestCase):
             "auditor_model": "fixture-model",
             "auditor_session_id": session,
             "auditor_run_id": run,
-            "audited_commit": "1" * 40,
-            "audited_tree_hash": "2" * 40,
+            "audited_commit": commit,
+            "audited_tree_hash": tree,
             "artifact_families": ["control-plane"],
-            "decision_coverage": [],
+            "decision_coverage": [
+                {
+                    "decision_id": "G0-01",
+                    "assessment": "implemented",
+                    "evidence_ref": "agent-system/work/P0/gates/G0-criteria.json",
+                }
+            ],
             "findings": [],
             "verdict": "no_blocking_findings",
             "independence_attestation": {"fresh_session": True, "distinct": True},
@@ -212,13 +229,59 @@ class AuditTests(unittest.TestCase):
             with self.assertRaises(PermissionViolation):
                 ingest_audit("G0", self._audit(session="authored-session"), construction_log=log)
 
+    def test_empty_audit_scope_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = pathlib.Path(temporary) / "CONSTRUCTION-LOG.md"
+            log.write_text("author_session_id: authored-session\n")
+            audit = self._audit()
+            audit["artifact_families"] = []
+            with self.assertRaises(InvalidArtifact):
+                ingest_audit(
+                    "G0", audit, construction_log=log, repository_root=self.root
+                )
+
+    def test_nonindependent_or_contradictory_audit_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = pathlib.Path(temporary) / "CONSTRUCTION-LOG.md"
+            log.write_text("author_session_id: authored-session\n")
+            nonindependent = self._audit()
+            nonindependent["independence_attestation"]["distinct"] = False
+            with self.assertRaises(PermissionViolation):
+                ingest_audit(
+                    "G0", nonindependent, construction_log=log, repository_root=self.root
+                )
+
+            contradictory = self._audit()
+            contradictory["findings"] = [{"blocking": True}]
+            with self.assertRaises(InvalidArtifact):
+                ingest_audit(
+                    "G0", contradictory, construction_log=log, repository_root=self.root
+                )
+
+    def test_stale_audit_binding_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = pathlib.Path(temporary) / "CONSTRUCTION-LOG.md"
+            log.write_text("author_session_id: authored-session\n")
+            audit = self._audit()
+            audit["audited_commit"] = "1" * 40
+            with self.assertRaises(InvalidArtifact):
+                ingest_audit(
+                    "G0", audit, construction_log=log, repository_root=self.root
+                )
+
     def test_fresh_auditor_is_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = pathlib.Path(temporary)
             log = directory / "CONSTRUCTION-LOG.md"
             log.write_text("author_session_id: authored-session\n")
             store = EventStore(directory / "runtime.sqlite3", repository_root=self.root)
-            result = ingest_audit("G0", self._audit(), construction_log=log, store=store)
+            result = ingest_audit(
+                "G0",
+                self._audit(),
+                construction_log=log,
+                store=store,
+                repository_root=self.root,
+            )
             self.assertEqual(result["audit_id"], "AUDIT-1")
             self.assertEqual(store.scalar("SELECT COUNT(*) FROM artifacts"), 1)
 

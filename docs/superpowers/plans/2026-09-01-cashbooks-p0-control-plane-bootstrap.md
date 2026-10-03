@@ -175,7 +175,7 @@ docs/archive/CLAUDE-legacy-2026-07.md
 agent-system/README.md
 agent-system/VERSION
 agent-system/schemas/                  (10 files, Task 6)
-agent-system/policies/                 (11 files, Task 7)
+agent-system/policies/                 (11 files from Task 7; approval-principals.json from Task 17)
 agent-system/roles/                    (7 files, Task 8)
 agent-system/routing/                  (4 files + baselines/README.md, Task 8)
 agent-system/templates/                (11 files, Task 10)
@@ -1162,7 +1162,8 @@ git commit -m "agent-system: add artifact schemas, hashing rules, and directory 
 ## Task 7: Encode policies
 
 **Files:**
-- Create: eleven policy files under `agent-system/policies/`
+- Create: eleven initial policy files under `agent-system/policies/`. Task 17 adds the
+  twelfth, `approval-principals.json`, when the external seal-key principal is provisioned.
 
 **Interfaces:**
 - Consumes: the canonical design's invariants, lock vocabulary, concurrency defaults, budget policy, permission model, error taxonomy, and escalation ladder; this plan's normative invariant ID table and authority block.
@@ -1619,16 +1620,13 @@ python3 - <<'PY'
 import json, os, pathlib, subprocess, sys
 root = subprocess.check_output(["git","rev-parse","--show-toplevel"], text=True).strip()
 sys.path.insert(0, os.path.join(root, "tools/agentctl"))
-from agentctl.hashing import sha256_of_json_excluding
+from agentctl.validate import validate_artifact
 types = set()
 for p in sorted(pathlib.Path("agent-system/examples/valid").glob("*.json")):
     d = json.loads(p.read_text())
     types.add(d["artifact_type"])
-    for field in ("contract_hash", "context_hash"):
-        if field in d:
-            assert d[field] == sha256_of_json_excluding(d, field), \
-                f"{p.name}: {field} is not a real hash of its own content"
-        assert "REPLACE" not in json.dumps(d), f"{p.name} still contains a placeholder"
+    validate_artifact(p, repository_root=root)
+    assert "REPLACE" not in json.dumps(d), f"{p.name} still contains a placeholder"
 assert types == {"work-package","task-contract","context-manifest","implementation-manifest",
                  "review-verdict","integration-manifest","phase-gate","human-approval"}, types
 print("valid examples: ok")
@@ -2017,7 +2015,7 @@ Also author the two failure fixtures, which revision 1 consumed but never create
 
 G0-11 requires documentation checks from a clean checkout. Revision 1 had none: its document assertions were one-shot inline shell in Tasks 3–6, never re-runnable, and its "documentation and control-plane check" step contained only `doctor`, `unittest`, and a validation loop.
 
-`agentctl docs verify` re-runs, from any checkout: the banner presence and 4/0 shape on the six historical documents; `AGENTS.md`'s eleven section headings, two verbatim claims-discipline sentences, and provider-neutrality; adapter line limits and first lines; the twelve required `docs/` files; the five ADR statuses and ten headings each; the five role headings across seven role files; a byte comparison of `docs/DOCUMENT_AUTHORITY.md`'s authority block against `agent-system/policies/document-authority.json`; a byte comparison of `docs/program/PHASE_GATES.md` against regenerated output; a link check over all committed Markdown; the twelve literal non-goals; and the three-way invariant-ID set equality.
+`agentctl docs verify` re-runs, from any checkout: the banner presence and 4/0 shape on the six historical documents; `AGENTS.md`'s eleven section headings, two verbatim claims-discipline sentences, and provider-neutrality; adapter line limits and first lines; the twelve required `docs/` files; the five ADR statuses and ten headings each; the five role headings across seven role files; a byte comparison of `docs/DOCUMENT_AUTHORITY.md`'s authority block against `agent-system/policies/document-authority.json`; a byte comparison of `docs/program/PHASE_GATES.md` against regenerated output; a link check over all committed Markdown; the twelve literal non-goals; and three-way invariant ID-and-normalized-statement equality.
 
 Add a **claims lint**: no tracked file outside `docs/archive/`, `docs/superpowers/`, and `docs/program/ROADMAP.md` may contain `finished app`, `production-ready`, `supports Foundation Models`, `ships with Foundation Models`, or `App Store`.
 
@@ -2312,7 +2310,7 @@ test ! -f .git/MERGE_HEAD
 # Structure
 for f in AGENTS.md CLAUDE.md GEMINI.md .gitignore docs/DOCUMENT_AUTHORITY.md; do test -f "$f"; done
 test "$(ls agent-system/schemas/*.schema.json | wc -l | tr -d ' ')" -eq 10
-test "$(ls agent-system/policies/*.json      | wc -l | tr -d ' ')" -eq 11
+test "$(ls agent-system/policies/*.json      | wc -l | tr -d ' ')" -eq 12
 test "$(ls agent-system/roles/*.md           | wc -l | tr -d ' ')" -eq 7
 
 # Repository integrity — tree equality, not a pathspec diff

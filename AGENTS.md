@@ -3,9 +3,10 @@
 **Status:** Active. Universal. Written at P0 Task 4, 2026-09-01.
 **Applies to:** every automated worker, of every provider, in every role.
 
-This file is provider-neutral by design. Roles are named by **capability class**, never by
-vendor or model. Model bindings live in `agent-system/routing/capability-registry.json` and
-nowhere else, so that changing a provider changes one file rather than the constitution.
+This file is provider-neutral by design. Roles are named by **capability class** or
+**operational role**, never by vendor or model. Capability-class model bindings live in
+`agent-system/routing/capability-registry.json` and nowhere else, so that changing a provider
+changes one file rather than the constitution.
 
 Read this file in full before acting. Then read your role contract, then your task contract.
 
@@ -133,7 +134,8 @@ document, stop and escalate — do not summarize it, quote it, or attach it to a
 
 ## 5. Roles and separation of duty
 
-Seven capability classes. Each is defined in full in `agent-system/roles/`.
+Five routable capability classes and two operational roles. Each is defined in full in
+`agent-system/roles/`.
 
 - **architectural_authority** — global architecture, invariant definitions, cross-work-package
   conflict resolution, phase audits, severe ambiguity. Not a routine implementer or reviewer.
@@ -145,6 +147,9 @@ Seven capability classes. Each is defined in full in `agent-system/roles/`.
   unit tests, documentation, routine refactors, first-pass review of mechanical work.
 - **mechanical_execution** — fixture generation from an exact manifest, repetitive test
   matrices, inventories, formatting, exact renames, generated indexes.
+
+The operational roles are not provider-routed capability classes:
+
 - **verifier** — runs deterministic gates, inspects scope and protected-test integrity,
   emits structured findings. Never repairs code while acting as verifier.
 - **integrator** — consumes verified candidates in topological order, resolves only
@@ -172,9 +177,11 @@ not create an independent reviewer.
 You act only under an immutable task contract. Its `contract_hash` and your context pack's
 `context_hash` are recorded; an artifact returned against different hashes is rejected.
 
-Every artifact you return echoes your **lease ID, lease epoch, and fencing token**. An
-artifact carrying an expired or superseded token is retained as orphan evidence and advances
-nothing, however correct its content.
+Every artifact returned from a leased execution attempt echoes its **lease ID, lease epoch,
+and fencing token**. An artifact carrying an expired or superseded token is retained as
+orphan evidence and advances nothing, however correct its content. Governance artifacts
+created outside a leased attempt carry the identity and content bindings their schemas
+define and advance only through their dedicated control-plane ingest checks.
 
 Return the typed manifest your role requires, complete. Prose may summarize a manifest; it
 never replaces one. A claim of completion with no manifest is not a completion.

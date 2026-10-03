@@ -27,7 +27,12 @@ def run(argv: list[str]) -> int:
     except ValueError:
         source = ""
     result = ingest_audit(
-        argv[1], artifact, construction_log=log, store=EventStore(), source_path=source
+        argv[1],
+        artifact,
+        construction_log=log,
+        store=EventStore(),
+        source_path=source,
+        repository_root=config.repo_root,
     )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0

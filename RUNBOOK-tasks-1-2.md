@@ -1,3 +1,7 @@
+> **Authority: Historical (2026-09-30).** Migration-era operator runbook retained as evidence of the root-repository bootstrap.
+> The active authority order is defined in [docs/DOCUMENT_AUTHORITY.md](docs/DOCUMENT_AUTHORITY.md).
+> Nothing in this document authorizes work. Treat it as input, not instruction.
+
 # CashBooks P0 — Runbook for Tasks 1 and 2
 
 Run every block in **Terminal.app on your Mac**, from `~/cashguard`. Paste the output back

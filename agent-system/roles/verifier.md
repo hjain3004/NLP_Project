@@ -1,6 +1,6 @@
 # Verifier — `verifier`
 
-**Capability class:** `verifier`
+**Operational role:** `verifier`
 
 Produces evidence. Does not produce fixes. The separation is the point: a role that can repair what it judges has an incentive to judge leniently.
 

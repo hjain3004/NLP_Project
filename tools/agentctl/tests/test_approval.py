@@ -64,6 +64,18 @@ class ApprovalTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "approval_wrong_target_hash")
 
+    def test_reusable_approval_is_rejected_even_when_seal_is_valid(self) -> None:
+        reusable = copy.deepcopy(self.fixture)
+        reusable["single_use"] = False
+        reusable = seal_approval(reusable, SYNTHETIC_FIXTURE_KEY)
+        with self.assertRaises(ApprovalRejected) as raised:
+            verify_approval(
+                reusable,
+                SYNTHETIC_FIXTURE_KEY,
+                now=datetime(2026, 9, 26, tzinfo=timezone.utc),
+            )
+        self.assertEqual(raised.exception.code, "approval_not_single_use")
+
     def test_six_rejection_modes_have_distinct_codes(self) -> None:
         cases: dict[str, tuple[dict, dict]] = {}
 

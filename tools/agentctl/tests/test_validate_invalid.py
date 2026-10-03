@@ -109,6 +109,39 @@ class InvalidArtifactTests(unittest.TestCase):
         error = self._validate_changed_task(changed)
         self.assertEqual(error.code, "acceptance_evidence_missing")
 
+    def test_destructive_task_requires_matching_human_approval_binding(self) -> None:
+        changed = self._task()
+        changed["permissions"]["destructive_commands"] = True
+        error = self._validate_changed_task(changed)
+        self.assertEqual(error.code, "human_approval_required")
+
+        changed["permissions"]["human_approval_ref"] = "APPROVAL-DESTRUCTIVE-1"
+        changed["permissions"]["required_human_approval_action"] = "protected_test_change"
+        error = self._validate_changed_task(changed)
+        self.assertEqual(error.code, "human_approval_wrong_action")
+
+    def test_protected_test_task_requires_matching_human_approval_binding(self) -> None:
+        changed = self._task()
+        changed["permissions"]["may_modify_tests"] = "protected_with_approval"
+        error = self._validate_changed_task(changed)
+        self.assertEqual(error.code, "human_approval_required")
+
+        changed["permissions"]["human_approval_ref"] = "APPROVAL-PROTECTED-1"
+        changed["permissions"]["required_human_approval_action"] = "destructive_operation"
+        error = self._validate_changed_task(changed)
+        self.assertEqual(error.code, "human_approval_wrong_action")
+
+    def test_context_exclusions_are_the_exact_policy_set(self) -> None:
+        source = self.root / "agent-system/examples/valid/03-context-manifest.json"
+        changed = json.loads(source.read_text(encoding="utf-8"))
+        changed["excluded_by_policy"] = ["prd"] * 8
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "context.json"
+            path.write_text(json.dumps(changed), encoding="utf-8")
+            with self.assertRaises(InvalidArtifact) as caught:
+                validate_artifact(path, repository_root=self.root)
+        self.assertEqual(caught.exception.code, "context_exclusions_invalid")
+
     def test_task_dependency_must_resolve(self) -> None:
         changed = self._task()
         changed["dependencies"]["requires"] = ["TASK-DOES-NOT-EXIST"]

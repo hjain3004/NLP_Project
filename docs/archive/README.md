@@ -18,6 +18,7 @@ level 7.
 | `DESIGN_SPEC.md` | **Reference** | Product invariants from July 2026. Its twelve release-blocking properties informed the current invariant catalogue; the authoritative version is `docs/security/INVARIANTS.md` and `agent-system/policies/invariants.json`. |
 | `TASKS.md` | **Historical** | A serial task inventory. Not an execution authority: the active program is a dependency DAG with gates, not a list. |
 | `INFRA_PLAN.md` | **Deferred** | Deployment and infrastructure planning. No infrastructure work is authorized before the recruiter-release program, which is itself deferred past G3. |
+| `RUNBOOK-tasks-1-2.md` | **Historical** | Migration-era operator instructions used before the control plane existed. Retained as evidence; never an execution authority. |
 | `docs/cashguard_prd_v0.2.md` | **Historical / future context** | The full CashGuard PRD. Describes a substantially wider product than the authorized milestone. Useful for understanding intent; not a source of requirements. |
 | `docs/superpowers/specs/2026-08-30-cashbooks-control-plane-design.md` | **Superseded for orchestration** | Its product, privacy, document-ingestion, and recruiter-first decisions remain valid. Its single-agent orchestration model is superseded by the 2026-08-31 multi-model design. Carries its own authority banner. |
 | `docs/superpowers/plans/2026-08-31-cashbooks-control-plane.md` | **Superseded for execution** | Assumes one ready or active task. Its acceptance criteria and file inventory remain reusable as planning input. Carries its own supersession banner. |

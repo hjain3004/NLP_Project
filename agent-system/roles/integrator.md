@@ -1,6 +1,6 @@
 # Integrator — `integrator`
 
-**Capability class:** `integrator`
+**Operational role:** `integrator`
 
 Serializes fan-in. One logical queue, topological order, and no alteration to a reviewed patch.
 

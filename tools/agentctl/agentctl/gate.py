@@ -328,6 +328,7 @@ def ingest_audit(
     construction_log: str | os.PathLike[str],
     store: EventStore | None = None,
     source_path: str = "",
+    repository_root: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Reject construction authors and optionally persist an architecture audit."""
     if audit.get("artifact_type") != "architecture-audit" or audit.get("gate_id") != gate_id:
@@ -342,10 +343,49 @@ def ingest_audit(
                 field=field,
                 identity=identity,
             )
+    attestation = audit.get("independence_attestation", {})
+    if attestation.get("fresh_session") is not True or attestation.get("distinct") is not True:
+        raise PermissionViolation(
+            "architecture audit lacks independent fresh-session attestation"
+        )
+    if not audit.get("artifact_families") or not audit.get("decision_coverage"):
+        raise InvalidArtifact("architecture audit scope and decision coverage must be nonempty")
+    has_blocking = any(
+        finding.get("blocking") is True for finding in audit.get("findings", [])
+    )
+    verdict = audit.get("verdict")
+    if (verdict == "no_blocking_findings" and has_blocking) or (
+        verdict == "blocking_findings" and not has_blocking
+    ):
+        raise InvalidArtifact("architecture audit verdict contradicts its findings")
+
+    if repository_root is None:
+        if store is not None:
+            repository_root = store.repository_root
+        else:
+            repository_root = subprocess.check_output(
+                ["git", "-C", str(log_path.parent), "rev-parse", "--show-toplevel"],
+                text=True,
+            ).strip()
+    root = Path(repository_root).resolve()
+    expected_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=root, text=True
+    ).strip()
+    expected_tree = subprocess.check_output(
+        ["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True
+    ).strip()
+    if audit.get("audited_commit") != expected_commit or audit.get("audited_tree_hash") != expected_tree:
+        raise InvalidArtifact(
+            "architecture audit is stale or bound to another repository tree",
+            expected_commit=expected_commit,
+            expected_tree=expected_tree,
+            audited_commit=audit.get("audited_commit"),
+            audited_tree_hash=audit.get("audited_tree_hash"),
+        )
     result = {
         "audit_id": audit["audit_id"],
         "gate_id": gate_id,
-        "verdict": audit["verdict"],
+        "verdict": verdict,
     }
     if store is None:
         return result

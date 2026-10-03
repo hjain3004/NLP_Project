@@ -31,7 +31,7 @@ This file answers one question: when two documents disagree, which one governs?
 6.  Role and provider adapters
     AGENTS.md, agent-system/roles/*.md, CLAUDE.md, GEMINI.md
 7.  Historical research and superseded plans
-    docs/archive/**, docs/cashguard_prd_v0.2.md, root-level CashGuard-era specifications,
+    docs/archive/**, docs/cashguard_prd_v0.2.md, root-level CashGuard-era specifications and migration runbooks,
     docs/superpowers/specs/2026-08-30-*, docs/superpowers/plans/2026-08-31-*,
     the git-ignored research corpus
 ```

@@ -74,6 +74,32 @@ def _fail(message: str, **context: object) -> None:
     raise VerificationFailure(message, **context)
 
 
+def _normalise_invariant_statement(value: str) -> str:
+    return re.sub(r"\s+", " ", value.replace("`", "")).strip().rstrip(".")
+
+
+def _agent_invariant_statements(text: str) -> dict[str, str]:
+    pattern = re.compile(
+        r"^- \*\*((?:FIN|AI|PRIV|PLAT)-\d{2})\*\* (.*?)(?=\n- \*\*|\n\n|\n###)",
+        re.MULTILINE | re.DOTALL,
+    )
+    return {
+        identifier: _normalise_invariant_statement(statement)
+        for identifier, statement in pattern.findall(text)
+    }
+
+
+def _documented_invariant_statements(text: str) -> dict[str, str]:
+    pattern = re.compile(
+        r"^\| \*\*((?:FIN|AI|PRIV|PLAT)-\d{2})\*\* \| ([^|]+) \|",
+        re.MULTILINE,
+    )
+    return {
+        identifier: _normalise_invariant_statement(statement)
+        for identifier, statement in pattern.findall(text)
+    }
+
+
 def _tracked_markdown(root: Path) -> list[Path]:
     result = subprocess.run(
         ["git", "ls-files", "*.md"], cwd=root, check=True, capture_output=True, text=True
@@ -86,6 +112,7 @@ def _verify_banner_shape(root: Path) -> None:
         "BOOTSTRAP.md",
         "DESIGN_SPEC.md",
         "INFRA_PLAN.md",
+        "RUNBOOK-tasks-1-2.md",
         "TASKS.md",
         "TECH_SPEC.md",
         "docs/cashguard_prd_v0.2.md",
@@ -167,6 +194,19 @@ def _verify_claims(root: Path, paths: list[Path]) -> None:
         for phrase in forbidden:
             if phrase.lower() in scrubbed.lower():
                 _fail("active documentation contains a forbidden product claim", path=relative, phrase=phrase)
+
+
+def _verify_root_runbook_inventory(root: Path, paths: list[Path]) -> None:
+    archive_index = (root / "docs/archive/README.md").read_text(encoding="utf-8")
+    for path in paths:
+        relative = path.relative_to(root)
+        if relative.parent != Path(".") or "runbook" not in relative.name.lower():
+            continue
+        text = path.read_text(encoding="utf-8")
+        if not text.startswith("> **Authority: Historical"):
+            _fail("root runbook lacks a non-authoritative historical banner", path=relative.as_posix())
+        if f"`{relative.as_posix()}`" not in archive_index:
+            _fail("root runbook is absent from the historical document index", path=relative.as_posix())
 
 
 def verify_docs(repository_root: str | Path) -> dict[str, object]:
@@ -262,14 +302,24 @@ def verify_docs(repository_root: str | Path) -> dict[str, object]:
         if item not in non_goals:
             _fail("NON_GOALS.md is missing a required literal", item=item)
 
-    identifier_pattern = r"\b((?:FIN|AI|PRIV|PLAT)-\d{2})\b"
-    agent_ids = set(re.findall(identifier_pattern, agents))
-    doc_ids = set(re.findall(identifier_pattern, (root / "docs/security/INVARIANTS.md").read_text()))
-    policy_ids = {entry["id"] for entry in json.loads((root / "agent-system/policies/invariants.json").read_text())["entries"]}
-    if not (agent_ids == doc_ids == policy_ids) or len(policy_ids) != 26:
-        _fail("the three invariant catalogs do not contain the same twenty-six IDs")
+    invariant_doc = (root / "docs/security/INVARIANTS.md").read_text()
+    invariant_policy = json.loads(
+        (root / "agent-system/policies/invariants.json").read_text()
+    )
+    agent_statements = _agent_invariant_statements(agents)
+    doc_statements = _documented_invariant_statements(invariant_doc)
+    policy_statements = {
+        entry["id"]: _normalise_invariant_statement(entry["statement"])
+        for entry in invariant_policy["entries"]
+    }
+    if not (
+        agent_statements == doc_statements == policy_statements
+        and len(policy_statements) == 26
+    ):
+        _fail("the three invariant catalogs do not contain the same twenty-six statements")
 
     markdown = _tracked_markdown(root)
+    _verify_root_runbook_inventory(root, markdown)
     _verify_links(root, markdown)
     _verify_claims(root, markdown)
     return {"status": "ok", "markdown_files_checked": len(markdown)}
