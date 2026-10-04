@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -24,6 +25,8 @@ def _repo_root() -> pathlib.Path:
 
 
 class GateTests(unittest.TestCase):
+    root = _repo_root()
+
     def _criteria(self, criterion: dict) -> dict:
         return {
             "artifact_type": "phase-gate",
@@ -179,6 +182,187 @@ class GateTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"PWD": str(logical)}):
                 result = GateEvaluator(physical).evaluate(source, write_result=False)
         self.assertEqual(result["criteria"][0]["result"], "pass")
+
+    def test_architecture_audit_gate_rejects_untrusted_or_blocking_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary) / "repository"
+            (root / "agent-system/work/P0/gates").mkdir(parents=True)
+            shutil.copytree(
+                self.root / "agent-system/schemas", root / "agent-system/schemas"
+            )
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "fixture@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Fixture"], cwd=root, check=True
+            )
+            (root / "seed.txt").write_text("seed\n", encoding="utf-8")
+            subprocess.run(["git", "add", "--all"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=root, check=True)
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True
+            ).strip()
+            tree = subprocess.check_output(
+                ["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True
+            ).strip()
+            valid = {
+                "artifact_type": "architecture-audit",
+                "audit_id": "AUDIT-GATE-1",
+                "gate_id": "G0",
+                "pass_id": "merge",
+                "auditor_role": "architectural_authority",
+                "auditor_provider": "fixture-provider",
+                "auditor_model": "fixture-model",
+                "auditor_session_id": "fresh-session",
+                "auditor_run_id": "fresh-run",
+                "audited_commit": commit,
+                "audited_tree_hash": tree,
+                "artifact_families": ["all"],
+                "decision_coverage": [
+                    {
+                        "decision_id": "G0",
+                        "assessment": "implemented",
+                        "evidence_ref": "seed.txt",
+                    }
+                ],
+                "findings": [],
+                "verdict": "no_blocking_findings",
+                "independence_attestation": {"fresh_session": True, "distinct": True},
+            }
+            audit_path = root / "agent-system/work/P0/gates/G0-architecture-audit.json"
+            criteria_path = root / "G0-criteria.json"
+            criteria_path.write_text(
+                json.dumps(
+                    {
+                        **self._criteria(
+                            {
+                                "criterion_id": "AUDIT-1",
+                                "statement": "Audit must be trusted and clean",
+                                "evidence_type": "artifact",
+                                "evidence_ref": audit_path.relative_to(root).as_posix(),
+                            }
+                        ),
+                        "gate_id": "G0",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            cases = []
+            incomplete = json.loads(json.dumps(valid))
+            incomplete["artifact_families"] = []
+            cases.append(incomplete)
+            nonindependent = json.loads(json.dumps(valid))
+            nonindependent["independence_attestation"]["distinct"] = False
+            cases.append(nonindependent)
+            stale = json.loads(json.dumps(valid))
+            stale["audited_commit"] = "1" * 40
+            cases.append(stale)
+            blocking = json.loads(json.dumps(valid))
+            blocking["findings"] = [
+                {
+                    "finding_id": "BLOCK-1",
+                    "severity": "critical",
+                    "violated_criterion": "G0",
+                    "reproducible_evidence": "seed.txt",
+                    "observed_behavior": "blocked",
+                    "required_behavior": "clean",
+                    "required_outcome": "repair",
+                    "blocking": True,
+                }
+            ]
+            blocking["verdict"] = "blocking_findings"
+            cases.append(blocking)
+            for index, audit in enumerate(cases):
+                with self.subTest(index=index):
+                    audit_path.write_text(json.dumps(audit), encoding="utf-8")
+                    result = GateEvaluator(root).evaluate(criteria_path, write_result=False)
+                    self.assertEqual(result["criteria"][0]["result"], "fail")
+
+    def test_architecture_audit_remains_current_after_evidence_only_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary) / "repository"
+            audit_path = root / "agent-system/work/P0/gates/G0-architecture-audit.json"
+            audit_path.parent.mkdir(parents=True)
+            shutil.copytree(
+                self.root / "agent-system/schemas", root / "agent-system/schemas"
+            )
+            criteria_path = root / "G0-criteria.json"
+            criteria_path.write_text(
+                json.dumps(
+                    {
+                        **self._criteria(
+                        {
+                            "criterion_id": "AUDIT-1",
+                            "statement": "Audit must remain bound after evidence commit",
+                            "evidence_type": "artifact",
+                            "evidence_ref": audit_path.relative_to(root).as_posix(),
+                        }
+                        ),
+                        "gate_id": "G0",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "fixture@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Fixture"], cwd=root, check=True
+            )
+            subprocess.run(["git", "add", "--all"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "audited base"], cwd=root, check=True)
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True
+            ).strip()
+            tree = subprocess.check_output(
+                ["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True
+            ).strip()
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "artifact_type": "architecture-audit",
+                        "audit_id": "AUDIT-EVIDENCE-COMMIT",
+                        "gate_id": "G0",
+                        "pass_id": "merge",
+                        "auditor_role": "architectural_authority",
+                        "auditor_provider": "fixture-provider",
+                        "auditor_model": "fixture-model",
+                        "auditor_session_id": "fresh-session",
+                        "auditor_run_id": "fresh-run",
+                        "audited_commit": commit,
+                        "audited_tree_hash": tree,
+                        "artifact_families": ["all"],
+                        "decision_coverage": [
+                            {
+                                "decision_id": "G0",
+                                "assessment": "implemented",
+                                "evidence_ref": "G0-criteria.json",
+                            }
+                        ],
+                        "findings": [],
+                        "verdict": "no_blocking_findings",
+                        "independence_attestation": {
+                            "fresh_session": True,
+                            "distinct": True,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "--all"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "commit", "-q", "-m", "record audit evidence"],
+                cwd=root,
+                check=True,
+            )
+            result = GateEvaluator(root).evaluate(criteria_path, write_result=False)
+            self.assertEqual(result["criteria"][0]["result"], "pass")
 
 
 class AuditTests(unittest.TestCase):

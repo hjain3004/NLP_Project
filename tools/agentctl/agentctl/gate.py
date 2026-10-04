@@ -142,6 +142,28 @@ class GateEvaluator:
                     except InvalidArtifact:
                         result = "fail"
                     else:
+                        if artifact.get("artifact_type") == "architecture-audit":
+                            try:
+                                ingested = ingest_audit(
+                                    gate_id,
+                                    artifact,
+                                    construction_log=(
+                                        self.root
+                                        / "agent-system/work/P0/CONSTRUCTION-LOG.md"
+                                    ),
+                                    store=self.store,
+                                    source_path=reference,
+                                    repository_root=self.root,
+                                )
+                            except (InvalidArtifact, PermissionViolation, subprocess.SubprocessError):
+                                result = "fail"
+                            else:
+                                result = (
+                                    "pass"
+                                    if ingested["verdict"] == "no_blocking_findings"
+                                    else "fail"
+                                )
+                            return {**criterion, "result": result}
                         identity_bound = any(
                             key in artifact
                             for key in ("task_id", "gate_id", "audit_id", "integration_id")
@@ -371,17 +393,65 @@ def ingest_audit(
     expected_commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=root, text=True
     ).strip()
-    expected_tree = subprocess.check_output(
-        ["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True
-    ).strip()
-    if audit.get("audited_commit") != expected_commit or audit.get("audited_tree_hash") != expected_tree:
+    audited_commit = str(audit.get("audited_commit", ""))
+    try:
+        audited_tree = subprocess.check_output(
+            ["git", "rev-parse", f"{audited_commit}^{{tree}}"],
+            cwd=root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", audited_commit, expected_commit],
+            cwd=root,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
         raise InvalidArtifact(
-            "architecture audit is stale or bound to another repository tree",
-            expected_commit=expected_commit,
-            expected_tree=expected_tree,
-            audited_commit=audit.get("audited_commit"),
+            "architecture audit commit is absent or not an ancestor of the evaluated tree",
+            audited_commit=audited_commit,
+            evaluated_commit=expected_commit,
+        ) from None
+    if audit.get("audited_tree_hash") != audited_tree:
+        raise InvalidArtifact(
+            "architecture audit tree hash does not match its audited commit",
+            audited_commit=audited_commit,
+            expected_tree=audited_tree,
             audited_tree_hash=audit.get("audited_tree_hash"),
         )
+    if audited_commit != expected_commit:
+        changed = subprocess.check_output(
+            ["git", "diff", "--name-only", f"{audited_commit}..{expected_commit}"],
+            cwd=root,
+            text=True,
+        ).splitlines()
+        allowed_exact = {
+            "agent-system/work/P0/gates/G0-architecture-audit.json",
+            "agent-system/work/P0/gates/G0-result.json",
+            "docs/program/PHASE_GATES.md",
+        }
+        disallowed = [
+            path
+            for path in changed
+            if path not in allowed_exact
+            and not (
+                path.startswith("agent-system/work/P0/gates/G0-audit-pass-")
+                and path.endswith(".json")
+            )
+            and not (
+                path.startswith("agent-system/work/P0/approvals/G0-")
+                and path.endswith(".json")
+            )
+        ]
+        if disallowed:
+            raise InvalidArtifact(
+                "architecture audit is stale because non-evidence files changed",
+                audited_commit=audited_commit,
+                evaluated_commit=expected_commit,
+                disallowed_paths=disallowed,
+            )
     result = {
         "audit_id": audit["audit_id"],
         "gate_id": gate_id,

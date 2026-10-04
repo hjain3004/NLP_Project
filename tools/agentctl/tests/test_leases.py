@@ -8,9 +8,11 @@ import pathlib
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timezone
 
-from agentctl.errors import ContractStale, PermissionViolation
-from agentctl.scheduler import Scheduler, TaskSpec
+from agentctl.approval import ApprovalManager, create_approval
+from agentctl.errors import ContractStale, PermissionViolation, PlanningError
+from agentctl.scheduler import Scheduler, TaskSpec, task_approval_scope
 from agentctl.store import EventStore
 
 
@@ -226,6 +228,120 @@ class LeaseTests(unittest.TestCase):
         fixture["lease_id"] = lease.lease_id
         with self.assertRaises(PermissionViolation):
             self.scheduler.ingest_manifest("FIXTURE-TASK", fixture)
+
+    def test_privileged_task_cannot_lease_without_registered_bound_approval(self) -> None:
+        key = b"p" * 32
+        policy = {"tiers": {"destructive_operation": "interactive_tty_with_key_unlock"}}
+        approvals = ApprovalManager(self.store, key=key, policy=policy)
+        scheduler = Scheduler(self.store, approval_manager=approvals)
+        spec = TaskSpec(
+            **{
+                **self._spec("PRIVILEGED-TASK").__dict__,
+                "human_approval_ref": "MISSING-APPROVAL",
+                "human_approval_action": "destructive_operation",
+            }
+        )
+        scheduler.register_task(spec)
+        with self.assertRaises(PlanningError):
+            scheduler.dispatch("PRIVILEGED-TASK", worker_identity="worker")
+        self.assertEqual(self.store.scalar("SELECT COUNT(*) FROM leases"), 0)
+
+    def test_bound_approval_is_consumed_in_the_lease_transaction(self) -> None:
+        key = b"p" * 32
+        policy = {"tiers": {"destructive_operation": "interactive_tty_with_key_unlock"}}
+        approvals = ApprovalManager(self.store, key=key, policy=policy)
+        scheduler = Scheduler(self.store, approval_manager=approvals)
+        spec = TaskSpec(
+            **{
+                **self._spec("PRIVILEGED-TASK").__dict__,
+                "human_approval_ref": "APPROVAL-PRIVILEGED-TASK",
+                "human_approval_action": "destructive_operation",
+            }
+        )
+        approval = create_approval(
+            key=key,
+            principal="owner",
+            machine_identity="owner-machine",
+            action="destructive_operation",
+            target_type="task-contract",
+            target_id=spec.task_id,
+            target_hash=spec.contract_hash,
+            scope=task_approval_scope(spec),
+            reason="Authorize the exact privileged task contract",
+            now=datetime.now(timezone.utc),
+        )
+        approval["approval_id"] = spec.human_approval_ref
+        from agentctl.approval import seal_approval
+
+        approval = seal_approval(approval, key)
+        approvals.register(approval)
+        scheduler.register_task(spec)
+        lease = scheduler.dispatch("PRIVILEGED-TASK", worker_identity="worker")
+        self.assertEqual(lease.epoch, 1)
+        stored = json.loads(
+            self.store.rows(
+                "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                (spec.human_approval_ref,),
+            )[0]["payload_json"]
+        )
+        self.assertIsNotNone(stored["consumed_at"])
+
+    def test_wrong_approval_binding_never_issues_a_lease(self) -> None:
+        key = b"p" * 32
+        policy = {
+            "tiers": {
+                "destructive_operation": "interactive_tty_with_key_unlock",
+                "protected_test_change": "interactive_tty_with_key_unlock",
+            }
+        }
+        cases = {
+            "action": {"action": "protected_test_change"},
+            "target_type": {"target_type": "work-package"},
+            "target_id": {"target_id": "ANOTHER-TASK"},
+            "target_hash": {"target_hash": "9" * 64},
+            "scope": {"scope": "Authorize a broader task"},
+        }
+        for index, (name, override) in enumerate(cases.items(), start=1):
+            with self.subTest(name=name):
+                task_id = f"PRIVILEGED-{index}"
+                approvals = ApprovalManager(self.store, key=key, policy=policy)
+                scheduler = Scheduler(self.store, approval_manager=approvals)
+                spec = TaskSpec(
+                    **{
+                        **self._spec(task_id).__dict__,
+                        "human_approval_ref": f"APPROVAL-{index}",
+                        "human_approval_action": "destructive_operation",
+                    }
+                )
+                values = {
+                    "action": "destructive_operation",
+                    "target_type": "task-contract",
+                    "target_id": spec.task_id,
+                    "target_hash": spec.contract_hash,
+                    "scope": task_approval_scope(spec),
+                    **override,
+                }
+                approval = create_approval(
+                    key=key,
+                    principal="owner",
+                    machine_identity="owner-machine",
+                    reason="Exercise a wrong approval binding",
+                    now=datetime.now(timezone.utc),
+                    **values,
+                )
+                approval["approval_id"] = spec.human_approval_ref
+                from agentctl.approval import seal_approval
+
+                approvals.register(seal_approval(approval, key))
+                scheduler.register_task(spec)
+                with self.assertRaises(PlanningError):
+                    scheduler.dispatch(task_id, worker_identity="worker")
+                self.assertEqual(
+                    self.store.scalar(
+                        "SELECT COUNT(*) FROM leases WHERE task_id = ?", (task_id,)
+                    ),
+                    0,
+                )
 
 
 if __name__ == "__main__":

@@ -266,6 +266,72 @@ class ApprovalManager:
             self.store.execute(f"approval-register:{approval_id}", event, mutation)
         )
 
+    def verify_registered(
+        self, request: Mapping[str, str], *, now: dt.datetime | None = None
+    ) -> Mapping[str, Any]:
+        approval_id = str(request["approval_id"])
+        rows = self.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_id = ? "
+            "AND artifact_type = 'human-approval'",
+            (approval_id,),
+        )
+        if not rows:
+            raise ApprovalRejected("approval_unsigned", "approval is not registered")
+        record = json.loads(rows[0]["payload_json"])
+        return verify_approval(
+            record,
+            self.key,
+            expected_action=request["expected_action"],
+            expected_target_type=request.get("expected_target_type") or None,
+            expected_target_id=request.get("expected_target_id") or None,
+            expected_target_hash=request["expected_target_hash"],
+            expected_scope=request["expected_scope"],
+            now=now,
+            policy=self.policy,
+            repository_root=self.store.repository_root,
+        )
+
+    def consume_in_transaction(
+        self,
+        connection: sqlite3.Connection,
+        request: Mapping[str, str],
+        *,
+        now: dt.datetime | None = None,
+    ) -> dict[str, Any]:
+        """Verify and consume one approval inside an existing writer transaction."""
+        approval_id = str(request["approval_id"])
+        row = connection.execute(
+            "SELECT payload_json FROM artifacts WHERE artifact_id = ? "
+            "AND artifact_type = 'human-approval'",
+            (approval_id,),
+        ).fetchone()
+        if row is None:
+            raise ApprovalRejected("approval_unsigned", "approval is not registered")
+        record = json.loads(row["payload_json"])
+        verify_approval(
+            record,
+            self.key,
+            expected_action=request["expected_action"],
+            expected_target_type=request.get("expected_target_type") or None,
+            expected_target_id=request.get("expected_target_id") or None,
+            expected_target_hash=request["expected_target_hash"],
+            expected_scope=request["expected_scope"],
+            now=now,
+            policy=self.policy,
+            repository_root=self.store.repository_root,
+        )
+        consumed_at = _timestamp(now or _utc_now())
+        record["consumed_at"] = consumed_at
+        connection.execute(
+            "UPDATE artifacts SET content_hash = ?, payload_json = ? WHERE artifact_id = ?",
+            (
+                sha256_of_json(record),
+                json.dumps(record, sort_keys=True, separators=(",", ":")),
+                approval_id,
+            ),
+        )
+        return {"approval_id": approval_id, "consumed_at": consumed_at}
+
     def consume(
         self,
         approval_id: str,

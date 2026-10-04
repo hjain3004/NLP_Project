@@ -67,7 +67,14 @@ class LeaseManager:
         self.store = store
         self.duration_seconds = duration_seconds
 
-    def issue(self, spec: Any, *, worker_identity: str) -> Lease:
+    def issue(
+        self,
+        spec: Any,
+        *,
+        worker_identity: str,
+        approval_manager: Any | None = None,
+        approval_request: Mapping[str, str] | None = None,
+    ) -> Lease:
         issued_at = _now()
         heartbeat_at = _timestamp(issued_at)
         expires_at = _timestamp(issued_at + dt.timedelta(seconds=self.duration_seconds))
@@ -85,6 +92,9 @@ class LeaseManager:
             contract_hash=spec.contract_hash,
             context_hash=spec.context_hash,
             repository_commits=[spec.base_commit],
+            artifact_refs=(
+                [str(approval_request["approval_id"])] if approval_request else []
+            ),
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -141,6 +151,14 @@ class LeaseManager:
             ).fetchone()
             if budget_row is None or int(budget_row["attempts_remaining"] or 0) <= 0:
                 raise BudgetExhausted("task attempt budget is exhausted", task_id=spec.task_id)
+
+            if approval_request is not None:
+                if approval_manager is None:
+                    raise IllegalTransition(
+                        "privileged task has no approval authority",
+                        task_id=spec.task_id,
+                    )
+                approval_manager.consume_in_transaction(connection, approval_request)
 
             epoch = int(
                 connection.execute(

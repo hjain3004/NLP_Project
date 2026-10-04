@@ -13,7 +13,7 @@ from agentctl.context import (
     ContextCompiler,
     assert_context_hash,
 )
-from agentctl.errors import ContractStale
+from agentctl.errors import ContractStale, PlanningError
 from agentctl.scheduler import Scheduler, TaskSpec
 from agentctl.store import EventStore
 
@@ -62,6 +62,20 @@ class ContextCompilationTests(unittest.TestCase):
         assert_context_hash("a" * 64, artifact)
         with self.assertRaises(ContractStale):
             assert_context_hash("b" * 64, artifact)
+
+    def test_compiler_rejects_explicitly_excluded_and_disallowed_paths(self) -> None:
+        compiler = ContextCompiler(self.root)
+        for path in ("docs/archive/README.md", "CLAUDE.md"):
+            with self.subTest(path=path):
+                inputs = self._inputs()
+                inputs["decisions"] = [path]
+                with self.assertRaises(PlanningError):
+                    compiler.compile(
+                        task_id="TASK-CTX",
+                        attempt_id="TASK-CTX-attempt-1",
+                        role="mechanical_execution",
+                        inputs=inputs,
+                    )
 
     def test_interface_bump_stales_consumer_and_rebuild_changes_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

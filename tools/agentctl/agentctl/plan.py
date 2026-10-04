@@ -54,7 +54,8 @@ def task_spec_from_contract(
         maximum_artifact_corrections=int(budgets["maximum_artifact_corrections"]),
         dependencies=tuple(dependencies["requires"]),
         interface_pins=_interface_pins(dependencies["consumes"]),
-        human_approval_required=bool(permissions.get("human_approval_ref")),
+        human_approval_ref=permissions.get("human_approval_ref"),
+        human_approval_action=permissions.get("required_human_approval_action"),
     )
 
 

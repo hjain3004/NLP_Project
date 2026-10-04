@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
+from .approval import ApprovalManager, ApprovalRejected
 from .errors import (
     BudgetExhausted,
     ContractStale,
@@ -31,6 +32,7 @@ __all__ = [
     "Scheduler",
     "TaskSpec",
     "admission_decision",
+    "task_approval_scope",
     "transition",
 ]
 
@@ -184,7 +186,8 @@ class TaskSpec:
     maximum_artifact_corrections: int
     dependencies: tuple[str, ...] = ()
     interface_pins: Mapping[str, str] | None = None
-    human_approval_required: bool = False
+    human_approval_ref: str | None = None
+    human_approval_action: str | None = None
 
     def with_semantic_locks(self, claims: Mapping[str, str]) -> "TaskSpec":
         return replace(self, semantic_locks=dict(claims))
@@ -216,10 +219,50 @@ _CAPABILITY_RANK = {
 }
 
 
+def task_approval_scope(spec: TaskSpec) -> str:
+    if not spec.human_approval_action:
+        raise PlanningError("task has no required human approval action", task_id=spec.task_id)
+    return (
+        f"Authorize {spec.human_approval_action} for task-contract "
+        f"{spec.task_id}@{spec.contract_hash}"
+    )
+
+
 class Scheduler:
-    def __init__(self, store: EventStore) -> None:
+    def __init__(
+        self, store: EventStore, *, approval_manager: ApprovalManager | None = None
+    ) -> None:
         self.store = store
         self.leases = LeaseManager(store)
+        self.approvals = approval_manager
+
+    def _approval_request(self, spec: TaskSpec) -> dict[str, str] | None:
+        if spec.human_approval_ref is None:
+            return None
+        if not spec.human_approval_action:
+            raise PlanningError(
+                "task approval reference has no required action", task_id=spec.task_id
+            )
+        return {
+            "approval_id": spec.human_approval_ref,
+            "expected_action": spec.human_approval_action,
+            "expected_target_type": "task-contract",
+            "expected_target_id": spec.task_id,
+            "expected_target_hash": spec.contract_hash,
+            "expected_scope": task_approval_scope(spec),
+        }
+
+    def _approval_is_available(self, spec: TaskSpec) -> bool:
+        request = self._approval_request(spec)
+        if request is None:
+            return True
+        if self.approvals is None:
+            return False
+        try:
+            self.approvals.verify_registered(request)
+        except ApprovalRejected:
+            return False
+        return True
 
     def register_task(self, spec: TaskSpec) -> None:
         event = make_event(
@@ -288,7 +331,6 @@ class Scheduler:
         *,
         worker_capability: str,
         reviewer_available: bool,
-        human_approval_available: bool,
     ) -> AdmissionFacts:
         incomplete = int(self.store.scalar(
             "SELECT COUNT(*) FROM dependencies d LEFT JOIN tasks t "
@@ -331,7 +373,7 @@ class Scheduler:
             reviewer_available=reviewer_available,
             budget_available=attempts > 0,
             enforcement_compatible=enforcement_ok,
-            human_approval_available=(not spec.human_approval_required) or human_approval_available,
+            human_approval_available=self._approval_is_available(spec),
         )
 
     def dispatch(
@@ -341,7 +383,6 @@ class Scheduler:
         worker_identity: str,
         worker_capability: str | None = None,
         reviewer_available: bool = True,
-        human_approval_available: bool = False,
     ) -> Lease:
         self.leases.expire_dead()
         spec = self._spec(task_id)
@@ -349,7 +390,6 @@ class Scheduler:
             spec,
             worker_capability=worker_capability or spec.capability_class,
             reviewer_available=reviewer_available,
-            human_approval_available=human_approval_available,
         )
         decision = admission_decision(facts)
         if not decision.allowed:
@@ -375,7 +415,13 @@ class Scheduler:
             if decision.reason_code == "budget_exhausted":
                 raise BudgetExhausted("task was not admitted", task_id=task_id)
             raise PlanningError("task was not admitted", task_id=task_id, reason_code=decision.reason_code)
-        return self.leases.issue(spec, worker_identity=worker_identity)
+        approval_request = self._approval_request(spec)
+        return self.leases.issue(
+            spec,
+            worker_identity=worker_identity,
+            approval_manager=self.approvals,
+            approval_request=approval_request,
+        )
 
     def acknowledge(self, task_id: str, context_hash: str) -> Lease:
         return self.leases.acknowledge(task_id, context_hash)
@@ -391,7 +437,6 @@ class Scheduler:
                 spec,
                 worker_capability=spec.capability_class,
                 reviewer_available=True,
-                human_approval_available=False,
             ))
             is_schedulable_state = row["state"] == "ready"
             result.append({

@@ -1,12 +1,12 @@
 {
   "artifact_type": "context-manifest",
-  "context_hash": "0154da0429d7b1a4512e78036f46ea597eeefdb4ee73c4d1370d0d5438278256",
+  "context_hash": "8bbcc4f8e09799dce4c845c81d6ccc0c907d272ae13bc466d7f7a50c0c15ca25",
   "task_id": "EX-DOC-001",
   "attempt_id": "EX-DOC-001-A1",
   "compiled_at": "2026-09-01T00:05:00Z",
   "role": "mechanical_execution",
   "inputs": {
-    "authority_excerpt": {"path": "AGENTS.md", "sha256": "9e6820057d65b35b7243bc9f89c3a4319f85d4ed247d60c9a1d89f41c27579fd", "bytes": 14270},
+    "authority_excerpt": {"path": "AGENTS.md", "sha256": "082e7bc061eb554ee64d41631e7f49cff9121b375ac561b82b64d1f99ddc2d70", "bytes": 14326},
     "role_contract": {"path": "agent-system/roles/mechanical-executor.md", "sha256": "88a20a311a6a7bfb78aed0a6a130196cae3bcf31c9b38be9539b545f6f424026", "bytes": 1392},
     "task_contract": {"path": "agent-system/examples/valid/02-task-contract.json", "sha256": "d0f4dab3f62b10193e9d129f1639950907db5090df4201b411077355a33c2f2c", "bytes": 3227},
     "decisions": [

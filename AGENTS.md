@@ -246,16 +246,17 @@ failure
 
 The ladder: one local repair for a valid task → independent classification of the failure →
 one capability class higher for an implementation failure → one bounded replan for invalid
-assumptions or dependencies → architecture for cross-work-package conflict → the human for
-protected-invariant, destructive, schema-commitment, release, or unresolved product decisions.
+assumptions or dependencies → architectural authority for architecture, privacy, financial,
+or cross-work-package conflict → the human for protected-invariant, destructive,
+schema-commitment, release, or unresolved product decisions.
 
 The default ceiling is **three execution attempts**. A task may declare fewer. You may not
 extend your own retry allowance.
 
 **Retries without new evidence are forbidden.** Stop and escalate when the same failure
 signature repeats, a repair does not address the cited evidence, attempts alternate between
-two broken states, previously passing gates regress, the budget expires, you cross scope, or
-a permission or protected-test violation occurs.
+two broken states, previously passing gates regress, the task or budget expires, you cross
+scope, or a permission or protected-test violation occurs.
 
 ## 10. Human approval
 

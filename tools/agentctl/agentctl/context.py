@@ -7,7 +7,7 @@ import json
 import sqlite3
 import uuid
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .config import repo_root as resolve_repo_root
@@ -83,6 +83,20 @@ class ContextCompiler:
             else resolve_repo_root()
         )
         self.store = store
+        boundary = json.loads(
+            (self.root / "agent-system/policies/product-data-boundary.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        enforcement = boundary["enforcement"]
+        self.allowed_context_roots = tuple(enforcement["allowed_context_roots"])
+        self.excluded_context_paths = tuple(enforcement["excluded_by_default"])
+
+    @staticmethod
+    def _path_matches(relative_path: str, rule: str) -> bool:
+        if any(character in rule for character in "*?["):
+            return PurePosixPath(relative_path).match(rule)
+        return relative_path == rule or relative_path.startswith(f"{rule}/")
 
     def _entry(self, relative_path: str) -> dict[str, Any]:
         if not isinstance(relative_path, str) or not relative_path:
@@ -94,6 +108,18 @@ class ContextCompiler:
             raise PlanningError("context input escapes the repository", path=relative_path) from exc
         if normalized != relative_path or not candidate.is_file():
             raise PlanningError("context input is missing or unnormalised", path=relative_path)
+        if any(
+            self._path_matches(normalized, rule) for rule in self.excluded_context_paths
+        ):
+            raise PlanningError(
+                "context input is excluded by the product-data boundary", path=relative_path
+            )
+        if not any(
+            self._path_matches(normalized, rule) for rule in self.allowed_context_roots
+        ):
+            raise PlanningError(
+                "context input is outside the allowed context roots", path=relative_path
+            )
         return {
             "path": relative_path,
             "sha256": sha256_of_file(candidate),
