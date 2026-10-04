@@ -1,6 +1,6 @@
 {
   "artifact_type": "context-manifest",
-  "context_hash": "d79cbd80030e13cb24e42ba95902d4d3e81eefbf0518a324be43412d8d4ff826",
+  "context_hash": "f2ba6438c35985500708a35ac5c7eda6ada194601f449a2deb46132863058703",
   "task_id": "DRY-001",
   "attempt_id": "DRY-001-attempt-1",
   "compiled_at": "2026-09-26T00:00:00Z",
@@ -8,8 +8,8 @@
   "inputs": {
     "authority_excerpt": {
       "path": "AGENTS.md",
-      "sha256": "4c5e2c2bb1cdb31e23d3835b3eb8343e9be8fa640bcb2c55080e1cbed30a44f5",
-      "bytes": 13913
+      "sha256": "4ece66211ea6b2fa6c9c8e2a22e4979bccfac3c5d7417082fb0f9222d69f4b25",
+      "bytes": 14437
     },
     "role_contract": {
       "path": "agent-system/roles/mechanical-executor.md",
