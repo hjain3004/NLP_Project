@@ -10,7 +10,7 @@
       "statement": "The standalone example artifacts are structurally valid",
       "evidence_type": "artifact",
       "evidence_ref": "agent-system/examples/valid/06-integration-manifest.json",
-      "evidence_hash": "e80e120a5d26cc0b89cc31200549ac2625cfcb1b858265f31a1982596a3b2481",
+      "evidence_hash": "50518ba28db2ba577272efc56dbc115f6a182eb29c8cba376584c119f4674ca3",
       "result": "pass"
     }
   ],

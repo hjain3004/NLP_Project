@@ -15,6 +15,9 @@
     "reviewer_model",
     "reviewer_session_id",
     "reviewer_run_id",
+    "lease_id",
+    "lease_epoch",
+    "fencing_token",
     "reviewed_result_commit",
     "tree_hash",
     "diff_hash",
@@ -53,6 +56,15 @@
       "type": "string"
     },
     "reviewer_run_id": {
+      "type": "string"
+    },
+    "lease_id": {
+      "type": "string"
+    },
+    "lease_epoch": {
+      "type": "integer"
+    },
+    "fencing_token": {
       "type": "string"
     },
     "reviewed_result_commit": {
@@ -138,10 +150,13 @@
           "finding_id",
           "severity",
           "violated_criterion",
+          "file",
+          "location",
           "reproducible_evidence",
           "observed_behavior",
           "required_behavior",
           "required_outcome",
+          "reviewer_confidence",
           "blocking"
         ]
       }

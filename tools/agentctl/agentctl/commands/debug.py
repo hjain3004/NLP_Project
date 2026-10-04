@@ -46,14 +46,23 @@ def _assert_debug_allowed() -> None:
 
 
 def run(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[0] not in {"expire-lease", "bump-interface"}:
-        print("usage: agentctl debug <expire-lease|bump-interface> <id>", file=sys.stderr)
+    valid_expire = len(argv) == 2 and argv[0] == "expire-lease"
+    valid_bump = len(argv) == 4 and argv[0] == "bump-interface"
+    if not (valid_expire or valid_bump):
+        print(
+            "usage: agentctl debug expire-lease <task-id> | "
+            "debug bump-interface <interface-id> <source-path> <version>",
+            file=sys.stderr,
+        )
         return 2
     _assert_debug_allowed()
     scheduler = Scheduler(EventStore())
-    if argv[0] == "expire-lease":
+    if valid_expire:
         result: object = {"task_id": argv[1], "expired": scheduler.expire_lease(argv[1], force=True)}
     else:
-        result = {"interface_id": argv[1], "stale_tasks": list(scheduler.bump_interface(argv[1]))}
+        result = {
+            "interface_id": argv[1],
+            "stale_tasks": list(scheduler.bump_interface(argv[1], argv[2], argv[3])),
+        }
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0

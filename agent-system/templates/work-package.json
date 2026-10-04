@@ -20,5 +20,7 @@
     "REPLACE:objective acceptance summary"
   ],
   "status": "REPLACE:allowed status",
-  "created_at": "REPLACE:RFC 3339 timestamp"
+  "bootstrap_phase": "REPLACE:true only for bootstrap work",
+  "created_at": "REPLACE:RFC 3339 timestamp",
+  "plan_hash": "REPLACE:64-character approved-plan SHA-256"
 }

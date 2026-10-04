@@ -10,7 +10,7 @@
   "model": "fixture-model",
   "model_version": "fixture-version-1",
   "contract_hash": "c460f2b334ed96f0d78d59826eb97b6f50655003473b855fb61a9ca7f51bb7af",
-  "context_hash": "8bbcc4f8e09799dce4c845c81d6ccc0c907d272ae13bc466d7f7a50c0c15ca25",
+  "context_hash": "17fe796e55a1177075b58be29fc0755853b9e45eb9eae233dec1f4760e34f8ca",
   "base_commit": "3e49a7a082b263bf0682b766e49f47633e242ee2",
   "result_commit": "623601c1937612a14f0cf247b316f42e909f598c",
   "files_changed": [

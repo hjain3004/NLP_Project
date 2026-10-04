@@ -8,15 +8,17 @@
     "base_commit": "0000000000000000000000000000000000000000",
     "execution_mode": "control_plane",
     "status": "validated",
-    "created_at": "2026-09-01T00:00:00Z"
+    "created_at": "2026-09-01T00:00:00Z",
+    "expires_at": "2099-09-01T00:00:00Z"
   },
   "intent": {
     "objective": "Prove path traversal is rejected",
     "rationale": "The writable path intentionally escapes the repository",
     "non_goals": [],
-    "acceptance_behavior": ["The validator reports path traversal"]
+    "acceptance_behavior": ["The validator reports path traversal"],
+    "relevant_decisions": []
   },
-  "dependencies": {"requires": [], "consumes": [], "produces": []},
+  "dependencies": {"requires": [], "consumes": [], "produces": [], "integration_order": 1, "invalidation_triggers": []},
   "scope": {
     "readable_paths": ["agent-system/examples/**"],
     "writable_paths": ["../outside-repository.json"],

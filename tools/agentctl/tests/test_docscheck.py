@@ -66,6 +66,13 @@ class DocumentationCheckTests(unittest.TestCase):
         )
         for entry in registry["entries"]:
             self.assertNotIn(entry["capability_class"], adapters)
+        self.assertNotIn("Acceptance is objective and deterministic", adapters)
+        self.assertNotIn("You make no architectural", adapters)
+
+    def test_integrator_summary_preserves_reviewed_candidate_immutability(self) -> None:
+        agents = (self.root / "AGENTS.md").read_text()
+        self.assertIn("never alters a reviewed candidate", agents)
+        self.assertNotIn("resolves only\n  mechanical conflicts", agents)
 
     def test_operational_roles_are_not_labelled_capability_classes(self) -> None:
         for name in ("verifier.md", "integrator.md"):

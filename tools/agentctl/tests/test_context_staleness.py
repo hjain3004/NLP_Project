@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -79,18 +80,30 @@ class ContextCompilationTests(unittest.TestCase):
 
     def test_interface_bump_stales_consumer_and_rebuild_changes_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
+            clone = pathlib.Path(temporary) / "repository"
+            shutil.copytree(self.root, clone, ignore=shutil.ignore_patterns(".git", "runtime"))
             store = EventStore(
                 pathlib.Path(temporary) / "runtime.sqlite3",
-                repository_root=self.root,
+                repository_root=clone,
             )
             scheduler = Scheduler(store)
-            old_hash = "2" * 64
+            compiler = ContextCompiler(clone, store)
+            inputs = self._inputs()
+            interface_path = "agent-system/work/DRY-RUN/interfaces/context-v1.json"
+            inputs["consumed_interfaces"] = [interface_path]
+            original = compiler.compile(
+                task_id="TASK-CTX",
+                attempt_id="TASK-CTX-attempt-1",
+                role="mechanical_execution",
+                inputs=inputs,
+                compiled_at="2026-09-01T00:00:00Z",
+            )
             scheduler.register_task(
                 TaskSpec(
                     task_id="TASK-CTX",
                     work_package_id="WP-CTX",
                     contract_hash="1" * 64,
-                    context_hash=old_hash,
+                    context_hash=original["context_hash"],
                     base_commit="3" * 40,
                     capability_class="mechanical_execution",
                     risk="low",
@@ -100,23 +113,67 @@ class ContextCompilationTests(unittest.TestCase):
                     semantic_locks={},
                     maximum_attempts=1,
                     maximum_artifact_corrections=1,
-                    interface_pins={"contract:core-domain-v1": "a" * 64},
+                    interface_pins={"dry-run:context-v1": "1"},
                 )
             )
+            source = clone / interface_path
+            source.write_text('{"interface":"dry-run:context-v1","version":1,"revision":2}\n')
             self.assertEqual(
-                scheduler.bump_interface("contract:core-domain-v1"), ("TASK-CTX",)
+                scheduler.bump_interface("dry-run:context-v1", interface_path, "1"),
+                ("TASK-CTX",),
             )
             self.assertEqual(store.status("TASK-CTX")["state"], "stale")
 
-            manifest = ContextCompiler(self.root, store).rebuild(
-                "TASK-CTX", role="mechanical_execution", inputs=self._inputs()
+            manifest = compiler.rebuild(
+                "TASK-CTX", role="mechanical_execution", inputs=inputs
             )
-            self.assertNotEqual(manifest["context_hash"], old_hash)
+            self.assertNotEqual(manifest["context_hash"], original["context_hash"])
+            self.assertEqual(
+                manifest["inputs"]["consumed_interfaces"][0]["sha256"],
+                store.scalar(
+                    "SELECT content_hash FROM artifacts WHERE artifact_id = ?",
+                    ("interface-binding:dry-run:context-v1",),
+                ),
+            )
             self.assertEqual(store.status("TASK-CTX")["state"], "validated")
             self.assertEqual(
                 store.scalar("SELECT context_hash FROM tasks WHERE task_id = ?", ("TASK-CTX",)),
                 manifest["context_hash"],
             )
+
+    def test_rebuild_refuses_an_interface_version_outside_the_contract_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = pathlib.Path(temporary) / "repository"
+            shutil.copytree(self.root, clone, ignore=shutil.ignore_patterns(".git", "runtime"))
+            store = EventStore(
+                pathlib.Path(temporary) / "runtime.sqlite3", repository_root=clone
+            )
+            scheduler = Scheduler(store)
+            scheduler.register_task(
+                TaskSpec(
+                    task_id="TASK-CTX-VERSION",
+                    work_package_id="WP-CTX",
+                    contract_hash="1" * 64,
+                    context_hash="2" * 64,
+                    base_commit="3" * 40,
+                    capability_class="mechanical_execution",
+                    risk="low",
+                    enforcement_class="sandboxed_tools",
+                    writable_paths=("docs/context.md",),
+                    prohibited_paths=("AppleBooks/**",),
+                    semantic_locks={},
+                    maximum_attempts=1,
+                    maximum_artifact_corrections=1,
+                    interface_pins={"dry-run:context-v1": "1"},
+                )
+            )
+            interface_path = "agent-system/work/DRY-RUN/interfaces/context-v1.json"
+            scheduler.bump_interface("dry-run:context-v1", interface_path, "2")
+            with self.assertRaises(ContractStale):
+                ContextCompiler(clone, store).rebuild(
+                    "TASK-CTX-VERSION", role="mechanical_execution"
+                )
+            self.assertEqual(store.status("TASK-CTX-VERSION")["state"], "stale")
 
 
 if __name__ == "__main__":

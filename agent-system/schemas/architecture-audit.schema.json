@@ -150,10 +150,13 @@
           "finding_id",
           "severity",
           "violated_criterion",
+          "file",
+          "location",
           "reproducible_evidence",
           "observed_behavior",
           "required_behavior",
           "required_outcome",
+          "reviewer_confidence",
           "blocking"
         ]
       }

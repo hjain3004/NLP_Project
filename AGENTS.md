@@ -152,8 +152,9 @@ The operational roles are not provider-routed capability classes:
 
 - **verifier** — runs deterministic gates, inspects scope and protected-test integrity,
   emits structured findings. Never repairs code while acting as verifier.
-- **integrator** — consumes verified candidates in topological order, resolves only
-  mechanical conflicts, reruns affected gates, records the integration manifest.
+- **integrator** — consumes verified candidates in topological order and never alters a reviewed candidate;
+  it reruns affected gates and records the integration manifest. Any conflict becomes
+  a new repair or replanning task with fresh verification and independent review.
 
 ### Separation-of-duty invariants
 

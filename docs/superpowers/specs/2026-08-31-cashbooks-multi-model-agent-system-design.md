@@ -430,7 +430,7 @@ The integrator:
 
 - consumes verified candidates in topological order;
 - checks base compatibility;
-- resolves only mechanical conflicts within approved contracts;
+- never alters a reviewed candidate; every conflict becomes new repair or replanning work;
 - reruns affected gates after integration;
 - requests replanning for semantic conflicts;
 - records the integration manifest.
@@ -1237,10 +1237,11 @@ Each finding includes:
 
 The reviewer does not repair code in the same role.
 
-Every review verdict also binds to the reviewed result commit, tree hash, diff
-hash relative to its declared base, contract hash, context hash, and
-verification-evidence hash. Integration rejects a verdict if any bound value
-changes.
+Every review verdict also carries its reviewer lease ID, lease epoch, and fencing token and
+binds to the reviewed result commit, tree hash, diff hash relative to its declared base,
+contract hash, context hash, and verification-evidence hash. The control plane compares the
+lease and reviewer identity with trusted assignment state rather than deriving either from
+the verdict. Integration rejects a verdict if any bound value changes.
 
 ## 25. Bounded reflection and failure ladder
 
@@ -2303,21 +2304,20 @@ It avoids provider syntax, implementation backlog, and duplicated architecture d
 CLAUDE.md is a thin adapter:
 
 - read AGENTS.md first;
-- Opus plans work packages;
-- Sonnet implements or reviews bounded tasks;
+- use the capability class and decision rights supplied by the injected role and task contracts;
+- do not bind the provider to a capability class inside the adapter;
 - return typed artifacts;
 - never treat chat as canonical state;
 - never duplicate or weaken universal invariants.
 
 ### 47.3 GEMINI.md
 
-GEMINI.md is a thin mechanical-worker adapter:
+GEMINI.md is a thin adapter:
 
 - exact scope only;
-- objective acceptance only;
-- no architecture, privacy, financial, migration, or security decisions;
-- stop and escalate ambiguity;
-- return the required manifest.
+- use the capability class, checks, and escalation triggers supplied by the injected contracts;
+- do not narrow or broaden those contracts;
+- return the required typed artifact.
 
 ### 47.4 Codex
 

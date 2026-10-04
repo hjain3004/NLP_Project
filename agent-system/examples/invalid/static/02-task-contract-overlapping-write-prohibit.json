@@ -8,15 +8,17 @@
     "base_commit": "0000000000000000000000000000000000000000",
     "execution_mode": "control_plane",
     "status": "validated",
-    "created_at": "2026-09-01T00:00:00Z"
+    "created_at": "2026-09-01T00:00:00Z",
+    "expires_at": "2099-09-01T00:00:00Z"
   },
   "intent": {
     "objective": "Prove overlapping writable and prohibited paths are rejected",
     "rationale": "The same path is intentionally present in both sets",
     "non_goals": [],
-    "acceptance_behavior": ["The validator reports writable/prohibited overlap"]
+    "acceptance_behavior": ["The validator reports writable/prohibited overlap"],
+    "relevant_decisions": []
   },
-  "dependencies": {"requires": [], "consumes": [], "produces": []},
+  "dependencies": {"requires": [], "consumes": [], "produces": [], "integration_order": 1, "invalidation_triggers": []},
   "scope": {
     "readable_paths": ["agent-system/examples/**"],
     "writable_paths": ["docs/archive/**"],

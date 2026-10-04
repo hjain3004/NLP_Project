@@ -88,7 +88,8 @@
         "base_commit",
         "execution_mode",
         "status",
-        "created_at"
+        "created_at",
+        "expires_at"
       ]
     },
     "intent": {
@@ -125,7 +126,8 @@
         "objective",
         "rationale",
         "non_goals",
-        "acceptance_behavior"
+        "acceptance_behavior",
+        "relevant_decisions"
       ]
     },
     "dependencies": {
@@ -142,7 +144,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[a-z]+:[a-z0-9-]+@[0-9]+$"
+            "pattern": "^[a-z][a-z0-9-]*:[a-z0-9-]+@[0-9]+$"
           }
         },
         "produces": {
@@ -164,7 +166,9 @@
       "required": [
         "requires",
         "consumes",
-        "produces"
+        "produces",
+        "integration_order",
+        "invalidation_triggers"
       ]
     },
     "scope": {

@@ -820,7 +820,11 @@ Then, and nothing more: the `work_package_planning` role proposes a DAG, depende
 
 - [ ] **Step 3: Write `GEMINI.md` (40 lines maximum)**
 
-Same first line, then: execute the exact scope and nothing adjacent; acceptance is objective and deterministic, and if it requires judgement, stop and escalate; never make an architectural, privacy, financial, migration, or security decision; ambiguity is a stop condition, not a prompt to choose; return the required implementation manifest complete, with lease ID, lease epoch, and fencing token.
+Same first line, then: the task and role contracts supply the capability class, decision rights,
+checks, and escalation triggers; the adapter does not bind the provider to any class and may
+neither narrow nor broaden those injected contracts; execute the exact scope and nothing
+adjacent; return the required typed artifact complete, including lease ID, lease epoch, and
+fencing token for a leased attempt.
 
 - [ ] **Step 4: Verify**
 
@@ -1077,13 +1081,13 @@ Schema-enforced constraints: `secret_access` is `"const": false`; `maximum_attem
 
 - [ ] **Step 6: `review-verdict.schema.json`**
 
-`artifact_type`, `review_id`, `task_id`, `attempt_id`, `reviewer_role`, `reviewer_provider`, `reviewer_model`, `reviewer_session_id`, `reviewer_run_id`; the binding block `reviewed_result_commit`, `tree_hash`, `diff_hash`, `declared_base_commit`, `contract_hash`, `context_hash`, `verification_evidence_hash`; `findings[]` each with `finding_id`, `severity` (`critical`|`important`|`minor`|`nit`), `violated_criterion`, `file`, `location`, `reproducible_evidence`, `observed_behavior`, `required_behavior`, `required_outcome`, `reviewer_confidence`, `blocking`; `verdict` (`no_blocking_findings`|`blocking_findings`|`cannot_review`); and `independence_attestation` with `author_session_id`, `author_run_id`, `distinct`.
+`artifact_type`, `review_id`, `task_id`, `attempt_id`, `reviewer_role`, `reviewer_provider`, `reviewer_model`, `reviewer_session_id`, `reviewer_run_id`, `lease_id`, `lease_epoch`, `fencing_token`; the binding block `reviewed_result_commit`, `tree_hash`, `diff_hash`, `declared_base_commit`, `contract_hash`, `context_hash`, `verification_evidence_hash`; `findings[]` each with required `finding_id`, `severity` (`critical`|`important`|`minor`|`nit`), `violated_criterion`, `file`, `location`, `reproducible_evidence`, `observed_behavior`, `required_behavior`, `required_outcome`, `reviewer_confidence`, `blocking`; `verdict` (`no_blocking_findings`|`blocking_findings`|`cannot_review`); and `independence_attestation` with `author_session_id`, `author_run_id`, `distinct`.
 
 The independence fields exist so `agentctl` compares identity rather than trusting a claim — and the `distinct` field is deliberately worker-supplied so a **false** claim can be caught.
 
 - [ ] **Step 7: `integration-manifest.schema.json`**
 
-`artifact_type`, `integration_id`, `task_id`, `integrator_role`, `integrator_session_id`, `candidate_result_commit`, `reviewed_diff_hash`, `review_id`, `integration_base_commit`, `integration_commit`, `merge_strategy` (`const: "conflict_free_preserving_candidate"`), `candidate_patch_unchanged` (`const: true`), `dependency_interface_hashes[]`, `affected_gates_rerun[]` with results, `completed_at`.
+`artifact_type`, `integration_id`, `task_id`, `integrator_role`, `integrator_session_id`, `lease_id`, `lease_epoch`, `fencing_token`, `candidate_result_commit`, `reviewed_diff_hash`, `review_id`, `integration_base_commit`, `integration_commit`, `merge_strategy` (`const: "conflict_free_preserving_candidate"`), `candidate_patch_unchanged` (`const: true`), `dependency_interface_hashes[]`, `affected_gates_rerun[]` with results, `completed_at`.
 
 The two constants encode the rule that any alteration to the reviewed patch invalidates the review. A manifest that cannot honestly set them cannot be written.
 
@@ -1305,7 +1309,7 @@ Each uses exactly these five headings: `## Owns`, `## May not`, `## Required out
 - `standard-implementer.md` — ordinary domain code, adapters behind settled interfaces, unit tests, documentation, routine refactors, first-pass review of mechanical work. May not approve its own attempt or be sole approver of a high-risk financial or privacy change.
 - `mechanical-executor.md` — fixture generation from an exact manifest, repetitive test matrices, repository inventories, formatting, exact renames without structural authority, generated indexes, low-risk documentation transformation. No architectural, privacy, financial, migration, or security decisions; ambiguity is a stop condition.
 - `verifier.md` — runs deterministic gates, inspects scope and protected-test integrity, emits structured findings. Never silently edits production code; never approves work it authored; invokes protected checks from the trusted integration base using verifier-owned commands, never a candidate-modified script.
-- `integrator.md` — consumes verified candidates in topological order, checks base compatibility, resolves only mechanical conflicts within approved contracts, reruns affected gates, requests replanning for semantic conflicts, records the integration manifest. May not waive a failed gate.
+- `integrator.md` — consumes verified candidates in topological order, checks base compatibility, performs only a conflict-free merge that preserves the reviewed candidate unchanged, reruns affected gates, and records the integration manifest. Any conflict becomes new repair or replanning work with fresh verification and independent review. May not waive a failed gate.
 
 - [ ] **Step 2: `capability-registry.json`** — `{"registry_id","version","entries":[…]}`, five entries mapping capability class → `provider`, `model_id`, `model_version` (`"unpinned"` at P0), `scope`, `binding_type` (`"initial_prior"`):
 
@@ -1352,7 +1356,7 @@ assert json.load(open("agent-system/routing/champion-challenger.json"))["challen
 print("routing: ok")
 PY
 # Model names live only in capability-registry.json.
-! rg -qli 'sonnet|opus|terra|gemini|sol\b' agent-system/schemas/ agent-system/policies/ \
+! rg -qli 'sonnet|opus|terra|gemini[- ]?(2|3|pro|flash|ultra)|sol\b' agent-system/schemas/ agent-system/policies/ \
       agent-system/roles/ agent-system/routing/routing-policy.json \
   || { echo "model names leaked outside capability-registry.json"; exit 1; }
 echo "roles and routing: ok"
@@ -1991,7 +1995,7 @@ This is the first machine-scheduled work in the repository. Its contracts are **
 
 ```text
 DRY-001  append a line to agent-system/examples/README.md   no semantic lock
-DRY-002  append a line to agent-system/evals/README.md      consumes contract:core-domain-v1@1
+DRY-002  append a line to agent-system/evals/README.md      consumes dry-run:context-v1@1
 DRY-003  edit docs/decisions/README.md                      semantic lock docs:generated-indexes
 DRY-004  edit docs/decisions/README.md                      semantic lock docs:generated-indexes
 DRY-005  edit docs/archive/README.md                        no semantic lock
@@ -2009,7 +2013,7 @@ The pairs are deliberately different in kind, because revision 1 proved G0-06 an
 Also author the two failure fixtures, which revision 1 consumed but never created — so `agentctl ingest` on a nonexistent file exited non-zero, which is exactly the outcome those steps checked for, and two G0 criteria would have been certified on nothing:
 
 - `artifacts/DRY-001-late-manifest.json` — a complete, schema-valid implementation manifest whose `fencing_token` and `lease_epoch` are the values issued by the Step 4 dispatch and then superseded by the forced expiry.
-- `artifacts/DRY-001-self-review.json` — a complete, schema-valid review verdict whose `reviewer_session_id` and `reviewer_run_id` equal the author's and whose `independence_attestation.distinct` is `true` — a **false** claim, so the rejection proves identity comparison rather than trust.
+- `artifacts/DRY-001-self-review.json` — a complete, schema-valid review verdict documenting the author identity that a trusted reviewer assignment must reject. The executable proof is the control-plane assignment command in Step 7, so artifact-authored identity strings cannot establish independence.
 
 - [ ] **Step 2: Implement `agentctl docs verify`**
 
@@ -2091,9 +2095,22 @@ This step exists because revision 1's self-review check ran against a task that 
 ```bash
 set -euo pipefail
 test -f agent-system/work/DRY-RUN/artifacts/DRY-001-self-review.json
-python3 -m agentctl review ingest DRY-001 agent-system/work/DRY-RUN/artifacts/DRY-001-self-review.json \
+python3 -m agentctl review assign DRY-001 DRY-001 DRY-001-attempt-2 \
+  DRY-001-attempt-2 manual-operator implementation \
   && { echo "SELF-REVIEW ACCEPTED"; exit 1; }
-python3 -m agentctl review ingest DRY-001 agent-system/work/DRY-RUN/artifacts/DRY-001-review.json
+python3 -m agentctl review assign DRY-001 DRY-001-REVIEW DRY-001-REVIEW-attempt-1 \
+  independent-run-DRY-001 independent-session-DRY-001 verifier \
+  > agent-system/runtime/DRY-001-review-assignment.json
+python3 - <<'PY'
+import json
+assignment = json.load(open("agent-system/runtime/DRY-001-review-assignment.json"))
+verdict = json.load(open("agent-system/work/DRY-RUN/artifacts/DRY-001-review.json"))
+for field in ("lease_id", "lease_epoch", "fencing_token"):
+    verdict[field] = assignment[field]
+open("agent-system/runtime/DRY-001-review.json", "w").write(
+    json.dumps(verdict, indent=2, sort_keys=True) + "\n")
+PY
+python3 -m agentctl review ingest DRY-001 agent-system/runtime/DRY-001-review.json
 python3 -m agentctl status DRY-001 --json | python3 -c "
 import json,sys; s=json.load(sys.stdin)['state']
 assert s=='integration_ready', s; print('self-review rejected, independent verdict accepted: ok')"
@@ -2103,7 +2120,8 @@ assert s=='integration_ready', s; print('self-review rejected, independent verdi
 
 ```bash
 set -euo pipefail
-python3 -m agentctl debug bump-interface contract:core-domain-v1
+python3 -m agentctl debug bump-interface dry-run:context-v1 \
+  agent-system/work/DRY-RUN/interfaces/context-v1-revision-2.json 1
 python3 -m agentctl status DRY-002 --json | python3 -c "
 import json,sys; s=json.load(sys.stdin)['state']; assert s=='stale', s; print('staleness: ok')"
 python3 -m agentctl context rebuild DRY-002
@@ -2111,7 +2129,11 @@ python3 -m agentctl status DRY-002 --json | python3 -c "
 import json,sys; s=json.load(sys.stdin)['state']; assert s=='validated', s; print('recovery: ok')"
 ```
 
-DRY-002's contract declares `consumes: ["contract:core-domain-v1@1"]`, which is what makes the bump reach it. Revision 1 bumped that interface and asserted a task that consumed nothing became stale.
+DRY-002's contract declares `consumes: ["dry-run:context-v1@1"]`. The initial and revision-2
+source files are distinct committed synthetic interface definitions; the control plane records
+their old and new content hashes, invalidates the consumer, and embeds the revision-2 source
+hash in the rebuilt context. Revision 1 bumped an identifier without a new hash or definition
+and could change the context hash solely by changing `compiled_at`.
 
 - [ ] **Step 9: Export committed evidence**
 
@@ -2327,7 +2349,7 @@ python3 -m agentctl gate G0
 
 # Provider neutrality
 ! rg -qi '\b(claude|codex|anthropic|openai|gpt-5(\.[0-9]+)?)\b' AGENTS.md
-! rg -qli 'sonnet|opus|terra|gemini|sol\b' agent-system/schemas/ agent-system/policies/ agent-system/roles/
+! rg -qli 'sonnet|opus|terra|gemini[- ]?(2|3|pro|flash|ultra)|sol\b' agent-system/schemas/ agent-system/policies/ agent-system/roles/
 
 # No UI or deferred-phase work leaked into the active program
 python3 - <<'PY'

@@ -3,6 +3,13 @@
   "version": 1,
   "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a716",
   "note": "Locks protect semantic ownership, not just files. Two tasks writing different files can still contend.",
+  "interface_sources": [
+    {
+      "interface_id": "dry-run:context-v1",
+      "version": "1",
+      "path": "agent-system/work/DRY-RUN/interfaces/context-v1.json"
+    }
+  ],
   "entries": [
     {
       "lock_id": "repo:path-layout",

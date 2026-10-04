@@ -19,7 +19,9 @@
     "semantic_locks",
     "acceptance_summary",
     "status",
-    "created_at"
+    "bootstrap_phase",
+    "created_at",
+    "plan_hash"
   ],
   "properties": {
     "artifact_type": {

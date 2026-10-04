@@ -14,6 +14,7 @@ from .config import repo_root as resolve_repo_root
 from .errors import ContractStale, PlanningError
 from .events import make_event
 from .hashing import sha256_of_file, sha256_of_json_excluding
+from .interfaces import current_interface_binding
 from .store import EventStore
 
 __all__ = [
@@ -173,7 +174,21 @@ class ContextCompiler:
             if matches:
                 decisions.append(matches[0].relative_to(self.root).as_posix())
         consumes = contract.get("dependencies", {}).get("consumes", [])
-        interface_paths = ["agent-system/policies/semantic-locks.json"] if consumes else []
+        interface_paths = []
+        for value in consumes:
+            if not isinstance(value, str) or "@" not in value:
+                raise PlanningError("interface pin is malformed", value=value)
+            interface_id, expected_version = value.rsplit("@", 1)
+            binding = current_interface_binding(self.root, interface_id, self.store)
+            if binding.version != expected_version:
+                raise ContractStale(
+                    "task contract pins a noncurrent interface version",
+                    task_id=task_id,
+                    interface_id=interface_id,
+                    expected_version=expected_version,
+                    current_version=binding.version,
+                )
+            interface_paths.append(binding.path)
         base_summary = "agent-system/work/P0/evidence/migration.json"
         if not (self.root / base_summary).is_file():
             base_summary = contract_path
@@ -212,7 +227,40 @@ class ContextCompiler:
             raise ContractStale("only a stale task context can be rebuilt", task_id=task_id, state=row["state"])
         task_payload = json.loads(row["payload_json"])
         selected_role = role or task_payload["capability_class"]
+        interface_changes: list[tuple[str, str, str, str]] = []
+        current_paths: list[str] = []
+        for interface_id, expected_version in sorted(
+            (task_payload.get("interface_pins") or {}).items()
+        ):
+            binding = current_interface_binding(self.root, interface_id, self.store)
+            if binding.version != expected_version:
+                raise ContractStale(
+                    "changed interface requires a replacement contract pin",
+                    task_id=task_id,
+                    interface_id=interface_id,
+                    expected_version=expected_version,
+                    current_version=binding.version,
+                )
+            previous_hash = self.store.scalar(
+                "SELECT interface_hash FROM dependencies WHERE task_id = ? AND interface_id = ?",
+                (task_id, interface_id),
+            )
+            if previous_hash != binding.content_hash:
+                interface_changes.append(
+                    (interface_id, str(previous_hash), binding.content_hash, binding.path)
+                )
+            current_paths.append(binding.path)
+        if not interface_changes:
+            raise ContractStale(
+                "stale task has no revalidated interface-content change", task_id=task_id
+            )
         selected_inputs = inputs or self.default_inputs(task_id, selected_role)
+        selected_interface_paths = selected_inputs.get("consumed_interfaces", [])
+        if sorted(str(path) for path in selected_interface_paths) != sorted(current_paths):
+            raise PlanningError(
+                "context inputs do not match current consumed-interface sources",
+                task_id=task_id,
+            )
         latest_attempt = self.store.scalar(
             "SELECT attempt_id FROM attempts WHERE task_id = ? ORDER BY attempt_number DESC LIMIT 1",
             (task_id,),
@@ -226,15 +274,9 @@ class ContextCompiler:
         )
         new_hash = manifest["context_hash"]
         if new_hash == row["context_hash"]:
-            # A rebuild must demonstrate a new compiled context, not relabel the old one.
-            manifest = self.compile(
-                task_id=task_id,
-                attempt_id=attempt_id,
-                role=selected_role,
-                inputs=selected_inputs,
-                compiled_at=_timestamp(),
+            raise ContractStale(
+                "changed interface did not change the compiled context", task_id=task_id
             )
-            new_hash = manifest["context_hash"]
         artifact_id = f"context:{task_id}:{new_hash}"
         event = make_event(
             event_type="context_rebuilt",
@@ -245,7 +287,11 @@ class ContextCompiler:
             prior_state="stale",
             next_state="validated",
             context_hash=new_hash,
-            artifact_refs=[artifact_id],
+            artifact_refs=[artifact_id]
+            + [
+                f"{interface_id}:{old_hash}->{new_interface_hash}"
+                for interface_id, old_hash, new_interface_hash, _path in interface_changes
+            ],
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -261,6 +307,12 @@ class ContextCompiler:
                 "updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
                 (new_hash, json.dumps(payload, sort_keys=True, separators=(",", ":")), task_id),
             )
+            for interface_id, _old_hash, new_interface_hash, _path in interface_changes:
+                connection.execute(
+                    "UPDATE dependencies SET interface_hash = ? "
+                    "WHERE task_id = ? AND interface_id = ?",
+                    (new_interface_hash, task_id, interface_id),
+                )
             connection.execute(
                 "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
                 "content_hash, path, integrable, payload_json) "

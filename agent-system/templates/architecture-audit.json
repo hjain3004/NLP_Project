@@ -25,10 +25,13 @@
       "finding_id": "REPLACE:finding identifier",
       "severity": "REPLACE:critical, important, minor, or nit",
       "violated_criterion": "REPLACE:violated criterion",
+      "file": "REPLACE:affected repository path",
+      "location": "REPLACE:line, symbol, or JSON pointer",
       "reproducible_evidence": "REPLACE:reproducible evidence",
       "observed_behavior": "REPLACE:observed behavior",
       "required_behavior": "REPLACE:required behavior",
       "required_outcome": "REPLACE:required outcome",
+      "reviewer_confidence": "REPLACE:high, medium, or low",
       "blocking": "REPLACE:true or false"
     }
   ],

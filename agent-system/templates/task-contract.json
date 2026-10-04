@@ -8,7 +8,8 @@
     "base_commit": "REPLACE:40-character commit SHA or unbound while proposed",
     "execution_mode": "REPLACE:control_plane or bootstrap_retrospective",
     "status": "REPLACE:allowed status",
-    "created_at": "REPLACE:RFC 3339 timestamp"
+    "created_at": "REPLACE:RFC 3339 timestamp",
+    "expires_at": "REPLACE:RFC 3339 expiry timestamp"
   },
   "intent": {
     "objective": "REPLACE:single task objective",
@@ -18,6 +19,9 @@
     ],
     "acceptance_behavior": [
       "REPLACE:observable accepted behavior"
+    ],
+    "relevant_decisions": [
+      "REPLACE:accepted ADR or fixed decision identifier"
     ]
   },
   "dependencies": {
@@ -29,6 +33,10 @@
     ],
     "produces": [
       "REPLACE:produced interface or artifact"
+    ],
+    "integration_order": "REPLACE:integer topological tie-break",
+    "invalidation_triggers": [
+      "REPLACE:dependency or interface invalidation trigger"
     ]
   },
   "scope": {

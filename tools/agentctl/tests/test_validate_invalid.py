@@ -167,6 +167,53 @@ class InvalidArtifactTests(unittest.TestCase):
                 validate_artifact(path, repository_root=self.root)
         self.assertEqual(caught.exception.code, "artifact_hash_mismatch")
 
+    def test_task_contract_mandatory_identity_intent_and_dependency_fields(self) -> None:
+        cases = (
+            ("identity", "expires_at"),
+            ("intent", "relevant_decisions"),
+            ("dependencies", "integration_order"),
+            ("dependencies", "invalidation_triggers"),
+        )
+        for section, field in cases:
+            with self.subTest(section=section, field=field):
+                changed = self._task()
+                del changed[section][field]
+                error = self._validate_changed_task(changed)
+                self.assertEqual(error.code, "schema_validation_failed")
+
+    def test_leased_review_and_integration_artifacts_require_fencing_bindings(self) -> None:
+        valid_dir = self.root / "agent-system/examples/valid"
+        for filename in ("05-review-verdict.json", "06-integration-manifest.json"):
+            for field in ("lease_id", "lease_epoch", "fencing_token"):
+                with self.subTest(filename=filename, field=field):
+                    changed = json.loads((valid_dir / filename).read_text())
+                    del changed[field]
+                    with tempfile.TemporaryDirectory() as directory:
+                        path = pathlib.Path(directory) / filename
+                        path.write_text(json.dumps(changed), encoding="utf-8")
+                        with self.assertRaises(InvalidArtifact) as caught:
+                            validate_artifact(path, repository_root=self.root)
+                    self.assertEqual(caught.exception.code, "schema_validation_failed")
+
+    def test_findings_require_file_location_and_reviewer_confidence(self) -> None:
+        expected = {"file", "location", "reviewer_confidence"}
+        for filename in (
+            "review-verdict.schema.json",
+            "architecture-audit.schema.json",
+        ):
+            with self.subTest(filename=filename):
+                schema = json.loads(
+                    (self.root / "agent-system/schemas" / filename).read_text()
+                )
+                required = set(schema["properties"]["findings"]["items"]["required"])
+                self.assertLessEqual(expected, required)
+
+    def test_work_package_requires_bootstrap_and_plan_bindings(self) -> None:
+        schema = json.loads(
+            (self.root / "agent-system/schemas/work-package.schema.json").read_text()
+        )
+        self.assertLessEqual({"bootstrap_phase", "plan_hash"}, set(schema["required"]))
+
     def test_cross_artifact_hash_link_tampering_is_rejected(self) -> None:
         cases = (
             ("04-implementation-manifest.json", "contract_hash"),

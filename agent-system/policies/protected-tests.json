@@ -24,7 +24,7 @@
     "explicit rationale",
     "stronger independent review",
     "a control-plane hash update",
-    "human approval when an invariant changes"
+    "typed, hash-bound human approval for every protected-test change"
   ],
   "verifier_checks": [
     "deletion",

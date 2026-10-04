@@ -18,6 +18,7 @@ from .errors import (
     PlanningError,
 )
 from .events import make_event
+from .interfaces import binding_from_source, current_interface_binding
 from .leases import Lease, LeaseManager
 from .locks import path_patterns_overlap, write_sets_conflict
 from .models import TERMINAL_STATES, TaskState
@@ -265,6 +266,20 @@ class Scheduler:
         return True
 
     def register_task(self, spec: TaskSpec) -> None:
+        interface_bindings = {}
+        for interface_id, expected_version in sorted((spec.interface_pins or {}).items()):
+            binding = current_interface_binding(
+                self.store.repository_root, interface_id, self.store
+            )
+            if binding.version != expected_version:
+                raise PlanningError(
+                    "task contract pins a noncurrent interface version",
+                    task_id=spec.task_id,
+                    interface_id=interface_id,
+                    expected_version=expected_version,
+                    current_version=binding.version,
+                )
+            interface_bindings[interface_id] = binding
         event = make_event(
             event_type="task_registered",
             reason_code="schema_policy_passed",
@@ -305,10 +320,20 @@ class Scheduler:
                     "INSERT INTO dependencies(task_id, depends_on_task_id) VALUES (?, ?)",
                     (spec.task_id, dependency),
                 )
-            for interface_id, interface_hash in sorted((spec.interface_pins or {}).items()):
+            for interface_id, binding in sorted(interface_bindings.items()):
+                connection.execute(
+                    "INSERT OR IGNORE INTO artifacts(artifact_id, artifact_type, content_hash, "
+                    "path, integrable, payload_json) VALUES (?, 'interface-binding', ?, ?, 1, ?)",
+                    (
+                        f"interface-binding:{interface_id}",
+                        binding.content_hash,
+                        binding.path,
+                        json.dumps(binding.to_payload(), sort_keys=True, separators=(",", ":")),
+                    ),
+                )
                 connection.execute(
                     "INSERT INTO dependencies(task_id, interface_id, interface_hash) VALUES (?, ?, ?)",
-                    (spec.task_id, interface_id, interface_hash),
+                    (spec.task_id, interface_id, binding.content_hash),
                 )
             connection.execute(
                 "INSERT INTO budgets(scope_type, scope_id, attempts_remaining, "
@@ -482,12 +507,62 @@ class Scheduler:
                 lambda _connection, tasks=selected: {"ready": tasks},
             )
 
-    def bump_interface(self, interface_id: str) -> tuple[str, ...]:
-        """Invalidate direct consumers and their dependency descendants."""
+    def bump_interface(
+        self, interface_id: str, source_path: str, version: str
+    ) -> tuple[str, ...]:
+        """Bind new interface content and invalidate mismatched consumers and descendants."""
+        binding = binding_from_source(
+            self.store.repository_root, interface_id, version, source_path
+        )
+        prior_rows = self.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+            (f"interface-binding:{interface_id}",),
+        )
+        prior_hash = "unregistered"
+        if prior_rows:
+            prior_hash = str(json.loads(prior_rows[0]["payload_json"])["content_hash"])
+        binding_event = make_event(
+            event_type="interface_updated",
+            reason_code="interface_binding_changed",
+            actor_role="scheduler",
+            artifact_refs=[
+                f"{interface_id}@{version}",
+                f"old:{prior_hash}",
+                f"new:{binding.content_hash}",
+                source_path,
+            ],
+        )
+
+        def bind(connection: sqlite3.Connection) -> dict[str, str]:
+            connection.execute(
+                "INSERT INTO artifacts(artifact_id, artifact_type, content_hash, path, "
+                "integrable, payload_json) VALUES (?, 'interface-binding', ?, ?, 1, ?) "
+                "ON CONFLICT(artifact_id) DO UPDATE SET content_hash = excluded.content_hash, "
+                "path = excluded.path, integrable = 1, payload_json = excluded.payload_json",
+                (
+                    f"interface-binding:{interface_id}",
+                    binding.content_hash,
+                    binding.path,
+                    json.dumps(binding.to_payload(), sort_keys=True, separators=(",", ":")),
+                ),
+            )
+            return {"interface_id": interface_id, "content_hash": binding.content_hash}
+
+        self.store.execute(
+            f"interface-bind:{interface_id}:{version}:{binding.content_hash}",
+            binding_event,
+            bind,
+        )
+
         direct: set[str] = set()
-        for row in self.store.rows("SELECT task_id, payload_json FROM tasks"):
+        for row in self.store.rows(
+            "SELECT d.task_id, d.interface_hash, t.payload_json FROM dependencies d "
+            "JOIN tasks t ON t.task_id = d.task_id WHERE d.interface_id = ?",
+            (interface_id,),
+        ):
             spec = TaskSpec.from_payload(json.loads(row["payload_json"]))
-            if interface_id in (spec.interface_pins or {}) or interface_id in spec.semantic_locks:
+            expected_version = (spec.interface_pins or {}).get(interface_id)
+            if expected_version != version or row["interface_hash"] != binding.content_hash:
                 direct.add(spec.task_id)
         pending = list(direct)
         affected = set(direct)
@@ -506,7 +581,13 @@ class Scheduler:
             event = make_event(
                 event_type="dependency_changed", reason_code="context_stale",
                 actor_role="scheduler", task_id=task_id,
-                prior_state=current, next_state="stale", artifact_refs=[interface_id],
+                prior_state=current,
+                next_state="stale",
+                artifact_refs=[
+                    f"{interface_id}@{version}",
+                    f"old:{prior_hash}",
+                    f"new:{binding.content_hash}",
+                ],
             )
             def mutation(connection: sqlite3.Connection, selected: str = task_id) -> str:
                 active = connection.execute(

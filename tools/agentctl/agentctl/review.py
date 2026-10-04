@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -92,6 +94,113 @@ class ReviewManager:
             actor_role=str(payload.get("author_actor_role", "implementation")),
         )
 
+    def _record_rejection(
+        self,
+        task_id: str,
+        attempt_id: str,
+        *,
+        reason_code: str,
+        dimension: str,
+        artifact_ref: str,
+    ) -> None:
+        event = make_event(
+            event_type="review_rejected",
+            reason_code=reason_code,
+            actor_role="scheduler",
+            task_id=task_id,
+            attempt_id=attempt_id,
+            prior_state="independent_review",
+            next_state="independent_review",
+            artifact_refs=[artifact_ref],
+        )
+        self.store.execute(
+            f"review-rejected:{task_id}:{artifact_ref}:{dimension}:{uuid.uuid4()}",
+            event,
+            lambda _connection: {"task_id": task_id, "dimension": dimension},
+        )
+
+    def assign(self, task_id: str, reviewer: ReviewIdentity) -> dict[str, Any]:
+        """Register trusted reviewer dispatch identity and issue its fenced lease."""
+        task_rows = self.store.rows("SELECT state FROM tasks WHERE task_id = ?", (task_id,))
+        if not task_rows or task_rows[0]["state"] != "independent_review":
+            raise IllegalTransition("task is not awaiting reviewer assignment", task_id=task_id)
+        attempt = self._attempt(task_id)
+        author = self.author_identity(task_id)
+        collision = next(
+            (
+                dimension
+                for dimension in _IDENTITY_DIMENSIONS
+                if getattr(author, dimension) == getattr(reviewer, dimension)
+            ),
+            None,
+        )
+        if collision is not None:
+            self._record_rejection(
+                task_id,
+                str(attempt["attempt_id"]),
+                reason_code="self_review_rejected",
+                dimension=collision,
+                artifact_ref=f"reviewer-assignment:{reviewer.model_session_id}",
+            )
+            raise PermissionViolation(
+                "reviewer identity is not independent",
+                task_id=task_id,
+                dimension=collision,
+            )
+
+        previous_epoch = self.store.scalar(
+            "SELECT MAX(CAST(json_extract(payload_json, '$.lease_epoch') AS INTEGER)) "
+            "FROM artifacts WHERE task_id = ? AND artifact_type = 'review-assignment'",
+            (task_id,),
+        )
+        assignment = {
+            "reviewer_task_id": reviewer.task_id,
+            "reviewer_attempt_id": reviewer.attempt_id,
+            "reviewer_run_id": reviewer.provider_run_id,
+            "reviewer_session_id": reviewer.model_session_id,
+            "reviewer_role": reviewer.actor_role,
+            "lease_id": str(uuid.uuid4()),
+            "lease_epoch": int(previous_epoch or 0) + 1,
+            "fencing_token": secrets.token_hex(32),
+        }
+        artifact_id = f"review-assignment:{task_id}:{assignment['lease_id']}"
+        event = make_event(
+            event_type="review_assigned",
+            reason_code="independent_reviewer_reserved",
+            actor_role="scheduler",
+            task_id=task_id,
+            attempt_id=str(attempt["attempt_id"]),
+            prior_state="independent_review",
+            next_state="independent_review",
+            artifact_refs=[artifact_id],
+        )
+
+        def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+            connection.execute(
+                "UPDATE artifacts SET integrable = 0 WHERE task_id = ? "
+                "AND artifact_type = 'review-assignment' AND integrable = 1",
+                (task_id,),
+            )
+            connection.execute(
+                "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+                "content_hash, path, integrable, payload_json) VALUES "
+                "(?, 'review-assignment', ?, ?, ?, '', 1, ?)",
+                (
+                    artifact_id,
+                    task_id,
+                    attempt["attempt_id"],
+                    assignment["fencing_token"],
+                    json.dumps(assignment, sort_keys=True, separators=(",", ":")),
+                ),
+            )
+            return assignment
+
+        return dict(
+            self.store.execute(
+                f"review-assign:{task_id}:{assignment['lease_id']}", event, mutation
+            )
+        )
+
     def prepare(self, task_id: str) -> dict[str, Any]:
         task_rows = self.store.rows(
             "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
@@ -155,8 +264,6 @@ class ReviewManager:
         self,
         task_id: str,
         verdict: Mapping[str, Any],
-        *,
-        reviewer_identity: ReviewIdentity | None = None,
     ) -> dict[str, Any]:
         task_rows = self.store.rows("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
         if not task_rows or task_rows[0]["state"] != "independent_review":
@@ -182,12 +289,49 @@ class ReviewManager:
             or attestation.get("author_run_id") != author.provider_run_id
         ):
             raise PermissionViolation("review attestation does not identify the recorded author", task_id=task_id)
-        reviewer = reviewer_identity or ReviewIdentity(
-            task_id=f"review:{task_id}",
-            attempt_id=f"review:{attempt['attempt_id']}",
-            provider_run_id=str(verdict.get("reviewer_run_id", "")),
-            model_session_id=str(verdict.get("reviewer_session_id", "")),
-            actor_role=str(verdict.get("reviewer_role", "")),
+        assignment_rows = self.store.rows(
+            "SELECT artifact_id, payload_json FROM artifacts WHERE task_id = ? "
+            "AND artifact_type = 'review-assignment' AND integrable = 1 "
+            "ORDER BY rowid DESC LIMIT 1",
+            (task_id,),
+        )
+        if not assignment_rows:
+            raise PermissionViolation(
+                "review verdict has no trusted reviewer assignment", task_id=task_id
+            )
+        assignment_id = str(assignment_rows[0]["artifact_id"])
+        assignment = json.loads(assignment_rows[0]["payload_json"])
+        expected_fields = {
+            "reviewer_run_id": assignment["reviewer_run_id"],
+            "reviewer_session_id": assignment["reviewer_session_id"],
+            "reviewer_role": assignment["reviewer_role"],
+            "lease_id": assignment["lease_id"],
+            "lease_epoch": assignment["lease_epoch"],
+            "fencing_token": assignment["fencing_token"],
+        }
+        mismatch = next(
+            (field for field, expected in expected_fields.items() if verdict.get(field) != expected),
+            None,
+        )
+        if mismatch is not None:
+            self._record_rejection(
+                task_id,
+                str(attempt["attempt_id"]),
+                reason_code="review_identity_mismatch",
+                dimension=mismatch,
+                artifact_ref=str(verdict.get("review_id", "unidentified-review")),
+            )
+            raise PermissionViolation(
+                "review verdict does not match trusted reviewer assignment",
+                task_id=task_id,
+                dimension=mismatch,
+            )
+        reviewer = ReviewIdentity(
+            task_id=str(assignment["reviewer_task_id"]),
+            attempt_id=str(assignment["reviewer_attempt_id"]),
+            provider_run_id=str(assignment["reviewer_run_id"]),
+            model_session_id=str(assignment["reviewer_session_id"]),
+            actor_role=str(assignment["reviewer_role"]),
         )
         collision = next(
             (dimension for dimension in _IDENTITY_DIMENSIONS if getattr(author, dimension) == getattr(reviewer, dimension)),
@@ -195,20 +339,12 @@ class ReviewManager:
         )
         if collision is not None or attestation.get("distinct") is not True:
             dimension = collision or "independence_attestation"
-            event = make_event(
-                event_type="review_rejected",
+            self._record_rejection(
+                task_id,
+                str(attempt["attempt_id"]),
                 reason_code="self_review_rejected",
-                actor_role="scheduler",
-                task_id=task_id,
-                attempt_id=attempt["attempt_id"],
-                prior_state="independent_review",
-                next_state="independent_review",
-                artifact_refs=[str(verdict.get("review_id", "unidentified-review"))],
-            )
-            self.store.execute(
-                f"review-rejected:{verdict.get('review_id')}:{dimension}",
-                event,
-                lambda _connection: {"task_id": task_id, "dimension": dimension},
+                dimension=dimension,
+                artifact_ref=str(verdict.get("review_id", "unidentified-review")),
             )
             raise PermissionViolation(
                 "reviewer identity is not independent",
@@ -235,6 +371,14 @@ class ReviewManager:
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+            consumed = connection.execute(
+                "UPDATE artifacts SET integrable = 0 WHERE artifact_id = ? AND integrable = 1",
+                (assignment_id,),
+            ).rowcount
+            if consumed != 1:
+                raise PermissionViolation(
+                    "reviewer assignment was already consumed", task_id=task_id
+                )
             connection.execute(
                 "INSERT INTO reviews(review_id, task_id, attempt_id, verdict, "
                 "reviewer_session_id, reviewer_run_id, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?)",

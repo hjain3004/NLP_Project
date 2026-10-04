@@ -87,7 +87,12 @@ class ReviewIndependenceTests(unittest.TestCase):
         self.manager.set_author_identity(task_id, author)
         return spec, lease
 
-    def _verdict(self, spec: TaskSpec, lease: object) -> dict:
+    def _reviewer(self) -> ReviewIdentity:
+        return ReviewIdentity(
+            "review-task", "review-attempt", "review-run", "review-session", "verifier"
+        )
+
+    def _verdict(self, spec: TaskSpec, lease: object, assignment: dict) -> dict:
         return {
             "artifact_type": "review-verdict",
             "review_id": f"{spec.task_id}-review-1",
@@ -98,6 +103,9 @@ class ReviewIndependenceTests(unittest.TestCase):
             "reviewer_model": "review-model",
             "reviewer_session_id": "review-session",
             "reviewer_run_id": "review-run",
+            "lease_id": assignment["lease_id"],
+            "lease_epoch": assignment["lease_epoch"],
+            "fencing_token": assignment["fencing_token"],
             "reviewed_result_commit": "4" * 40,
             "tree_hash": "5" * 40,
             "diff_hash": "6" * 64,
@@ -136,34 +144,46 @@ class ReviewIndependenceTests(unittest.TestCase):
                 self.setUp()
                 spec, lease = self._candidate(f"TASK-{dimension}")
                 self.manager.prepare(spec.task_id)
-                distinct = ReviewIdentity(
-                    "review-task", "review-attempt", "review-run", "review-session", "verifier"
-                )
+                distinct = self._reviewer()
                 values = distinct.__dict__.copy()
                 author = self.manager.author_identity(spec.task_id)
                 values[dimension] = getattr(author, dimension)
                 reviewer = ReviewIdentity(**values)
-                verdict = self._verdict(spec, lease)
-                verdict["reviewer_run_id"] = reviewer.provider_run_id
-                verdict["reviewer_session_id"] = reviewer.model_session_id
-                verdict["reviewer_role"] = reviewer.actor_role
                 with self.assertRaises(PermissionViolation) as raised:
-                    self.manager.ingest(spec.task_id, verdict, reviewer_identity=reviewer)
+                    self.manager.assign(spec.task_id, reviewer)
                 self.assertEqual(raised.exception.context["dimension"], dimension)
                 self.assertEqual(self.store.status(spec.task_id)["state"], "independent_review")
 
     def test_independent_verdict_advances_to_integration_ready(self) -> None:
         spec, lease = self._candidate()
         self.manager.prepare(spec.task_id)
-        result = self.manager.ingest(
-            spec.task_id,
-            self._verdict(spec, lease),
-            reviewer_identity=ReviewIdentity(
-                "review-task", "review-attempt", "review-run", "review-session", "verifier"
-            ),
-        )
+        assignment = self.manager.assign(spec.task_id, self._reviewer())
+        result = self.manager.ingest(spec.task_id, self._verdict(spec, lease, assignment))
         self.assertEqual(result["state"], "integration_ready")
         self.assertEqual(self.store.status(spec.task_id)["state"], "integration_ready")
+
+    def test_ingest_fails_closed_without_a_registered_reviewer_assignment(self) -> None:
+        spec, lease = self._candidate()
+        self.manager.prepare(spec.task_id)
+        forged = {
+            "lease_id": "forged-review-lease",
+            "lease_epoch": 1,
+            "fencing_token": "forged-review-token",
+        }
+        with self.assertRaises(PermissionViolation):
+            self.manager.ingest(spec.task_id, self._verdict(spec, lease, forged))
+        self.assertEqual(self.store.status(spec.task_id)["state"], "independent_review")
+
+    def test_artifact_cannot_override_registered_reviewer_identity(self) -> None:
+        spec, lease = self._candidate()
+        self.manager.prepare(spec.task_id)
+        assignment = self.manager.assign(spec.task_id, self._reviewer())
+        verdict = self._verdict(spec, lease, assignment)
+        verdict["reviewer_session_id"] = "forged-distinct-session"
+        verdict["reviewer_run_id"] = "forged-distinct-run"
+        with self.assertRaises(PermissionViolation):
+            self.manager.ingest(spec.task_id, verdict)
+        self.assertEqual(self.store.status(spec.task_id)["state"], "independent_review")
 
     def test_committed_false_attestation_fixture_is_rejected_against_seeded_identity(self) -> None:
         spec, lease = self._candidate("FIXTURE-TASK")
@@ -172,6 +192,7 @@ class ReviewIndependenceTests(unittest.TestCase):
             ReviewIdentity(spec.task_id, lease.attempt_id, "fixture-author-run", "fixture-author-session", "standard_implementation"),
         )
         self.manager.prepare(spec.task_id)
+        assignment = self.manager.assign(spec.task_id, self._reviewer())
         fixture = json.loads(
             (self.root / "agent-system/examples/invalid/stateful/06-review-verdict-self-review.json").read_text(encoding="utf-8")
         )
@@ -181,6 +202,9 @@ class ReviewIndependenceTests(unittest.TestCase):
             declared_base_commit=spec.base_commit,
             contract_hash=spec.contract_hash,
             context_hash=spec.context_hash,
+            lease_id=assignment["lease_id"],
+            lease_epoch=assignment["lease_epoch"],
+            fencing_token=assignment["fencing_token"],
         )
         with self.assertRaises(PermissionViolation):
             self.manager.ingest(spec.task_id, fixture)
