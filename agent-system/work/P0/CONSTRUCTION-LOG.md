@@ -31,6 +31,26 @@ than filled with a guess.
 | 15 | agentctl E — leases and scheduler | `b8ea9c167e5e170e906b4206ea7e03f03d422c39` | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-09-26 | `make -C tools/agentctl test: OK` |
 | 16 | agentctl F — context compilation and review independence | `9106a3593e29a5bebb8f055c7eb650413a006e59` | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-09-26 | `make -C tools/agentctl test: OK` |
 | 17 | agentctl G — approval, gate, and doctor | `be377b313c1b17948d41771e697298618bbf65c6` | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-09-26 | `make -C tools/agentctl test: OK` |
+| 18 | Program graph, roadmap, immutable G0 criteria, and construction record | `56c44d4c889e46176cd1b09fb80c8d26f6a7ce22` | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-09-26 | `program DAG acyclic; G0 criteria count: 14` |
+| 19 | Documentation checks and first concurrency dry run | `e90e8f3a1efc174c30caa1f829acb80a567c42b4` | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-09-26 | `make -C tools/agentctl test: OK` |
+
+## Post-Task-19 repair authorship
+
+These repairs remain part of P0 construction and therefore participate in the architecture
+auditor denylist. A task path is recorded where the desktop orchestration exposed that as
+the only stable author-session identity; it is not presented as a control-plane lease.
+
+| Result commit | Repair evidence | Executing provider | Model | Model version | Author session ID | Date | Verification |
+|---|---|---|---|---|---|---|---|
+| `05eb65b455082eb467cd042decdb01612a6a2ae6` | Stable-root G0 check | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-10-05 | focused gate tests |
+| `878d14371987341defcb8dfb25c0ae6c071e5608` | G0 audit and approval validation hardening | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-10-05 | focused gate tests |
+| `48158e2ff9da46259cce8a83f4d7f7288b4a489d` | Trusted audit approval and context boundaries | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-10-05 | control-plane unit suite |
+| `ab5a4c7df71114c27a94bc91f17b1c0bb8c6385e` | Review identity and interface-content binding | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-10-05 | control-plane unit suite |
+| `5de9a9d135eb970406ede217e167d651cca4de04` | Dry-run context-binding refresh | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `01a0d785-e25e-7122-a617-7d39c57875a3` | 2026-10-05 | context and evidence replay checks |
+| `005c5d28e00144ed97a66c533958345a718b80b6` | Hardened concurrency dry-run replay | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/dry_run_replay` | 2026-10-05 | full agentctl suite and dry-run replay |
+| `1b2fcd6663cf4b577abeeaf478356ffd547ed944` | Candidate, verification, review, gate, semantic-lock, and graph hardening | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | 170 passing tests plus one expected stale-evidence failure |
+| `bb3ae8a6c597be0cf4295f8d201951f13e245bf7` | Dedicated one-file valid-fixture provenance candidate | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | exact one-file Git diff |
+| `db2b7cd61862a9f5536b87f11ddfadce5cae7286` | Coherent valid lifecycle fixture binding | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | fixture validation and cryptographic synthetic-approval tests |
 
 ## Verification note
 
