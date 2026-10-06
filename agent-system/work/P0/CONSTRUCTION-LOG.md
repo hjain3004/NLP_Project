@@ -52,6 +52,7 @@ the only stable author-session identity; it is not presented as a control-plane 
 | `bb3ae8a6c597be0cf4295f8d201951f13e245bf7` | Dedicated one-file valid-fixture provenance candidate | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | exact one-file Git diff |
 | `db2b7cd61862a9f5536b87f11ddfadce5cae7286` | Coherent valid lifecycle fixture binding | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | fixture validation and cryptographic synthetic-approval tests |
 | `e78ea393ef392494a0dc98bb10fedde48ea91188` | Fresh-clone provenance-bound dry-run replay and evidence export | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | 172 tests, documentation verification, and semantic event replay |
+| `7d462ec00fc062d15b5b09999f76556f744e3f2a` | Root-worktree gitfile handling in nested-repository gate check | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | focused G0-03 regression tests |
 
 ## Verification note
 
