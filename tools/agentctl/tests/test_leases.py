@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from agentctl.approval import ApprovalManager, create_approval
 from agentctl.errors import ContractStale, PermissionViolation, PlanningError
+from agentctl.locks import semantic_lock_claims
 from agentctl.scheduler import Scheduler, TaskSpec, task_approval_scope
 from agentctl.store import EventStore
 
@@ -38,12 +39,15 @@ class LeaseTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _spec(self, task_id: str = "TASK-1") -> TaskSpec:
+        base_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.root, text=True
+        ).strip()
         return TaskSpec(
             task_id=task_id,
             work_package_id="WP-1",
             contract_hash="1" * 64,
             context_hash="2" * 64,
-            base_commit="3" * 40,
+            base_commit=base_commit,
             capability_class="standard_implementation",
             risk="low",
             enforcement_class="sandboxed_tools",
@@ -107,7 +111,9 @@ class LeaseTests(unittest.TestCase):
 
     def test_expiry_releases_locks_but_preserves_attempt_and_worktree(self) -> None:
         spec = self._spec()
-        spec = spec.with_semantic_locks({"contract:core-domain-v1": "a" * 64})
+        spec = spec.with_semantic_locks(
+            semantic_lock_claims(["repo:path-layout"], self.root)
+        )
         self.scheduler.register_task(spec)
         lease = self.scheduler.dispatch("TASK-1", worker_identity="worker")
         self.scheduler.expire_lease("TASK-1", force=True)
@@ -209,7 +215,9 @@ class LeaseTests(unittest.TestCase):
                 **self._spec("FIXTURE-TASK").__dict__,
                 "contract_hash": "1" * 64,
                 "context_hash": "2" * 64,
-                "base_commit": "0" * 40,
+                "base_commit": subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], cwd=self.root, text=True
+                ).strip(),
             }
         )
         self.scheduler.register_task(spec)
@@ -226,6 +234,7 @@ class LeaseTests(unittest.TestCase):
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
         fixture["attempt_id"] = lease.attempt_id
         fixture["lease_id"] = lease.lease_id
+        fixture["base_commit"] = spec.base_commit
         with self.assertRaises(PermissionViolation):
             self.scheduler.ingest_manifest("FIXTURE-TASK", fixture)
 

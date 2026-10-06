@@ -22,6 +22,7 @@ level 7.
 | `docs/cashguard_prd_v0.2.md` | **Historical / future context** | The full CashGuard PRD. Describes a substantially wider product than the authorized milestone. Useful for understanding intent; not a source of requirements. |
 | `docs/superpowers/specs/2026-08-30-cashbooks-control-plane-design.md` | **Superseded for orchestration** | Its product, privacy, document-ingestion, and recruiter-first decisions remain valid. Its single-agent orchestration model is superseded by the 2026-08-31 multi-model design. Carries its own authority banner. |
 | `docs/superpowers/plans/2026-08-31-cashbooks-control-plane.md` | **Superseded for execution** | Assumes one ready or active task. Its acceptance criteria and file inventory remain reusable as planning input. Carries its own supersession banner. |
+| `docs/superpowers/reviews/2026-09-01-cashbooks-p0-plan-review.md` | **Review evidence only** | Records a historical review of the P0 bootstrap plan. It is evidence about that review, never execution authority or a source of current requirements. |
 | `docs/ach.md`, `docs/ebook.md`, `docs/money1.md`, `docs/silo.md`, `docs/22365_19_Agents_v8.md` | **Research corpus** | Extracted text from external whitepapers and reports. Git-ignored. Never a requirement source. |
 | `docs/pics/**`, `docs/*.pdf` | **Research corpus** | Source PDFs and page images (~180 MB). Git-ignored. |
 

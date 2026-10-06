@@ -2028,7 +2028,8 @@ Add a **claims lint**: no tracked file outside `docs/archive/`, `docs/superpower
 ```bash
 set -euo pipefail
 mkdir -p agent-system/runtime
-python3 -m agentctl plan validate agent-system/work/DRY-RUN/work-package.json
+python3 -m agentctl plan validate agent-system/work/DRY-RUN/work-package.json \
+  > agent-system/runtime/dry-plan-validation.json
 python3 -m agentctl ready --json > agent-system/runtime/dry-ready-1.json
 python3 -c "
 import json;d=json.load(open('agent-system/runtime/dry-ready-1.json'))
@@ -2080,8 +2081,35 @@ print('lease fencing and orphan evidence: ok')"
 
 ```bash
 set -euo pipefail
-python3 -m agentctl dispatch DRY-001
-python3 -m agentctl ingest DRY-001 agent-system/work/DRY-RUN/artifacts/DRY-001-manifest.json
+python3 -m agentctl dispatch DRY-001 > agent-system/runtime/DRY-001-lease.json
+CONTEXT_HASH="$(python3 -c 'import json; d=json.load(open("agent-system/runtime/dry-plan-validation.json")); print(next(t["context_hash"] for t in d["tasks"] if t["task_id"]=="DRY-001"))')"
+python3 -m agentctl acknowledge DRY-001 "$CONTEXT_HASH"
+WORKTREE="$(python3 -c 'import json; print(json.load(open("agent-system/runtime/DRY-001-lease.json"))["worktree_path"])')"
+BASE_COMMIT="$(python3 -c 'import json; print(json.load(open("agent-system/runtime/DRY-001-lease.json"))["base_commit"])')"
+mkdir -p "$(dirname "$WORKTREE")"
+git worktree add --detach "$WORKTREE" "$BASE_COMMIT"
+python3 -c "from pathlib import Path; p=Path('$WORKTREE/agent-system/examples/README.md'); p.write_text(p.read_text()+'DRY-001 synthetic candidate.\\n')"
+git -C "$WORKTREE" add agent-system/examples/README.md
+git -C "$WORKTREE" commit -m "dry-run: create synthetic candidate"
+python3 - <<'PY'
+import json, subprocess
+lease = json.load(open("agent-system/runtime/DRY-001-lease.json"))
+plan = json.load(open("agent-system/runtime/dry-plan-validation.json"))
+manifest = json.load(open("agent-system/work/DRY-RUN/artifacts/DRY-001-manifest.json"))
+manifest.update(
+    attempt_id=lease["attempt_id"], lease_id=lease["lease_id"],
+    lease_epoch=lease["epoch"], fencing_token=lease["fencing_token"],
+    context_hash=next(t["context_hash"] for t in plan["tasks"] if t["task_id"] == "DRY-001"),
+    base_commit=lease["base_commit"],
+    result_commit=subprocess.check_output(
+        ["git", "-C", lease["worktree_path"], "rev-parse", "HEAD"], text=True
+    ).strip(),
+)
+open("agent-system/runtime/DRY-001-manifest.json", "w").write(
+    json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+PY
+python3 -m agentctl ingest DRY-001 agent-system/runtime/DRY-001-manifest.json
+python3 -m agentctl verify DRY-001
 python3 -m agentctl review prepare DRY-001
 python3 -m agentctl status DRY-001 --json | python3 -c "
 import json,sys; s=json.load(sys.stdin)['state']
@@ -2107,6 +2135,16 @@ assignment = json.load(open("agent-system/runtime/DRY-001-review-assignment.json
 verdict = json.load(open("agent-system/work/DRY-RUN/artifacts/DRY-001-review.json"))
 for field in ("lease_id", "lease_epoch", "fencing_token"):
     verdict[field] = assignment[field]
+for verdict_field, assignment_field in {
+    "reviewed_result_commit": "reviewed_result_commit",
+    "tree_hash": "tree_hash",
+    "diff_hash": "diff_hash",
+    "declared_base_commit": "declared_base_commit",
+    "contract_hash": "contract_hash",
+    "context_hash": "context_hash",
+    "verification_evidence_hash": "verification_evidence_hash",
+}.items():
+    verdict[verdict_field] = assignment[assignment_field]
 open("agent-system/runtime/DRY-001-review.json", "w").write(
     json.dumps(verdict, indent=2, sort_keys=True) + "\n")
 PY
@@ -2277,12 +2315,12 @@ G0-13 and G0-14 approve *the active product scope* and *the authority map*. Revi
 set -euo pipefail
 python3 -m agentctl approve scope_authorization \
   --target-type document_set --target-id G0-scope \
-  --target-hash "$(python3 -m agentctl hash agent-system/work/P0/gates/G0-scope-statement.json)" \
+  --target-hash "$(python3 -m agentctl hash --json --digest-only agent-system/work/P0/gates/G0-scope-statement.json)" \
   --reason "Approve CashBooks active scope, non-goals, invariants, and authority map"
 
 python3 -m agentctl approve phase_authorization \
   --target-type phase_gate --target-id G0 \
-  --target-hash "$(python3 -m agentctl hash agent-system/work/P0/gates/G0-criteria.json)" \
+  --target-hash "$(python3 -m agentctl hash --json --digest-only agent-system/work/P0/gates/G0-criteria.json)" \
   --reason "Authorize G0 evaluation against the immutable criteria set"
 ```
 

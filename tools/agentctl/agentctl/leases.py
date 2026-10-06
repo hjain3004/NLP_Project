@@ -11,9 +11,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .errors import BudgetExhausted, IllegalTransition
+from .errors import BudgetExhausted, ContractStale, IllegalTransition
 from .events import make_event
-from .locks import write_sets_conflict
+from .locks import semantic_lock_claims, write_sets_conflict
 from .store import EventStore
 
 __all__ = ["Lease", "LeaseManager"]
@@ -80,6 +80,17 @@ class LeaseManager:
         expires_at = _timestamp(issued_at + dt.timedelta(seconds=self.duration_seconds))
         lease_id = str(uuid.uuid4())
         fencing_token = secrets.token_urlsafe(32)
+
+        current_lock_claims = semantic_lock_claims(
+            spec.semantic_locks.keys(), self.store.repository_root
+        )
+        if dict(spec.semantic_locks) != current_lock_claims:
+            raise ContractStale(
+                "semantic lock source changed before lease issuance",
+                task_id=spec.task_id,
+                expected=dict(spec.semantic_locks),
+                actual=current_lock_claims,
+            )
 
         event = make_event(
             event_type="lease_issued",

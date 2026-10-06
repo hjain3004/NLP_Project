@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import pathlib
 import sqlite3
+import subprocess
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -19,8 +22,9 @@ from .errors import (
 )
 from .events import make_event
 from .interfaces import binding_from_source, current_interface_binding
+from .hashing import sha256_of_json
 from .leases import Lease, LeaseManager
-from .locks import path_patterns_overlap, write_sets_conflict
+from .locks import path_patterns_overlap, semantic_lock_claims, write_sets_conflict
 from .models import TERMINAL_STATES, TaskState
 from .store import EventStore
 
@@ -68,7 +72,7 @@ TRANSITION_RULES: tuple[TransitionRule, ...] = (
     TransitionRule("nonterminal", "dependency_unavailable", (TaskState.BLOCKED,)),
     TransitionRule((TaskState.REPAIR_REQUIRED,), "repair_authorized", (TaskState.READY,)),
     TransitionRule((TaskState.DRAFT, TaskState.VALIDATED), "contract_invalid", (TaskState.REPLAN_REQUIRED,)),
-    TransitionRule((TaskState.STALE,), "context_rebuilt", (TaskState.READY,)),
+    TransitionRule((TaskState.STALE,), "context_rebuilt", (TaskState.VALIDATED,)),
     TransitionRule((TaskState.BLOCKED,), "blocker_resolved", (TaskState.READY,)),
     TransitionRule((TaskState.REPLAN_REQUIRED,), "replacement_plan_accepted", (TaskState.VALIDATED, TaskState.CANCELED)),
     TransitionRule((TaskState.ESCALATED,), "authority_decision", (TaskState.VALIDATED, TaskState.BLOCKED, TaskState.CANCELED)),
@@ -187,6 +191,7 @@ class TaskSpec:
     maximum_artifact_corrections: int
     dependencies: tuple[str, ...] = ()
     interface_pins: Mapping[str, str] | None = None
+    deterministic_checks: tuple[str, ...] = ()
     human_approval_ref: str | None = None
     human_approval_action: str | None = None
 
@@ -198,6 +203,7 @@ class TaskSpec:
         value["writable_paths"] = list(self.writable_paths)
         value["prohibited_paths"] = list(self.prohibited_paths)
         value["dependencies"] = list(self.dependencies)
+        value["deterministic_checks"] = list(self.deterministic_checks)
         return value
 
     @classmethod
@@ -206,6 +212,7 @@ class TaskSpec:
         data["writable_paths"] = tuple(data.get("writable_paths", ()))
         data["prohibited_paths"] = tuple(data.get("prohibited_paths", ()))
         data["dependencies"] = tuple(data.get("dependencies", ()))
+        data["deterministic_checks"] = tuple(data.get("deterministic_checks", ()))
         return cls(**data)
 
 
@@ -391,7 +398,7 @@ class Scheduler:
         return AdmissionFacts(
             dependencies_complete=incomplete == 0,
             context_current=len(spec.context_hash) == 64 and set(spec.context_hash) != {"0"},
-            base_commit_compatible=len(spec.base_commit) == 40 and spec.base_commit != "unbound",
+            base_commit_compatible=self._base_commit_compatible(spec.base_commit),
             path_locks_available=path_available,
             semantic_locks_available=semantic_available,
             capability_sufficient=_CAPABILITY_RANK.get(worker_capability, -1) >= _CAPABILITY_RANK.get(spec.capability_class, 99),
@@ -411,6 +418,16 @@ class Scheduler:
     ) -> Lease:
         self.leases.expire_dead()
         spec = self._spec(task_id)
+        current_lock_claims = semantic_lock_claims(
+            spec.semantic_locks.keys(), self.store.repository_root
+        )
+        if dict(spec.semantic_locks) != current_lock_claims:
+            raise ContractStale(
+                "semantic lock source changed after task validation",
+                task_id=task_id,
+                expected=dict(spec.semantic_locks),
+                actual=current_lock_claims,
+            )
         facts = self._admission_facts(
             spec,
             worker_capability=worker_capability or spec.capability_class,
@@ -655,6 +672,8 @@ class Scheduler:
             self._record_orphan(task_id, manifest)
             raise ContractStale("artifact belongs to an expired or superseded lease", task_id=task_id)
         lease = lease_rows[0]
+        current_state = str(self.store.status(task_id)["state"])
+        transition(current_state, "candidate_ingested", TaskState.CANDIDATE)
         mismatch = self._manifest_mismatch(spec, lease, manifest)
         if mismatch is not None:
             event = make_event(
@@ -669,15 +688,46 @@ class Scheduler:
             self.store.execute(f"permission-violation:{lease['lease_id']}:{mismatch}", event, revoke)
             raise PermissionViolation("manifest integrity check failed", task_id=task_id, mismatch=mismatch)
 
+        try:
+            binding = self._git_candidate_binding(spec, lease, manifest)
+        except PermissionViolation as exc:
+            mismatch = str(exc.context.get("mismatch", "provenance"))
+            event = make_event(
+                event_type="lease_revoked", reason_code="permission_violation",
+                actor_role="scheduler", task_id=task_id, attempt_id=lease["attempt_id"],
+                prior_state=self.store.status(task_id)["state"], next_state="repair_required",
+                contract_hash=spec.contract_hash, context_hash=spec.context_hash,
+            )
+
+            def revoke_provenance(connection: sqlite3.Connection) -> dict[str, str]:
+                self._end_active_attempt(connection, lease, "revoked", "repair_required")
+                return {"task_id": task_id, "mismatch": mismatch}
+
+            self.store.execute(
+                f"permission-violation:{lease['lease_id']}:{mismatch}",
+                event,
+                revoke_provenance,
+            )
+            raise
         artifact_id = str(uuid.uuid4())
+        binding_id = f"candidate-binding:{task_id}:{lease['attempt_id']}"
         event = make_event(
             event_type="candidate_ingested", reason_code="candidate_ingested",
             actor_role="scheduler", task_id=task_id, attempt_id=lease["attempt_id"],
-            prior_state=self.store.status(task_id)["state"], next_state="candidate",
+            prior_state=current_state, next_state="candidate",
             contract_hash=spec.contract_hash, context_hash=spec.context_hash,
-            repository_commits=[str(manifest["result_commit"])], artifact_refs=[artifact_id],
+            repository_commits=[str(manifest["result_commit"])],
+            artifact_refs=[artifact_id, binding_id],
         )
         def accept(connection: sqlite3.Connection) -> dict[str, Any]:
+            state = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if state is None or state["state"] != current_state:
+                raise IllegalTransition(
+                    "task changed before candidate ingestion", task_id=task_id
+                )
+            transition(state["state"], "candidate_ingested", TaskState.CANDIDATE)
             connection.execute("UPDATE leases SET active = 0 WHERE lease_id = ?", (lease["lease_id"],))
             connection.execute("DELETE FROM semantic_locks WHERE lease_id = ?", (lease["lease_id"],))
             connection.execute(
@@ -689,6 +739,18 @@ class Scheduler:
                 "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, path, integrable, payload_json) "
                 "VALUES (?, 'implementation-manifest', ?, ?, '', 1, ?)",
                 (artifact_id, task_id, lease["attempt_id"], json.dumps(dict(manifest), sort_keys=True, separators=(",", ":"))),
+            )
+            connection.execute(
+                "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+                "content_hash, path, integrable, payload_json) VALUES "
+                "(?, 'candidate-binding', ?, ?, ?, '', 1, ?)",
+                (
+                    binding_id,
+                    task_id,
+                    lease["attempt_id"],
+                    binding["diff_hash"],
+                    json.dumps(binding, sort_keys=True, separators=(",", ":")),
+                ),
             )
             return {"artifact_id": artifact_id, "task_id": task_id, "state": "candidate"}
         return dict(self.store.execute(f"candidate-ingest:{artifact_id}", event, accept))
@@ -718,6 +780,220 @@ class Scheduler:
             if prohibited or not writable:
                 return "prohibited_path"
         return None
+
+    def _git(self, *args: str, cwd: str | None = None, text: bool = True) -> subprocess.CompletedProcess[Any]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=cwd or self.store.repository_root,
+            capture_output=True,
+            text=text,
+            check=False,
+        )
+
+    def _base_commit_compatible(self, base_commit: str) -> bool:
+        if len(base_commit) != 40 or base_commit == "unbound":
+            return False
+        exists = self._git("cat-file", "-e", f"{base_commit}^{{commit}}")
+        if exists.returncode != 0:
+            return False
+        ancestor = self._git("merge-base", "--is-ancestor", base_commit, "HEAD")
+        return ancestor.returncode == 0
+
+    def _git_candidate_binding(
+        self,
+        spec: TaskSpec,
+        lease: Mapping[str, Any],
+        manifest: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        result_commit = str(manifest.get("result_commit", ""))
+        worktree = (self.store.repository_root / str(lease["worktree_path"])).resolve()
+        checks = (
+            self._git("cat-file", "-e", f"{spec.base_commit}^{{commit}}"),
+            self._git("cat-file", "-e", f"{result_commit}^{{commit}}"),
+            self._git("merge-base", "--is-ancestor", spec.base_commit, result_commit),
+        )
+        if any(check.returncode != 0 for check in checks) or not worktree.is_dir():
+            raise PermissionViolation(
+                "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
+            )
+        top = self._git("rev-parse", "--show-toplevel", cwd=str(worktree))
+        head = self._git("rev-parse", "HEAD", cwd=str(worktree))
+        clean = self._git("status", "--porcelain", cwd=str(worktree))
+        if (
+            top.returncode != 0
+            or pathlib.Path(top.stdout.strip()).resolve() != worktree
+            or head.returncode != 0
+            or head.stdout.strip() != result_commit
+            or clean.returncode != 0
+            or clean.stdout.strip()
+        ):
+            raise PermissionViolation(
+                "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
+            )
+        changed = self._git(
+            "diff", "--name-status", "--find-renames", spec.base_commit, result_commit
+        )
+        if changed.returncode != 0:
+            raise PermissionViolation(
+                "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
+            )
+        actual_files: list[dict[str, str]] = []
+        kinds = {"A": "added", "M": "modified", "D": "deleted"}
+        for line in changed.stdout.splitlines():
+            parts = line.split("\t")
+            status = parts[0]
+            if status.startswith("R") and len(parts) == 3:
+                actual_files.append({"path": parts[2], "change_type": "renamed"})
+            elif status[:1] in kinds and len(parts) == 2:
+                actual_files.append({"path": parts[1], "change_type": kinds[status[:1]]})
+            else:
+                raise PermissionViolation(
+                    "manifest integrity check failed",
+                    task_id=spec.task_id,
+                    mismatch="provenance",
+                )
+        declared = sorted(
+            (dict(value) for value in manifest.get("files_changed", ())),
+            key=lambda item: (item.get("path", ""), item.get("change_type", "")),
+        )
+        if sorted(actual_files, key=lambda item: (item["path"], item["change_type"])) != declared:
+            raise PermissionViolation(
+                "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
+            )
+        tree = self._git("rev-parse", f"{result_commit}^{{tree}}")
+        diff = self._git(
+            "diff", "--binary", "--full-index", spec.base_commit, result_commit, text=False
+        )
+        if tree.returncode != 0 or diff.returncode != 0:
+            raise PermissionViolation(
+                "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
+            )
+        return {
+            "task_id": spec.task_id,
+            "attempt_id": str(lease["attempt_id"]),
+            "base_commit": spec.base_commit,
+            "result_commit": result_commit,
+            "tree_hash": tree.stdout.strip(),
+            "diff_hash": hashlib.sha256(diff.stdout).hexdigest(),
+            "files_changed": actual_files,
+            "worktree_path": str(lease["worktree_path"]),
+            "contract_hash": spec.contract_hash,
+            "context_hash": spec.context_hash,
+        }
+
+    def verify_candidate(self, task_id: str) -> dict[str, Any]:
+        """Run contract-owned deterministic checks and bind their evidence to a candidate."""
+        spec = self._spec(task_id)
+        status = str(self.store.status(task_id)["state"])
+        transition(status, "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
+        attempt = self.store.rows(
+            "SELECT * FROM attempts WHERE task_id = ? ORDER BY attempt_number DESC LIMIT 1",
+            (task_id,),
+        )[0]
+        binding_row = self.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_id = ? AND integrable = 1",
+            (f"candidate-binding:{task_id}:{attempt['attempt_id']}",),
+        )
+        if not binding_row:
+            raise IllegalTransition("candidate has no trusted Git binding", task_id=task_id)
+        binding = json.loads(binding_row[0]["payload_json"])
+        started = make_event(
+            event_type="verification_started",
+            reason_code="deterministic_verification_started",
+            actor_role="verifier",
+            task_id=task_id,
+            attempt_id=attempt["attempt_id"],
+            prior_state="candidate",
+            next_state="deterministic_verification",
+            repository_commits=[binding["result_commit"]],
+        )
+
+        def begin(connection: sqlite3.Connection) -> dict[str, str]:
+            current = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if current is None:
+                raise IllegalTransition("task disappeared before verification", task_id=task_id)
+            transition(current["state"], "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
+            connection.execute(
+                "UPDATE tasks SET state = 'deterministic_verification', updated_at = CURRENT_TIMESTAMP "
+                "WHERE task_id = ?", (task_id,)
+            )
+            return {"task_id": task_id, "state": "deterministic_verification"}
+
+        self.store.execute(f"verify-start:{task_id}:{attempt['attempt_id']}", started, begin)
+        worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
+        results: list[dict[str, Any]] = []
+        for command in spec.deterministic_checks:
+            completed = subprocess.run(
+                command,
+                cwd=worktree,
+                shell=True,
+                executable="/bin/sh",
+                capture_output=True,
+            )
+            results.append(
+                {
+                    "command": command,
+                    "exit_code": completed.returncode,
+                    "stdout_hash": hashlib.sha256(completed.stdout).hexdigest(),
+                    "stderr_hash": hashlib.sha256(completed.stderr).hexdigest(),
+                }
+            )
+        passed = all(item["exit_code"] == 0 for item in results)
+        evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
+        evidence_hash = sha256_of_json(evidence)
+        next_state = "independent_review" if passed else "repair_required"
+        event_name = "checks_passed" if passed else "implementation_defect"
+        event = make_event(
+            event_type=event_name,
+            reason_code="verification_passed" if passed else "verification_failed",
+            actor_role="verifier",
+            task_id=task_id,
+            attempt_id=attempt["attempt_id"],
+            prior_state="deterministic_verification",
+            next_state=next_state,
+            repository_commits=[binding["result_commit"]],
+            artifact_refs=[f"verification:{task_id}:{attempt['attempt_id']}"],
+        )
+
+        def finish(connection: sqlite3.Connection) -> dict[str, Any]:
+            current = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if current is None:
+                raise IllegalTransition("task disappeared during verification", task_id=task_id)
+            transition(current["state"], event_name, TaskState(next_state))
+            connection.execute(
+                "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+                "content_hash, path, integrable, payload_json) VALUES "
+                "(?, 'verification-evidence', ?, ?, ?, '', ?, ?)",
+                (
+                    f"verification:{task_id}:{attempt['attempt_id']}",
+                    task_id,
+                    attempt["attempt_id"],
+                    evidence_hash,
+                    1 if passed else 0,
+                    json.dumps(evidence, sort_keys=True, separators=(",", ":")),
+                ),
+            )
+            connection.execute(
+                "UPDATE tasks SET state = ?, updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (next_state, task_id),
+            )
+            return {
+                "task_id": task_id,
+                "state": next_state,
+                "verification_evidence_hash": evidence_hash,
+            }
+
+        return dict(
+            self.store.execute(
+                f"verify-finish:{task_id}:{attempt['attempt_id']}:{evidence_hash}",
+                event,
+                finish,
+            )
+        )
 
     def _record_orphan(self, task_id: str, manifest: Mapping[str, Any]) -> None:
         artifact_id = str(uuid.uuid4())

@@ -14,7 +14,7 @@ from unittest import mock
 from agentctl.approval import ApprovalManager, ApprovalRejected, create_approval
 from agentctl.errors import InvalidArtifact, PermissionViolation
 from agentctl.gate import GateEvaluator, ingest_audit
-from agentctl.hashing import sha256_hex, sha256_of_file
+from agentctl.hashing import sha256_hex, sha256_of_file, sha256_of_json
 from agentctl.store import EventStore
 
 
@@ -136,7 +136,7 @@ class GateTests(unittest.TestCase):
                 action="phase_authorization",
                 target_type="phase_gate",
                 target_id="TEST-GATE",
-                target_hash=sha256_of_file(source),
+                target_hash=sha256_of_json(json.loads(source.read_text())),
                 scope="Close TEST-GATE against its immutable criteria",
                 reason="Exercise gate approval consumption",
             )
@@ -156,9 +156,125 @@ class GateTests(unittest.TestCase):
                 )[0]["payload_json"]
             )
             self.assertIsNotNone(stored["consumed_at"])
-            with self.assertRaises(ApprovalRejected) as raised:
-                evaluator.evaluate(source)
-            self.assertEqual(raised.exception.code, "approval_consumed")
+            repeated = evaluator.evaluate(source)
+            self.assertEqual(repeated["gate_result"], "passed")
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+
+    def test_gate_approval_consumption_and_authoritative_result_are_one_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            source = directory / "TEST-GATE-criteria.json"
+            approval_path = directory / "phase-approval.json"
+            source.write_text(
+                json.dumps(
+                    {
+                        **self._criteria(
+                            {
+                                "criterion_id": "APPROVAL-1",
+                                "statement": "A human authorizes these exact criteria",
+                                "evidence_type": "human_approval",
+                                "evidence_ref": approval_path.name,
+                            }
+                        ),
+                        "human_approval_refs": [approval_path.name],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            key = b"g" * 32
+            approval = create_approval(
+                key=key,
+                principal="owner",
+                machine_identity="owner-machine",
+                action="phase_authorization",
+                target_type="phase_gate",
+                target_id="TEST-GATE",
+                target_hash=sha256_of_json(json.loads(source.read_text())),
+                scope="Close TEST-GATE against its immutable criteria",
+                reason="Exercise atomic gate closure",
+            )
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            store = EventStore(
+                directory / "runtime.sqlite3", repository_root=_repo_root()
+            )
+            ApprovalManager(store, key=key).register(approval, path=approval_path.name)
+            with store._connection() as connection:
+                connection.execute(
+                    "CREATE TRIGGER reject_gate_artifact BEFORE INSERT ON artifacts "
+                    "WHEN NEW.artifact_type = 'phase-gate' BEGIN "
+                    "SELECT RAISE(ABORT, 'injected gate persistence failure'); END"
+                )
+
+            with self.assertRaises(Exception):
+                GateEvaluator(directory, approval_key=key, store=store).evaluate(source)
+            stored = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                    (approval["approval_id"],),
+                )[0]["payload_json"]
+            )
+            self.assertIsNone(stored["consumed_at"])
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                0,
+            )
+
+    def test_gate_result_view_is_recoverable_after_post_commit_write_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            source = directory / "TEST-GATE-criteria.json"
+            source.write_text(
+                json.dumps(
+                    self._criteria(
+                        {
+                            "criterion_id": "PASS-1",
+                            "statement": "Passes",
+                            "evidence_type": "deterministic_check",
+                            "evidence_command": "true",
+                            "expected_exit_code": 0,
+                        }
+                    )
+                ),
+                encoding="utf-8",
+            )
+            store = EventStore(
+                directory / "runtime.sqlite3", repository_root=_repo_root()
+            )
+            evaluator = GateEvaluator(directory, store=store)
+            original_write = pathlib.Path.write_text
+            calls = {"count": 0}
+
+            def fail_once(path: pathlib.Path, *args: object, **kwargs: object) -> int:
+                if path.name == "TEST-GATE-result.json" and calls["count"] == 0:
+                    calls["count"] += 1
+                    raise OSError("injected result-view failure")
+                return original_write(path, *args, **kwargs)
+
+            with mock.patch.object(pathlib.Path, "write_text", fail_once):
+                with self.assertRaises(OSError):
+                    evaluator.evaluate(source)
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+            result = evaluator.evaluate(source)
+            self.assertEqual(result["gate_result"], "passed")
+            self.assertTrue((directory / "TEST-GATE-result.json").is_file())
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
 
     def test_repository_root_check_accepts_a_logical_symlink_pwd(self) -> None:
         repository = _repo_root()
@@ -182,6 +298,46 @@ class GateTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"PWD": str(logical)}):
                 result = GateEvaluator(physical).evaluate(source, write_result=False)
         self.assertEqual(result["criteria"][0]["result"], "pass")
+
+    def test_clean_checkout_criterion_ignores_dirty_worktree_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = pathlib.Path(temporary) / "repository"
+            subprocess.run(
+                ["git", "clone", "--quiet", "--shared", str(self.root), str(clone)],
+                check=True,
+            )
+            agents = clone / "AGENTS.md"
+            agents.write_text("dirty content that fails documentation checks\n", encoding="utf-8")
+            criteria_path = clone / "agent-system/work/P0/gates/G0-criteria.json"
+            source = json.loads(criteria_path.read_text(encoding="utf-8"))
+            criterion = next(
+                item for item in source["criteria"] if item["criterion_id"] == "G0-11"
+            )
+            result = GateEvaluator(clone)._evaluate_criterion(
+                criterion, gate_id="G0", criteria_path=criteria_path
+            )
+        self.assertEqual(result["result"], "pass")
+
+    def test_nested_git_criterion_rejects_file_markers_anywhere(self) -> None:
+        g0 = json.loads(
+            (self.root / "agent-system/work/P0/gates/G0-criteria.json").read_text()
+        )
+        criterion = next(
+            item for item in g0["criteria"] if item["criterion_id"] == "G0-03"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary) / "repository"
+            subprocess.run(
+                ["git", "clone", "--quiet", "--shared", str(self.root), str(root)],
+                check=True,
+            )
+            marker = root / "AppleBooks" / ".git"
+            marker.write_text("gitdir: /tmp/forged-nested-repository\n", encoding="utf-8")
+            criteria_path = root / "agent-system/work/P0/gates/G0-criteria.json"
+            result = GateEvaluator(root)._evaluate_criterion(
+                criterion, gate_id="G0", criteria_path=criteria_path
+            )
+        self.assertEqual(result["result"], "fail")
 
     def test_architecture_audit_gate_rejects_untrusted_or_blocking_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

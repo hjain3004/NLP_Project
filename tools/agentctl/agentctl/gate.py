@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 import subprocess
-import uuid
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -73,7 +73,9 @@ class GateEvaluator:
                 "expected_action": action,
                 "expected_target_type": "phase_gate",
                 "expected_target_id": gate_id,
-                "expected_target_hash": sha256_of_file(criteria_path),
+                "expected_target_hash": sha256_of_json(
+                    json.loads(criteria_path.read_text(encoding="utf-8"))
+                ),
                 "expected_scope": str(record.get("scope", "")),
             }
         if action == "scope_authorization":
@@ -88,7 +90,9 @@ class GateEvaluator:
                 "expected_action": action,
                 "expected_target_type": "document_set",
                 "expected_target_id": f"{gate_id}-scope",
-                "expected_target_hash": sha256_of_file(statement),
+                "expected_target_hash": sha256_of_json(
+                    json.loads(statement.read_text(encoding="utf-8"))
+                ),
                 "expected_scope": str(record.get("scope", "")),
             }
         raise ApprovalRejected(
@@ -113,13 +117,19 @@ class GateEvaluator:
                 result = "fail"
             else:
                 try:
-                    completed = subprocess.run(
-                        command,
-                        cwd=self.root,
-                        shell=True,
-                        executable="/bin/sh",
-                        capture_output=True,
-                        timeout=self.command_timeout_seconds,
+                    completed = (
+                        self._nested_git_check()
+                        if criterion.get("criterion_id") == "G0-03"
+                        else self._run_from_clean_checkout(command)
+                        if criterion.get("criterion_id") == "G0-11"
+                        else subprocess.run(
+                            command,
+                            cwd=self.root,
+                            shell=True,
+                            executable="/bin/sh",
+                            capture_output=True,
+                            timeout=self.command_timeout_seconds,
+                        )
                     )
                 except (OSError, subprocess.TimeoutExpired):
                     result = "fail"
@@ -222,6 +232,80 @@ class GateEvaluator:
         criterion["result"] = result
         return criterion
 
+    def _nested_git_check(self) -> subprocess.CompletedProcess[bytes]:
+        markers: list[str] = []
+        for directory, dirnames, filenames in os.walk(self.root):
+            current = Path(directory)
+            if current == self.root and ".git" in dirnames:
+                dirnames.remove(".git")
+            if current != self.root and ".git" in dirnames:
+                markers.append((current / ".git").relative_to(self.root).as_posix())
+                dirnames.remove(".git")
+            if ".git" in filenames:
+                markers.append((current / ".git").relative_to(self.root).as_posix())
+        staged = subprocess.run(
+            ["git", "ls-files", "--stage", "-z"],
+            cwd=self.root,
+            capture_output=True,
+            check=False,
+        )
+        gitlinks = []
+        if staged.returncode == 0:
+            gitlinks = [
+                entry.decode("utf-8", errors="replace")
+                for entry in staged.stdout.split(b"\0")
+                if entry.startswith(b"160000 ")
+            ]
+        passed = staged.returncode == 0 and not markers and not gitlinks
+        detail = "\n".join(sorted(markers + gitlinks)).encode("utf-8")
+        return subprocess.CompletedProcess(
+            args=["agentctl", "repository", "verify-no-nested-git"],
+            returncode=0 if passed else 1,
+            stdout=b"" if passed else detail,
+            stderr=b"",
+        )
+
+    def _run_from_clean_checkout(
+        self, command: str
+    ) -> subprocess.CompletedProcess[bytes]:
+        head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.root, text=True
+        ).strip()
+        with tempfile.TemporaryDirectory(prefix="agentctl-gate-clean-") as temporary:
+            checkout = Path(temporary) / "repository"
+            subprocess.run(
+                ["git", "clone", "--quiet", "--shared", str(self.root), str(checkout)],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "checkout", "--quiet", "--detach", head],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+            )
+            environment = dict(os.environ)
+            environment["PYTHONPATH"] = str(checkout / "tools/agentctl")
+            completed = subprocess.run(
+                command,
+                cwd=checkout,
+                shell=True,
+                executable="/bin/sh",
+                capture_output=True,
+                timeout=self.command_timeout_seconds,
+                env=environment,
+            )
+            actual = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=checkout, text=True
+            ).strip()
+            if actual != head:
+                raise PlanningError(
+                    "clean-checkout evidence ran against another commit",
+                    expected=head,
+                    actual=actual,
+                )
+            return completed
+
     def evaluate(
         self,
         criteria_path: str | os.PathLike[str],
@@ -236,6 +320,37 @@ class GateEvaluator:
         else:
             source_path = source_path.resolve()
         source = json.loads(source_path.read_text(encoding="utf-8"))
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+        )
+        head = commit.stdout.strip() if commit.returncode == 0 else "0" * 40
+        criteria_hash = sha256_of_json(source)
+        if result_path is None:
+            name = source_path.name.replace("-criteria.json", "-result.json")
+            if name == source_path.name:
+                name = f"{source['gate_id']}-result.json"
+            destination = source_path.with_name(name)
+        else:
+            destination = Path(result_path)
+            if not destination.is_absolute():
+                destination = self._path(destination.as_posix())
+        artifact_id = f"gate:{source['gate_id']}:{criteria_hash}:{head}"
+        if write_result and self.store is not None and not destination.is_file():
+            existing = self.store.rows(
+                "SELECT payload_json FROM artifacts WHERE artifact_id = ? "
+                "AND artifact_type = 'phase-gate'",
+                (artifact_id,),
+            )
+            if existing:
+                recovered = json.loads(existing[0]["payload_json"])
+                destination.write_text(
+                    json.dumps(recovered, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                return recovered
         selected_criteria = [
             item
             for item in source.get("criteria", [])
@@ -253,13 +368,6 @@ class GateEvaluator:
             raise PlanningError("phase gate has no criteria", path=str(source_path))
         results = {item["result"] for item in criteria}
         gate_result = "failed" if "fail" in results else "open" if "open" in results else "passed"
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-        )
-        head = commit.stdout.strip() if commit.returncode == 0 else "0" * 40
         result: dict[str, Any] = {
             "artifact_type": "phase-gate",
             "gate_id": source["gate_id"],
@@ -271,8 +379,8 @@ class GateEvaluator:
             "human_approval_refs": list(source.get("human_approval_refs", [])),
             "gate_result": gate_result,
         }
-        if gate_result == "passed" and self.store is not None:
-            approval_requests: list[dict[str, str]] = []
+        approval_requests: list[dict[str, str]] = []
+        if gate_result == "passed":
             for criterion in selected_criteria:
                 if criterion.get("evidence_type") != "human_approval":
                     continue
@@ -286,37 +394,32 @@ class GateEvaluator:
                     criteria_path=source_path,
                 )
                 approval_requests.append(
-                    {
-                        "approval_id": str(record["approval_id"]),
-                        **expectations,
-                    }
+                    {"approval_id": str(record["approval_id"]), **expectations}
                 )
-            if approval_requests:
-                manager = ApprovalManager(
-                    self.store,
-                    key=self.approval_key,
-                )
-                manager.consume_many(tuple(approval_requests))
-        if result_path is None:
-            name = source_path.name.replace("-criteria.json", "-result.json")
-            if name == source_path.name:
-                name = f"{source['gate_id']}-result.json"
-            destination = source_path.with_name(name)
-        else:
-            destination = Path(result_path)
-            if not destination.is_absolute():
-                destination = self._path(destination.as_posix())
+        if self.store is not None:
+            self._record(
+                result,
+                destination,
+                artifact_id=artifact_id,
+                criteria_hash=criteria_hash,
+                approval_requests=tuple(approval_requests),
+            )
         if write_result:
             destination.write_text(
                 json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8"
             )
-        if self.store is not None:
-            self._record(result, destination)
         return result
 
-    def _record(self, result: Mapping[str, Any], destination: Path) -> None:
+    def _record(
+        self,
+        result: Mapping[str, Any],
+        destination: Path,
+        *,
+        artifact_id: str,
+        criteria_hash: str,
+        approval_requests: tuple[Mapping[str, str], ...],
+    ) -> None:
         assert self.store is not None
-        artifact_id = f"gate:{result['gate_id']}:{uuid.uuid4()}"
         event = make_event(
             event_type="phase_gate_evaluated",
             reason_code=f"gate_{result['gate_result']}",
@@ -327,6 +430,10 @@ class GateEvaluator:
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+            if approval_requests:
+                manager = ApprovalManager(self.store, key=self.approval_key)
+                for request in approval_requests:
+                    manager.consume_in_transaction(connection, request)
             connection.execute(
                 "INSERT INTO artifacts(artifact_id, artifact_type, content_hash, path, "
                 "integrable, payload_json) VALUES (?, 'phase-gate', ?, ?, ?, ?)",
@@ -340,7 +447,12 @@ class GateEvaluator:
             )
             return {"gate_id": result["gate_id"], "gate_result": result["gate_result"]}
 
-        self.store.execute(f"gate-evaluate:{artifact_id}", event, mutation)
+        self.store.execute(
+            f"gate-evaluate:{result['gate_id']}:{criteria_hash}:"
+            f"{result['evaluated_against_commit']}",
+            event,
+            mutation,
+        )
 
 
 def ingest_audit(

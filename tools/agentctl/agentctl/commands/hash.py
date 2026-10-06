@@ -6,7 +6,8 @@ semantically identical artifact produces the same digest. With ``--tree`` the
 path must be a directory and is hashed with ``sha256_of_tree``.
 
 Output is one line: ``<hex>  <path>`` — the two-space separator matches
-``shasum`` so existing tooling can consume it.
+``shasum`` so existing tooling can consume it. ``--digest-only`` emits the
+bare 64-character digest for command substitution and approval target binding.
 """
 
 from __future__ import annotations
@@ -22,12 +23,15 @@ NAME = "hash"
 
 def run(argv: list[str]) -> int:
     mode = "bytes"
+    digest_only = False
     positional: list[str] = []
     for arg in argv:
         if arg == "--json":
             mode = "json"
         elif arg == "--tree":
             mode = "tree"
+        elif arg == "--digest-only":
+            digest_only = True
         elif arg.startswith("-"):
             print(f"agentctl hash: unknown option {arg!r}", file=sys.stderr)
             return 2
@@ -35,7 +39,10 @@ def run(argv: list[str]) -> int:
             positional.append(arg)
 
     if len(positional) != 1:
-        print("usage: agentctl hash [--json|--tree] <path>", file=sys.stderr)
+        print(
+            "usage: agentctl hash [--json|--tree] [--digest-only] <path>",
+            file=sys.stderr,
+        )
         return 2
 
     target = Path(positional[0])
@@ -50,5 +57,5 @@ def run(argv: list[str]) -> int:
     else:
         digest = sha256_of_file(target)
 
-    print(f"{digest}  {target}")
+    print(digest if digest_only else f"{digest}  {target}")
     return 0

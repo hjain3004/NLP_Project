@@ -1,9 +1,8 @@
-"""Level-1 placeholder for the P1 verification runner."""
+"""Trusted deterministic candidate verification."""
 
-from .errors import NotImplementedAtLevel1
+from .scheduler import Scheduler
+from .store import EventStore
 
 
-def verify_task(task_id: str) -> None:
-    raise NotImplementedAtLevel1(
-        "deterministic candidate verification lands at P1 entry", task_id=task_id
-    )
+def verify_task(task_id: str, *, store: EventStore | None = None) -> dict:
+    return Scheduler(store or EventStore()).verify_candidate(task_id)

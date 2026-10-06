@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 
+from agentctl import evidence
 from agentctl.evidence import export_work_package_events, verify_event_export
 from agentctl.events import make_event
 from agentctl.store import EventStore
@@ -20,6 +21,14 @@ def _repo_root() -> pathlib.Path:
 
 
 class EvidenceExportTests(unittest.TestCase):
+    def test_committed_dry_run_has_valid_transition_semantics(self) -> None:
+        verifier = getattr(evidence, "verify_dry_run_semantics", None)
+        self.assertIsNotNone(verifier)
+        verifier(
+            _repo_root() / "agent-system/work/DRY-RUN/evidence/events.json",
+            repository_root=_repo_root(),
+        )
+
     def test_export_is_filtered_and_tampering_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = pathlib.Path(temporary)

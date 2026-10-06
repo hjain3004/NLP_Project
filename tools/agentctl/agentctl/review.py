@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import datetime as dt
 import secrets
 import sqlite3
 import uuid
@@ -12,6 +13,8 @@ from typing import Any
 
 from .errors import ContractStale, IllegalTransition, PermissionViolation
 from .events import make_event
+from .models import TaskState
+from .scheduler import transition
 from .store import EventStore
 
 __all__ = ["ReviewIdentity", "ReviewManager"]
@@ -33,6 +36,12 @@ _IDENTITY_DIMENSIONS = (
     "model_session_id",
     "actor_role",
 )
+
+
+def _timestamp(value: dt.datetime) -> str:
+    return value.astimezone(dt.timezone.utc).isoformat(timespec="microseconds").replace(
+        "+00:00", "Z"
+    )
 
 
 class ReviewManager:
@@ -111,7 +120,7 @@ class ReviewManager:
             attempt_id=attempt_id,
             prior_state="independent_review",
             next_state="independent_review",
-            artifact_refs=[artifact_ref],
+            artifact_refs=[artifact_ref, f"collision:{dimension}"],
         )
         self.store.execute(
             f"review-rejected:{task_id}:{artifact_ref}:{dimension}:{uuid.uuid4()}",
@@ -162,7 +171,20 @@ class ReviewManager:
             "lease_id": str(uuid.uuid4()),
             "lease_epoch": int(previous_epoch or 0) + 1,
             "fencing_token": secrets.token_hex(32),
+            "expires_at": _timestamp(
+                dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=30)
+            ),
         }
+        candidate = self._trusted_candidate_binding(task_id, str(attempt["attempt_id"]))
+        assignment.update(
+            reviewed_result_commit=candidate["result_commit"],
+            tree_hash=candidate["tree_hash"],
+            diff_hash=candidate["diff_hash"],
+            declared_base_commit=candidate["base_commit"],
+            contract_hash=candidate["contract_hash"],
+            context_hash=candidate["context_hash"],
+            verification_evidence_hash=candidate["verification_evidence_hash"],
+        )
         artifact_id = f"review-assignment:{task_id}:{assignment['lease_id']}"
         event = make_event(
             event_type="review_assigned",
@@ -205,8 +227,11 @@ class ReviewManager:
         task_rows = self.store.rows(
             "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
         )
-        if not task_rows or task_rows[0]["state"] != "candidate":
-            raise IllegalTransition("only a candidate can enter independent review", task_id=task_id)
+        if not task_rows or task_rows[0]["state"] != "independent_review":
+            raise IllegalTransition(
+                "only a deterministically verified candidate can enter independent review",
+                task_id=task_id,
+            )
         task = task_rows[0]
         attempt = self._attempt(task_id)
         artifact_rows = self.store.rows(
@@ -217,6 +242,7 @@ class ReviewManager:
         if not artifact_rows:
             raise IllegalTransition("candidate has no integrable implementation manifest", task_id=task_id)
         manifest = json.loads(artifact_rows[0]["payload_json"])
+        candidate = self._trusted_candidate_binding(task_id, str(attempt["attempt_id"]))
         # Deliberately include bindings and objective evidence, not the author's
         # assumptions, decisions, deviations, confidence, or narrative summary.
         pack = {
@@ -224,22 +250,19 @@ class ReviewManager:
             "attempt_id": attempt["attempt_id"],
             "contract": json.loads(task["payload_json"]),
             "candidate_binding": {
-                "base_commit": manifest["base_commit"],
-                "result_commit": manifest["result_commit"],
-                "contract_hash": manifest["contract_hash"],
-                "context_hash": manifest["context_hash"],
+                **candidate,
                 "files_changed": manifest.get("files_changed", []),
             },
-            "deterministic_evidence": manifest.get("commands_executed", []),
+            "deterministic_evidence": candidate["verification_evidence"],
             "architecture_and_invariants": ["AGENTS.md", "docs/security/INVARIANTS.md"],
         }
         event = make_event(
-            event_type="review_prepared",
-            reason_code="verification_passed",
+            event_type="review_pack_prepared",
+            reason_code="trusted_review_pack_prepared",
             actor_role="scheduler",
             task_id=task_id,
             attempt_id=attempt["attempt_id"],
-            prior_state="candidate",
+            prior_state="independent_review",
             next_state="independent_review",
             contract_hash=task["contract_hash"],
             context_hash=task["context_hash"],
@@ -247,12 +270,10 @@ class ReviewManager:
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
-            changed = connection.execute(
-                "UPDATE tasks SET state = 'independent_review', updated_at = CURRENT_TIMESTAMP "
-                "WHERE task_id = ? AND state = 'candidate'",
-                (task_id,),
-            ).rowcount
-            if changed != 1:
+            current = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if current is None or current["state"] != "independent_review":
                 raise IllegalTransition("candidate changed before review preparation", task_id=task_id)
             return pack
 
@@ -272,16 +293,6 @@ class ReviewManager:
         attempt = self._attempt(task_id)
         if verdict.get("task_id") != task_id or verdict.get("attempt_id") != attempt["attempt_id"]:
             raise ContractStale("review verdict names another candidate", task_id=task_id)
-        bindings = {
-            "reviewed_result_commit": attempt["result_commit"],
-            "declared_base_commit": task["base_commit"],
-            "contract_hash": task["contract_hash"],
-            "context_hash": task["context_hash"],
-        }
-        for field, expected in bindings.items():
-            if verdict.get(field) != expected:
-                raise ContractStale("review binding changed", field=field, expected=expected, actual=verdict.get(field))
-
         author = self.author_identity(task_id)
         attestation = verdict.get("independence_attestation", {})
         if (
@@ -301,6 +312,44 @@ class ReviewManager:
             )
         assignment_id = str(assignment_rows[0]["artifact_id"])
         assignment = json.loads(assignment_rows[0]["payload_json"])
+        bindings = {
+            "reviewed_result_commit": assignment["reviewed_result_commit"],
+            "tree_hash": assignment["tree_hash"],
+            "diff_hash": assignment["diff_hash"],
+            "declared_base_commit": assignment["declared_base_commit"],
+            "contract_hash": assignment["contract_hash"],
+            "context_hash": assignment["context_hash"],
+            "verification_evidence_hash": assignment["verification_evidence_hash"],
+        }
+        for field, expected in bindings.items():
+            if verdict.get(field) != expected:
+                raise ContractStale(
+                    "review binding changed",
+                    field=field,
+                    expected=expected,
+                    actual=verdict.get(field),
+                )
+        try:
+            expires_at = dt.datetime.fromisoformat(
+                str(assignment["expires_at"]).replace("Z", "+00:00")
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PermissionViolation(
+                "reviewer assignment has no valid expiry",
+                task_id=task_id,
+                dimension="lease_expired",
+            ) from exc
+        if expires_at <= dt.datetime.now(dt.timezone.utc):
+            self._record_rejection(
+                task_id,
+                str(attempt["attempt_id"]),
+                reason_code="review_lease_expired",
+                dimension="lease_expired",
+                artifact_ref=str(verdict.get("review_id", "unidentified-review")),
+            )
+            raise PermissionViolation(
+                "reviewer assignment expired", task_id=task_id, dimension="lease_expired"
+            )
         expected_fields = {
             "reviewer_run_id": assignment["reviewer_run_id"],
             "reviewer_session_id": assignment["reviewer_session_id"],
@@ -371,6 +420,16 @@ class ReviewManager:
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+            current = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if current is None:
+                raise IllegalTransition("task disappeared before review ingestion", task_id=task_id)
+            transition(
+                current["state"],
+                "review_blocked" if blocking else "review_passed",
+                TaskState(next_state),
+            )
             consumed = connection.execute(
                 "UPDATE artifacts SET integrable = 0 WHERE artifact_id = ? AND integrable = 1",
                 (assignment_id,),
@@ -399,3 +458,28 @@ class ReviewManager:
             return {"review_id": review_id, "task_id": task_id, "state": next_state}
 
         return dict(self.store.execute(f"review-ingest:{review_id}", event, mutation))
+
+    def _trusted_candidate_binding(self, task_id: str, attempt_id: str) -> dict[str, Any]:
+        candidate_rows = self.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_id = ? AND integrable = 1",
+            (f"candidate-binding:{task_id}:{attempt_id}",),
+        )
+        verification_rows = self.store.rows(
+            "SELECT content_hash, payload_json FROM artifacts WHERE artifact_id = ? "
+            "AND integrable = 1",
+            (f"verification:{task_id}:{attempt_id}",),
+        )
+        if not candidate_rows or not verification_rows:
+            raise IllegalTransition(
+                "independent review lacks trusted candidate verification",
+                task_id=task_id,
+                attempt_id=attempt_id,
+            )
+        candidate = json.loads(candidate_rows[0]["payload_json"])
+        candidate["verification_evidence_hash"] = str(
+            verification_rows[0]["content_hash"]
+        )
+        candidate["verification_evidence"] = json.loads(
+            verification_rows[0]["payload_json"]
+        )
+        return candidate

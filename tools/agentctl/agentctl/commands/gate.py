@@ -7,7 +7,7 @@ import json
 import sys
 
 from ..config import load as load_config
-from ..evidence import verify_event_export
+from ..evidence import verify_dry_run_semantics
 from ..errors import VerificationFailure
 from ..gate import GateEvaluator
 from ..store import EventStore
@@ -33,32 +33,30 @@ def run(argv: list[str]) -> int:
         return 2
     config = load_config()
     gate_id = args.gate_id
-    if args.replay_dry_run:
+    replay_path = args.replay_dry_run
+    if gate_id == "G0" and replay_path is None:
+        replay_path = "agent-system/work/DRY-RUN/evidence/events.json"
+    if gate_id == "G0" and replay_path is not None:
+        expected = (
+            config.repo_root / "agent-system/work/DRY-RUN/evidence/events.json"
+        ).resolve()
+        if (config.repo_root / replay_path).resolve() != expected:
+            raise VerificationFailure(
+                "G0 must replay its exact committed DRY-RUN evidence", path=replay_path
+            )
+    if replay_path:
         try:
-            exported = verify_event_export(
-                args.replay_dry_run, repository_root=config.repo_root
+            verify_dry_run_semantics(
+                replay_path,
+                repository_root=config.repo_root,
+                require_committed=True,
             )
         except (OSError, ValueError) as exc:
             raise VerificationFailure(
                 "dry-run event evidence does not verify",
-                path=args.replay_dry_run,
+                path=replay_path,
                 detail=str(exc),
             ) from exc
-        codes = {event.get("reason_code") for event in exported["events"]}
-        required = {
-            "multiple_ready_tasks",
-            "path_lock_conflict",
-            "semantic_lock_conflict",
-            "stale_fencing_token",
-            "self_review_rejected",
-            "context_stale",
-            "context_rebuilt",
-        }
-        missing = sorted(required - codes)
-        if missing:
-            raise VerificationFailure(
-                "dry-run event evidence is incomplete", missing=missing
-            )
     source = config.repo_root / "agent-system/work/P0/gates" / f"{gate_id}-criteria.json"
     result = GateEvaluator(
         config.repo_root,

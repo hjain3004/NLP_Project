@@ -202,6 +202,18 @@ def _validate_local_semantics(artifact_type: str, document: Mapping[str, Any], r
     budgets = document["budgets"]
     verification = document["verification"]
 
+    policy = json.loads(
+        (root / "agent-system/policies/semantic-locks.json").read_text(encoding="utf-8")
+    )
+    registered_locks = {str(entry["lock_id"]) for entry in policy["entries"]}
+    unknown_locks = sorted(set(document["scope"]["semantic_locks"]) - registered_locks)
+    if unknown_locks:
+        _fail(
+            "semantic_lock_unregistered",
+            "task contract requests an unregistered semantic lock",
+            lock_ids=unknown_locks,
+        )
+
     if identity["base_commit"] == "unbound" and identity["status"] != "proposed":
         _fail("unbound_base_commit", "base_commit may be unbound only while status is proposed")
     if routing["risk"] == "critical" and permissions["enforcement_class"] == "unsandboxed_tools":
@@ -369,6 +381,17 @@ def _validate_dependencies(
             if _find_artifact(
                 index, "work-package", identifier=work_package_id, field="work_package_id"
             ) is None:
+                if document.get("bootstrap_phase") is True and document.get("status") == "complete":
+                    program_dag_path = root / "agent-system/work/program-dag.json"
+                    if program_dag_path.is_file():
+                        program_dag = json.loads(program_dag_path.read_text(encoding="utf-8"))
+                        recorded = {
+                            str(item.get("work_package_id"))
+                            for item in program_dag.get("work_packages", ())
+                            if item.get("status") == "complete"
+                        }
+                        if work_package_id in recorded:
+                            continue
                 _fail(
                     "dependency_unresolved",
                     "work-package dependency does not resolve",

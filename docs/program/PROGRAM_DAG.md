@@ -78,12 +78,15 @@ Two supporting tracks join those lanes without changing their authority:
 
 ```text
 Foundation Models: P2-M0 → P3-M3 → P3-M4 → P3-M5 → P3-M6 → P3-M7
-Verification:      P3-Q1 → P3-Q2; P3-Q3; P3-Q4 → P3-Q5 → P3-I
+Verification:      (P3-D7, P3-E3, P3-T5) → P3-Q1 → P3-Q2
+                   P3-H2 → P3-Q3
+                   (P3-D7, P3-H3) → P3-Q4
+                   (P3-Q1, P3-Q2, P3-Q3, P3-Q4) → P3-Q5
 ```
 
-P3-I consumes every P3 lane and performs headless iOS/macOS integration and failure
-injection. G3-B closes the authorized baseline. G3-L remains a separate, additive live-model
-claim.
+P3-I consumes the seven termini P3-D7, P3-T5, P3-E3, P3-P5, P3-H3, P3-M7, and P3-Q5,
+then performs headless iOS/macOS integration and failure injection. G3-B closes the
+authorized baseline. G3-L remains a separate, additive live-model claim.
 
 ## Contract materialization
 

@@ -13,14 +13,52 @@ from typing import Literal
 
 from .config import repo_root as resolve_repo_root
 from .errors import ContractStale, PlanningError
+from .hashing import sha256_of_file, sha256_of_json
 
 __all__ = [
     "SemanticLockClaim",
     "SemanticLockConflict",
     "SemanticLockSet",
+    "semantic_lock_claims",
     "path_patterns_overlap",
     "write_sets_conflict",
 ]
+
+
+def semantic_lock_claims(
+    lock_ids: Iterable[str], repository_root: str | Path
+) -> dict[str, str]:
+    """Resolve registered lock IDs to the hashes of their protected sources."""
+    root = Path(repository_root).expanduser().resolve()
+    policy_path = root / "agent-system" / "policies" / "semantic-locks.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    definitions = {str(entry["lock_id"]): entry for entry in policy["entries"]}
+    claims: dict[str, str] = {}
+    for lock_id in lock_ids:
+        definition = definitions.get(str(lock_id))
+        if definition is None:
+            raise PlanningError("unknown semantic lock", lock_id=lock_id)
+        if definition.get("pinned_by_contract_hash"):
+            source = definition.get("contract_source")
+            if not isinstance(source, str) or not source:
+                raise PlanningError(
+                    "pinned semantic lock source is not materialized", lock_id=lock_id
+                )
+            source_path = (root / source).resolve()
+            try:
+                source_path.relative_to(root)
+            except ValueError as exc:
+                raise PlanningError(
+                    "semantic lock source escapes repository", lock_id=lock_id
+                ) from exc
+            if not source_path.is_file():
+                raise PlanningError(
+                    "pinned semantic lock source is absent", lock_id=lock_id, path=source
+                )
+            claims[str(lock_id)] = sha256_of_file(source_path)
+        else:
+            claims[str(lock_id)] = sha256_of_json(definition)
+    return claims
 
 
 TokenKind = Literal["star", "any", "positive", "negative"]

@@ -275,11 +275,38 @@
   "p3_supporting_tracks": [
     {
       "track_id": "foundation-models",
-      "nodes": ["P2-M0", "P3-M3", "P3-M4", "P3-M5", "P3-M6", "P3-M7"]
+      "nodes": ["P2-M0", "P3-M3", "P3-M4", "P3-M5", "P3-M6", "P3-M7"],
+      "edges": [
+        ["P2-M0", "P3-M3"],
+        ["P3-M3", "P3-M4"],
+        ["P3-M4", "P3-M5"],
+        ["P3-M5", "P3-M6"],
+        ["P3-M6", "P3-M7"]
+      ]
     },
     {
       "track_id": "fixtures-evaluation-integration",
-      "nodes": ["P3-Q1", "P3-Q2", "P3-Q3", "P3-Q4", "P3-Q5", "P3-I"]
+      "nodes": ["P3-Q1", "P3-Q2", "P3-Q3", "P3-Q4", "P3-Q5", "P3-I"],
+      "edges": [
+        ["P3-D7", "P3-Q1"],
+        ["P3-E3", "P3-Q1"],
+        ["P3-T5", "P3-Q1"],
+        ["P3-Q1", "P3-Q2"],
+        ["P3-H2", "P3-Q3"],
+        ["P3-D7", "P3-Q4"],
+        ["P3-H3", "P3-Q4"],
+        ["P3-Q1", "P3-Q5"],
+        ["P3-Q2", "P3-Q5"],
+        ["P3-Q3", "P3-Q5"],
+        ["P3-Q4", "P3-Q5"],
+        ["P3-D7", "P3-I"],
+        ["P3-T5", "P3-I"],
+        ["P3-E3", "P3-I"],
+        ["P3-P5", "P3-I"],
+        ["P3-H3", "P3-I"],
+        ["P3-M7", "P3-I"],
+        ["P3-Q5", "P3-I"]
+      ]
     }
   ],
   "deferred_programs": [

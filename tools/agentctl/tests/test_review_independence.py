@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import pathlib
 import subprocess
 import tempfile
@@ -25,6 +26,12 @@ class ReviewIndependenceTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
+        self.source_root = _repo_root()
+        self.root = pathlib.Path(self.temporary.name) / "repository"
+        subprocess.run(
+            ["git", "clone", "--quiet", "--shared", str(self.source_root), str(self.root)],
+            check=True,
+        )
         self.store = EventStore(
             pathlib.Path(self.temporary.name) / "runtime.sqlite3",
             repository_root=self.root,
@@ -36,12 +43,15 @@ class ReviewIndependenceTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _candidate(self, task_id: str = "TASK-REVIEW") -> tuple[TaskSpec, object]:
+        base_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=self.root, text=True
+        ).strip()
         spec = TaskSpec(
             task_id=task_id,
             work_package_id="WP-REVIEW",
             contract_hash="1" * 64,
             context_hash="2" * 64,
-            base_commit="3" * 40,
+            base_commit=base_commit,
             capability_class="standard_implementation",
             risk="low",
             enforcement_class="sandboxed_tools",
@@ -54,6 +64,13 @@ class ReviewIndependenceTests(unittest.TestCase):
         self.scheduler.register_task(spec)
         lease = self.scheduler.dispatch(task_id, worker_identity="author-session")
         self.scheduler.acknowledge(task_id, spec.context_hash)
+        worktree = self.root / lease.worktree_path
+        worktree.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "worktree", "add", "--quiet", "--detach", str(worktree), base_commit],
+            cwd=self.root,
+            check=True,
+        )
         self.scheduler.ingest_manifest(
             task_id,
             {
@@ -70,8 +87,8 @@ class ReviewIndependenceTests(unittest.TestCase):
                 "contract_hash": spec.contract_hash,
                 "context_hash": spec.context_hash,
                 "base_commit": spec.base_commit,
-                "result_commit": "4" * 40,
-                "files_changed": [{"path": spec.writable_paths[0], "change_type": "modified"}],
+                "result_commit": base_commit,
+                "files_changed": [],
                 "commands_executed": [],
                 "acceptance_criteria_addressed": ["synthetic"],
                 "assumptions": ["persuasive author claim"],
@@ -85,6 +102,7 @@ class ReviewIndependenceTests(unittest.TestCase):
         )
         author = ReviewIdentity(task_id, lease.attempt_id, "author-run", "author-session", spec.capability_class)
         self.manager.set_author_identity(task_id, author)
+        self.scheduler.verify_candidate(task_id)
         return spec, lease
 
     def _reviewer(self) -> ReviewIdentity:
@@ -106,13 +124,20 @@ class ReviewIndependenceTests(unittest.TestCase):
             "lease_id": assignment["lease_id"],
             "lease_epoch": assignment["lease_epoch"],
             "fencing_token": assignment["fencing_token"],
-            "reviewed_result_commit": "4" * 40,
-            "tree_hash": "5" * 40,
-            "diff_hash": "6" * 64,
+            "reviewed_result_commit": spec.base_commit,
+            "tree_hash": subprocess.check_output(
+                ["git", "rev-parse", f"{spec.base_commit}^{{tree}}"],
+                cwd=self.root,
+                text=True,
+            ).strip(),
+            "diff_hash": hashlib.sha256(b"").hexdigest(),
             "declared_base_commit": spec.base_commit,
             "contract_hash": spec.contract_hash,
             "context_hash": spec.context_hash,
-            "verification_evidence_hash": "7" * 64,
+            "verification_evidence_hash": self.store.scalar(
+                "SELECT content_hash FROM artifacts WHERE artifact_id = ?",
+                (f"verification:{spec.task_id}:{lease.attempt_id}",),
+            ),
             "findings": [],
             "verdict": "no_blocking_findings",
             "independence_attestation": {
@@ -192,22 +217,26 @@ class ReviewIndependenceTests(unittest.TestCase):
             ReviewIdentity(spec.task_id, lease.attempt_id, "fixture-author-run", "fixture-author-session", "standard_implementation"),
         )
         self.manager.prepare(spec.task_id)
-        assignment = self.manager.assign(spec.task_id, self._reviewer())
         fixture = json.loads(
-            (self.root / "agent-system/examples/invalid/stateful/06-review-verdict-self-review.json").read_text(encoding="utf-8")
+            (self.source_root / "agent-system/examples/invalid/stateful/06-review-verdict-self-review.json").read_text(encoding="utf-8")
         )
-        fixture.update(
-            attempt_id=lease.attempt_id,
-            reviewed_result_commit="4" * 40,
-            declared_base_commit=spec.base_commit,
-            contract_hash=spec.contract_hash,
-            context_hash=spec.context_hash,
-            lease_id=assignment["lease_id"],
-            lease_epoch=assignment["lease_epoch"],
-            fencing_token=assignment["fencing_token"],
+        reviewer = ReviewIdentity(
+            task_id=fixture["task_id"],
+            attempt_id=fixture["attempt_id"],
+            provider_run_id=fixture["reviewer_run_id"],
+            model_session_id=fixture["reviewer_session_id"],
+            actor_role=fixture["reviewer_role"],
         )
-        with self.assertRaises(PermissionViolation):
-            self.manager.ingest(spec.task_id, fixture)
+        with self.assertRaises(PermissionViolation) as caught:
+            self.manager.assign(spec.task_id, reviewer)
+        self.assertEqual(caught.exception.context["dimension"], "task_id")
+        event = json.loads(
+            self.store.rows(
+                "SELECT payload_json FROM events WHERE task_id = ? ORDER BY sequence DESC LIMIT 1",
+                (spec.task_id,),
+            )[0]["payload_json"]
+        )
+        self.assertEqual(event["reason_code"], "self_review_rejected")
 
 
 if __name__ == "__main__":

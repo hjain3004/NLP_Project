@@ -9,8 +9,11 @@ regression in either the module or the test is visible.
 from __future__ import annotations
 
 import hashlib
+import contextlib
+import io
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +25,7 @@ from agentctl.hashing import (
     sha256_of_json_excluding,
     sha256_of_tree,
 )
+from agentctl.cli import main
 
 PINNED_JSON_HASH = "b235cbe9e939410a87741d03ec0f091253b5f4c4a46c3b2c3ff743d214d72e4d"
 PINNED_ALPHA_FILE_HASH = "b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060"
@@ -108,6 +112,46 @@ class FileAndTreeTests(unittest.TestCase):
         root = self._fixture()
         with self.assertRaises(NotADirectoryError):
             sha256_of_tree(root / "a.txt")
+
+    def test_digest_only_json_output_is_safe_for_shell_substitution(self) -> None:
+        root = self._fixture()
+        target = root / "sub" / "c.json"
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["hash", "--json", "--digest-only", str(target)])
+        self.assertEqual(code, 0)
+        digest = stdout.getvalue().strip()
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.assertEqual(digest, sha256_of_json(json.loads(target.read_text())))
+
+    def test_documented_approval_hash_commands_emit_exact_canonical_digests(self) -> None:
+        root = Path(
+            subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"], text=True
+            ).strip()
+        )
+        plan = (
+            root / "docs/superpowers/plans/2026-09-01-cashbooks-p0-control-plane-bootstrap.md"
+        ).read_text()
+        for relative in (
+            "agent-system/work/P0/gates/G0-scope-statement.json",
+            "agent-system/work/P0/gates/G0-criteria.json",
+        ):
+            documented = f"python3 -m agentctl hash --json --digest-only {relative}"
+            self.assertIn(documented, plan)
+            environment = dict(os.environ)
+            environment["PYTHONPATH"] = str(root / "tools/agentctl")
+            digest = subprocess.check_output(
+                ["python3", "-m", "agentctl", "hash", "--json", "--digest-only", relative],
+                cwd=root,
+                env=environment,
+                text=True,
+            ).strip()
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+            self.assertEqual(
+                digest,
+                sha256_of_json(json.loads((root / relative).read_text())),
+            )
 
 
 def _rmtree(path: Path) -> None:

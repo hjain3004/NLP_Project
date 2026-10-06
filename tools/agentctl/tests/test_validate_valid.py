@@ -81,6 +81,17 @@ class ValidArtifactTests(unittest.TestCase):
                         validate_artifact(path, repository_root=self.root)
                 self.assertEqual(caught.exception.code, "budget_below_floor")
 
+    def test_task_contract_rejects_unregistered_semantic_lock(self) -> None:
+        source = json.loads((self.valid_dir / "02-task-contract.json").read_text())
+        source["scope"]["semantic_locks"] = ["unknown:unregistered-lock"]
+        _rehash_task_contract(source)
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "task.json"
+            path.write_text(json.dumps(source), encoding="utf-8")
+            with self.assertRaises(InvalidArtifact) as caught:
+                validate_artifact(path, repository_root=self.root)
+        self.assertEqual(caught.exception.code, "semantic_lock_unregistered")
+
     def test_retry_manifest_may_reuse_an_identical_compiled_context(self) -> None:
         source = json.loads((self.valid_dir / "04-implementation-manifest.json").read_text())
         source["attempt_id"] = "EX-DOC-001-A2"

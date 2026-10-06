@@ -31,5 +31,6 @@
   ],
   "status": "complete",
   "bootstrap_phase": true,
-  "created_at": "2026-09-26T00:00:00Z"
+  "created_at": "2026-09-26T00:00:00Z",
+  "plan_hash": "ef128d6efedcb61618559d8adc115e554aa9fece7aa0384e5cfefa2474084b4c"
 }

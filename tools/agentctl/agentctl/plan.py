@@ -11,6 +11,7 @@ from .config import repo_root as resolve_repo_root
 from .context import ContextCompiler
 from .dag import DependencyGraph
 from .errors import PlanningError
+from .locks import semantic_lock_claims
 from .scheduler import Scheduler, TaskSpec
 from .store import EventStore
 from .validate import validate_artifact
@@ -29,7 +30,7 @@ def _interface_pins(values: object) -> dict[str, str]:
 
 
 def task_spec_from_contract(
-    contract: Mapping[str, Any], *, context_hash: str
+    contract: Mapping[str, Any], *, context_hash: str, repository_root: str | Path | None = None
 ) -> TaskSpec:
     identity = contract["identity"]
     scope = contract["scope"]
@@ -49,11 +50,14 @@ def task_spec_from_contract(
         enforcement_class=str(permissions["enforcement_class"]),
         writable_paths=tuple(scope["writable_paths"]),
         prohibited_paths=tuple(scope["prohibited_paths"]),
-        semantic_locks={str(lock_id): contract_hash for lock_id in scope["semantic_locks"]},
+        semantic_locks=semantic_lock_claims(
+            scope["semantic_locks"], repository_root or resolve_repo_root()
+        ),
         maximum_attempts=int(budgets["maximum_attempts"]),
         maximum_artifact_corrections=int(budgets["maximum_artifact_corrections"]),
         dependencies=tuple(dependencies["requires"]),
         interface_pins=_interface_pins(dependencies["consumes"]),
+        deterministic_checks=tuple(contract["verification"]["deterministic_checks"]),
         human_approval_ref=permissions.get("human_approval_ref"),
         human_approval_action=permissions.get("required_human_approval_action"),
     )
@@ -82,6 +86,12 @@ class PlanLoader:
             raise PlanningError("plan root is not a work package", path=str(path))
         task_paths = sorted((path.parent / "tasks").glob("*.json"))
         if not task_paths:
+            if work_package.get("bootstrap_phase") is True and work_package.get("status") == "complete":
+                return {
+                    "work_package_id": str(work_package["work_package_id"]),
+                    "tasks": [],
+                    "status": "validated_bootstrap_record",
+                }
             raise PlanningError("work package has no forward task contracts", path=str(path))
         contracts = [validate_artifact(item, repository_root=self.root) for item in task_paths]
         work_package_id = str(work_package["work_package_id"])
@@ -118,7 +128,9 @@ class PlanLoader:
                 inputs=compiler.default_inputs(task_id, role),
                 compiled_at=str(contract["identity"]["created_at"]),
             )
-            spec = task_spec_from_contract(contract, context_hash=manifest["context_hash"])
+            spec = task_spec_from_contract(
+                contract, context_hash=manifest["context_hash"], repository_root=self.root
+            )
             self.scheduler.register_task(spec)
             loaded.append({"task_id": task_id, "context_hash": manifest["context_hash"]})
         return {"work_package_id": work_package_id, "tasks": loaded, "status": "validated"}
