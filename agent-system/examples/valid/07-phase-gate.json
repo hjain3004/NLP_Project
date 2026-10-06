@@ -3,14 +3,14 @@
   "gate_id": "EX-GATE-001",
   "phase_id": "P0",
   "evaluated_at": "2026-09-01T00:25:00Z",
-  "evaluated_against_commit": "623601c1937612a14f0cf247b316f42e909f598c",
+  "evaluated_against_commit": "bb3ae8a6c597be0cf4295f8d201951f13e245bf7",
   "criteria": [
     {
       "criterion_id": "EX-GATE-001-01",
       "statement": "The standalone example artifacts are structurally valid",
       "evidence_type": "artifact",
       "evidence_ref": "agent-system/examples/valid/06-integration-manifest.json",
-      "evidence_hash": "50518ba28db2ba577272efc56dbc115f6a182eb29c8cba376584c119f4674ca3",
+      "evidence_hash": "a52de72b82221f9528621a890db92c3d9c114ab5ec9beeaa4fb47659f1e4354d",
       "result": "pass"
     }
   ],

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -100,6 +101,38 @@ class ValidArtifactTests(unittest.TestCase):
             path.write_text(json.dumps(source), encoding="utf-8")
             result = validate_artifact(path, repository_root=self.root)
         self.assertEqual(result["attempt_id"], "EX-DOC-001-A2")
+
+    def test_implementation_review_and_integration_fixtures_bind_one_exact_git_diff(self) -> None:
+        contract = json.loads((self.valid_dir / "02-task-contract.json").read_text())
+        manifest = json.loads((self.valid_dir / "04-implementation-manifest.json").read_text())
+        review = json.loads((self.valid_dir / "05-review-verdict.json").read_text())
+        integration = json.loads((self.valid_dir / "06-integration-manifest.json").read_text())
+        base = contract["identity"]["base_commit"]
+        result = manifest["result_commit"]
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", base, result],
+            cwd=self.root,
+            check=True,
+        )
+        changed = subprocess.check_output(
+            ["git", "diff", "--name-status", base, result], cwd=self.root, text=True
+        ).strip()
+        self.assertEqual(changed, "M\tagent-system/examples/README.md")
+        diff = subprocess.check_output(
+            ["git", "diff", "--binary", "--full-index", base, result], cwd=self.root
+        )
+        diff_hash = hashlib.sha256(diff).hexdigest()
+        tree_hash = subprocess.check_output(
+            ["git", "rev-parse", f"{result}^{{tree}}"], cwd=self.root, text=True
+        ).strip()
+        self.assertEqual(review["reviewed_result_commit"], result)
+        self.assertEqual(review["declared_base_commit"], base)
+        self.assertEqual(review["tree_hash"], tree_hash)
+        self.assertEqual(review["diff_hash"], diff_hash)
+        self.assertEqual(integration["candidate_result_commit"], result)
+        self.assertEqual(integration["integration_base_commit"], base)
+        self.assertEqual(integration["integration_commit"], result)
+        self.assertEqual(integration["reviewed_diff_hash"], diff_hash)
 
 
 if __name__ == "__main__":

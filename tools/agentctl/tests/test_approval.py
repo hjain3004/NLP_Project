@@ -54,7 +54,8 @@ class ApprovalTests(unittest.TestCase):
 
     def test_one_changed_target_hash_byte_is_rejected(self) -> None:
         changed = copy.deepcopy(self.fixture)
-        changed["target_hash"] = "8" + changed["target_hash"][1:]
+        replacement = "0" if changed["target_hash"][0] != "0" else "1"
+        changed["target_hash"] = replacement + changed["target_hash"][1:]
         with self.assertRaises(ApprovalRejected) as raised:
             verify_approval(
                 changed,
@@ -88,7 +89,8 @@ class ApprovalTests(unittest.TestCase):
         cases["approval_expired"] = (seal_approval(expired, SYNTHETIC_FIXTURE_KEY), {})
 
         wrong_target = copy.deepcopy(self.fixture)
-        wrong_target["target_hash"] = "8" + wrong_target["target_hash"][1:]
+        replacement = "0" if wrong_target["target_hash"][0] != "0" else "1"
+        wrong_target["target_hash"] = replacement + wrong_target["target_hash"][1:]
         cases["approval_wrong_target_hash"] = (
             wrong_target,
             {"expected_target_hash": self.fixture["target_hash"]},

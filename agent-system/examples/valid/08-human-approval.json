@@ -9,7 +9,7 @@
   "authorized_action": "phase_authorization",
   "target_type": "phase-gate",
   "target_id": "EX-GATE-001",
-  "target_hash": "c4bef863e005be99e372f9fb59cb1095e62d2236ae0ccce5a6a2208e12ce8460",
+  "target_hash": "834625540822aac70d819972077cb28ca2614d3ab12951cf7b6298185198876a",
   "scope": "Synthetic acceptance fixture only",
   "conditions": [
     "Never accepted as a real phase authorization"
@@ -22,5 +22,5 @@
   "revoked_at": null,
   "revocation_reason": null,
   "nonce": "0123456789abcdef0123456789abcdef",
-  "control_plane_seal": "d2e3fec240fa684d46aaa5b1ecd3ab73e07a603e4fdeb671aaf7944d9deeb606"
+  "control_plane_seal": "632af7431b7c50132d5923f5b2bf0a43dcf017f4bfc0b23081c5b311b0d2c0fa"
 }
