@@ -54,3 +54,6 @@ nothing.
 
 Fixture 06 carries `independence_attestation.distinct: true` — a **false** claim — so its
 rejection proves identity comparison rather than trust in the attestation.
+
+The valid implementation fixture is bound to the dedicated single-file provenance commit
+that added this note, so its declared diff can be checked against Git exactly.
