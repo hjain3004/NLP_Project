@@ -241,7 +241,7 @@ class GateEvaluator:
             if current != self.root and ".git" in dirnames:
                 markers.append((current / ".git").relative_to(self.root).as_posix())
                 dirnames.remove(".git")
-            if ".git" in filenames:
+            if current != self.root and ".git" in filenames:
                 markers.append((current / ".git").relative_to(self.root).as_posix())
         staged = subprocess.run(
             ["git", "ls-files", "--stage", "-z"],

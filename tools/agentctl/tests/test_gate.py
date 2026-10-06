@@ -435,7 +435,11 @@ class GateTests(unittest.TestCase):
                 with self.subTest(index=index):
                     audit_path.write_text(json.dumps(audit), encoding="utf-8")
                     result = GateEvaluator(root).evaluate(criteria_path, write_result=False)
-                    self.assertEqual(result["criteria"][0]["result"], "fail")
+            self.assertEqual(result["criteria"][0]["result"], "fail")
+
+    def test_repository_worktree_gitfile_is_not_a_nested_repository(self) -> None:
+        completed = GateEvaluator(self.root)._nested_git_check()
+        self.assertEqual(completed.returncode, 0, completed.stdout.decode())
 
     def test_architecture_audit_remains_current_after_evidence_only_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
