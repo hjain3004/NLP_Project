@@ -20,6 +20,11 @@ from agentctl.approval import (
     seal_approval,
     verify_approval,
 )
+from agentctl.local_authentication import (
+    LocalAuthenticationResult,
+    MacOSLocalAuthentication,
+    authenticate_exact_hash,
+)
 from agentctl.config import PermissionViolation
 from agentctl.errors import ConfigError
 from agentctl.store import EventStore
@@ -51,6 +56,93 @@ class ApprovalTests(unittest.TestCase):
             now=datetime(2026, 9, 26, tzinfo=timezone.utc),
         )
         self.assertEqual(verified["approval_id"], "EX-APPROVAL-001")
+
+    def test_local_authentication_adapter_receives_exact_target_hash(self) -> None:
+        calls: list[dict[str, str]] = []
+
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                calls.append(kwargs)
+                return LocalAuthenticationResult.AUTHENTICATED
+
+        target_hash = "a" * 64
+        authenticate_exact_hash(
+            Adapter(),
+            action="invariant_change",
+            target_hash=target_hash,
+            reason="Approve the exact invariant change",
+        )
+        self.assertEqual(calls, [{
+            "action": "invariant_change",
+            "target_hash": target_hash,
+            "reason": "Approve the exact invariant change",
+        }])
+
+    def test_cancelled_local_authentication_fails_closed(self) -> None:
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                return LocalAuthenticationResult.CANCELLED
+
+        with self.assertRaises(ApprovalRejected) as raised:
+            authenticate_exact_hash(
+                Adapter(),
+                action="invariant_change",
+                target_hash="b" * 64,
+                reason="Approve the exact invariant change",
+            )
+        self.assertEqual(raised.exception.code, "approval_authentication_cancelled")
+
+    def test_unavailable_local_authentication_fails_closed_without_secrets(self) -> None:
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                return LocalAuthenticationResult.UNAVAILABLE
+
+        with self.assertRaises(ApprovalRejected) as raised:
+            authenticate_exact_hash(
+                Adapter(),
+                action="invariant_change",
+                target_hash="c" * 64,
+                reason="Approve the exact invariant change",
+            )
+        self.assertEqual(raised.exception.code, "approval_authentication_unavailable")
+
+    def test_local_authentication_rejects_non_sha256_target_before_adapter(self) -> None:
+        calls = 0
+
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                nonlocal calls
+                calls += 1
+                return LocalAuthenticationResult.AUTHENTICATED
+
+        with self.assertRaises(ApprovalRejected) as raised:
+            authenticate_exact_hash(
+                Adapter(),
+                action="invariant_change",
+                target_hash="not-a-hash",
+                reason="Approve the exact invariant change",
+            )
+        self.assertEqual(raised.exception.code, "approval_wrong_target_hash")
+        self.assertEqual(calls, 0)
+
+    def test_macos_adapter_maps_helper_success_without_exposing_output(self) -> None:
+        calls: list[tuple[list[str], dict]] = []
+
+        def runner(command: list[str], **kwargs):
+            calls.append((command, kwargs))
+            return subprocess.CompletedProcess(command, 0, "authenticated\n", "secret-like stderr")
+
+        adapter = MacOSLocalAuthentication(
+            helper=self.root / "agent-system/work/P0/gates/G0-criteria.json",
+            runner=runner,
+            platform="darwin",
+        )
+        result = adapter.authenticate(
+            action="invariant_change", target_hash="d" * 64, reason="Exact hash approval"
+        )
+        self.assertEqual(result, LocalAuthenticationResult.AUTHENTICATED)
+        self.assertEqual(calls[0][0][0], "/usr/bin/swift")
+        self.assertEqual(calls[0][0][2:], ["invariant_change", "d" * 64, "Exact hash approval"])
 
     def test_one_changed_target_hash_byte_is_rejected(self) -> None:
         changed = copy.deepcopy(self.fixture)

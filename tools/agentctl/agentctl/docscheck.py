@@ -267,8 +267,33 @@ def verify_docs(repository_root: str | Path) -> dict[str, object]:
         _fail("the decision record must contain exactly five ADRs", count=len(adrs))
     for path in adrs:
         text = path.read_text(encoding="utf-8")
-        if not re.search(r"^status:\s*accepted\s*$", text, re.I | re.M):
-            _fail("ADR is not accepted", path=path.name)
+        status_match = re.search(
+            r"^status:\s*(accepted|proposed|superseded|rejected)\s*$",
+            text,
+            re.I | re.M,
+        )
+        if status_match is None:
+            _fail("ADR has an invalid status", path=path.name)
+        if status_match.group(1).lower() == "accepted":
+            required = text.split("## Required approvals", 1)[1].split("## References", 1)[0]
+            consequential = any(
+                marker in text.lower()
+                for marker in (
+                    "invariant-adjacent",
+                    "schema commitment",
+                    "protected-test change",
+                    "destructive operation",
+                    "release_or_public_claim",
+                )
+            )
+            if consequential and not re.search(
+                r"agent-system/work/[^\s)`]+/approvals/[^\s)`]+\.json", required
+            ):
+                _fail(
+                    "accepted consequential ADR lacks a typed approval artifact reference",
+                    path=path.name,
+                    finding="consequential ADR acceptance is unsubstantiated",
+                )
         actual = re.findall(r"^## (.+)$", text, re.MULTILINE)
         if actual != list(adr_headings):
             _fail("ADR headings differ from the ten-heading contract", path=path.name)

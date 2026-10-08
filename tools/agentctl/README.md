@@ -29,6 +29,27 @@ make -C tools/agentctl test
 `make -C tools/agentctl check` additionally runs `python3 -m agentctl doctor`
 (the `doctor` command arrives in Task 17).
 
+### Strong local authentication boundary
+
+`agentctl.local_authentication` contains the macOS LocalAuthentication adapter for
+consequential approval flows. It receives only the action, the exact lowercase
+SHA-256 target hash, and the displayed reason; it never receives seal-key bytes.
+The adapter fails closed on unsupported platforms, unavailable services, helper
+errors, failed prompts, or cancellation. Tests inject its narrow adapter protocol,
+so no test invokes a biometric or passcode prompt. The currently accepted ordinary
+approval path remains `interactive_tty_with_key_unlock`; enabling this adapter for a
+consequential action is a separately bounded authorization change.
+
+The governance and G0 corrections are recorded as non-authoritative proposals until
+human approval:
+
+```sh
+PYTHONPATH=tools/agentctl python3 -m agentctl hash --json --digest-only \
+  agent-system/work/P0/proposals/governance-change-set.json
+PYTHONPATH=tools/agentctl python3 -m agentctl hash --json --digest-only \
+  agent-system/work/P0/proposals/G0-criteria-candidate.json
+```
+
 ## What is built at P0
 
 `agentctl` is delivered in layers, each its own task with its own executable

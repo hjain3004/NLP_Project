@@ -31,6 +31,24 @@ class DocumentationCheckTests(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         self.assertGreater(result["markdown_files_checked"], 10)
 
+    def test_proposed_consequential_adr_is_non_authoritative(self) -> None:
+        text = (self.root / "docs/decisions/ADR-0005-symmetric-approval-seal.md").read_text()
+        self.assertIn("status: proposed", text)
+        self.assertNotIn("status: accepted", text)
+
+    def test_unsubstantiated_consequential_adr_acceptance_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = pathlib.Path(temporary) / "repository"
+            subprocess.run(["git", "clone", "--quiet", str(self.root), str(clone)], check=True)
+            adr = clone / "docs/decisions/ADR-0005-symmetric-approval-seal.md"
+            adr.write_text(
+                adr.read_text().replace("status: proposed", "status: accepted", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaises(VerificationFailure) as caught:
+                verify_docs(clone)
+            self.assertIn("consequential ADR", str(caught.exception))
+
     def test_unclassified_root_runbook_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             clone = pathlib.Path(temporary) / "repository"
@@ -43,6 +61,7 @@ class DocumentationCheckTests(unittest.TestCase):
                 "docs/archive/README.md",
                 "docs/DOCUMENT_AUTHORITY.md",
                 "agent-system/policies/document-authority.json",
+                "docs/decisions/ADR-0005-symmetric-approval-seal.md",
             ):
                 shutil.copy2(self.root / relative, clone / relative)
             subprocess.run(["git", "add", "--all"], cwd=clone, check=True)
@@ -101,6 +120,7 @@ class DocumentationCheckTests(unittest.TestCase):
                 "docs/archive/README.md",
                 "docs/DOCUMENT_AUTHORITY.md",
                 "agent-system/policies/document-authority.json",
+                "docs/decisions/ADR-0005-symmetric-approval-seal.md",
             ):
                 shutil.copy2(self.root / relative, clone / relative)
             invariants = clone / "docs/security/INVARIANTS.md"

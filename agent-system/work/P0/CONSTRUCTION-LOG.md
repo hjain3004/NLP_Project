@@ -54,6 +54,19 @@ the only stable author-session identity; it is not presented as a control-plane 
 | `e78ea393ef392494a0dc98bb10fedde48ea91188` | Fresh-clone provenance-bound dry-run replay and evidence export | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | 172 tests, documentation verification, and semantic event replay |
 | `7d462ec00fc062d15b5b09999f76556f744e3f2a` | Root-worktree gitfile handling in nested-repository gate check | OpenAI Codex desktop | GPT-5 family | runtime version unreported | `/root/g0_repair_round1` | 2026-10-06 | focused G0-03 regression tests |
 
+## Delegated preparation session — 2026-10-07
+
+This session was delegated implementation work outside the original P0 control-plane
+bootstrap. It prepared a fail-closed, injected macOS LocalAuthentication adapter and
+non-authoritative governance/G0 proposal artifacts. The live approval issuer/verifier was
+not widened: the workspace safety reviewer blocked the consequential authorization change
+without an established human approval record. No seal key was requested, read, typed, or
+issued, and no G0 criteria or live schema/policy file was replaced.
+
+| Session | Result commit | Provider | Model | Date | Verification |
+|---|---|---|---|---|---|
+| `/root/g0_authority_prep_luna` | recorded by the coordinating integrator | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-07 | 182-test suite, docs verify, proposal validators, canonical replay-only checks |
+
 ## Verification note
 
 The Task 18 plan names `agentctl plan validate` and `agentctl docs generate gates`, but those

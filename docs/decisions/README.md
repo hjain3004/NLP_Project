@@ -34,8 +34,8 @@ Required approvals
 References
 ```
 
-A check enforces their presence and that `status: accepted` appears as its own line for
-accepted records.
+A check enforces their presence, recognizes explicit lifecycle statuses, and rejects an
+accepted consequential ADR that lacks a typed approval-artifact reference.
 
 ## Status values
 
@@ -59,4 +59,4 @@ number.
 | ADR-0002 | Python development CLI beside a Swift product | accepted |
 | ADR-0003 | Bounded standard-library schema validation | accepted |
 | ADR-0004 | Single Git root with history import | accepted |
-| ADR-0005 | Symmetric approval seal at Level 1 | accepted |
+| ADR-0005 | Symmetric approval seal at Level 1 | proposed |

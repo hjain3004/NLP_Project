@@ -6,7 +6,7 @@ ADR-0005 — Symmetric approval seal at Level 1
 
 ## Status
 
-status: accepted
+status: proposed
 
 ## Context
 
