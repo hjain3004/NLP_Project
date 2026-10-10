@@ -77,7 +77,7 @@ independent review identity when it consumes this candidate.
 
 | Session | Result commit | Provider | Model | Date | Verification |
 |---|---|---|---|---|---|
-| `/root/wire_local_auth_luna` | recorded by the coordinating integrator | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-09 | 21 focused approval tests, 187-test full suite, docs verify, G0 canonical replay-only check, governance proposal validation |
+| `/root/wire_local_auth_luna` | recorded by the coordinating integrator | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-09 | 25 focused approval/CLI tests, 192-test full suite, docs verify, no-prompt proposal preflight, governance proposal validation |
 
 ## Verification note
 

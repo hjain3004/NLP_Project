@@ -1,8 +1,9 @@
 """Fail-closed macOS LocalAuthentication support for consequential approvals.
 
-The adapter receives only the typed action, exact SHA-256 target hash, and a
-human-readable reason. It never receives or returns a seal key, and its narrow
-interface makes tests independent of biometric prompts.
+The adapter receives the complete, non-secret approval binding: action, target
+type and ID, exact SHA-256 target hash, scope, a reason digest, approval ID,
+and nonce. It never receives or returns a seal key, and its narrow interface
+makes tests independent of biometric prompts.
 """
 
 from __future__ import annotations
@@ -41,6 +42,9 @@ class LocalAuthenticationAdapter(Protocol):
         action: str,
         target_hash: str,
         reason: str,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        scope: str | None = None,
         approval_id: str | None = None,
         nonce: str | None = None,
     ) -> LocalAuthenticationResult: ...
@@ -55,6 +59,9 @@ def authenticate_exact_hash(
     action: str,
     target_hash: str,
     reason: str,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    scope: str | None = None,
     approval_id: str | None = None,
     nonce: str | None = None,
 ) -> None:
@@ -80,6 +87,14 @@ def authenticate_exact_hash(
         raise ApprovalRejected(
             "approval_authentication_failed", "approval binding is malformed"
         )
+    bound = approval_id is not None
+    if bound and any(
+        not isinstance(value, str) or not value.strip()
+        for value in (target_type, target_id, scope)
+    ):
+        raise ApprovalRejected(
+            "approval_authentication_failed", "approval binding is malformed"
+        )
     if approval_id is not None and (
         not approval_id.strip() or not isinstance(nonce, str)
     ):
@@ -94,8 +109,16 @@ def authenticate_exact_hash(
             "approval_authentication_failed", "approval binding is malformed"
         )
     request = {"action": action, "target_hash": target_hash, "reason": reason}
-    if approval_id is not None:
-        request.update({"approval_id": approval_id, "nonce": nonce})
+    if bound:
+        request.update(
+            {
+                "target_type": target_type,
+                "target_id": target_id,
+                "scope": scope,
+                "approval_id": approval_id,
+                "nonce": nonce,
+            }
+        )
     try:
         outcome = adapter.authenticate(**request)
     except Exception as exc:  # platform adapters must fail closed
@@ -144,6 +167,9 @@ class MacOSLocalAuthentication:
         action: str,
         target_hash: str,
         reason: str,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        scope: str | None = None,
         approval_id: str | None = None,
         nonce: str | None = None,
     ) -> LocalAuthenticationResult:
@@ -153,6 +179,11 @@ class MacOSLocalAuthentication:
             return LocalAuthenticationResult.UNAVAILABLE
         if (approval_id is None) != (nonce is None):
             return LocalAuthenticationResult.FAILED
+        if approval_id is not None and any(
+            not isinstance(value, str) or not value.strip()
+            for value in (target_type, target_id, scope)
+        ):
+            return LocalAuthenticationResult.FAILED
         if approval_id is not None and (
             not approval_id.strip()
             or len(nonce or "") != 32
@@ -161,7 +192,18 @@ class MacOSLocalAuthentication:
             return LocalAuthenticationResult.FAILED
         command = ["/usr/bin/swift", str(self.helper), action, target_hash, reason]
         if approval_id is not None:
-            command.extend([approval_id, nonce or ""])
+            command = [
+                "/usr/bin/swift",
+                str(self.helper),
+                action,
+                target_hash,
+                target_type or "",
+                target_id or "",
+                scope or "",
+                reason,
+                approval_id,
+                nonce or "",
+            ]
         try:
             completed = self.runner(
                 command,

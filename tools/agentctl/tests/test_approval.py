@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest import mock
 
 from agentctl.approval import (
     SYNTHETIC_FIXTURE_KEY,
@@ -26,8 +28,10 @@ from agentctl.local_authentication import (
     authenticate_exact_hash,
 )
 from agentctl.commands.approve import _issue_record
-from agentctl.config import PermissionViolation
+from agentctl.commands import approve as approve_command
+from agentctl.config import Config, PermissionViolation
 from agentctl.errors import ConfigError
+from agentctl.hashing import sha256_of_json
 from agentctl.store import EventStore
 
 
@@ -173,7 +177,12 @@ class ApprovalTests(unittest.TestCase):
         self.assertEqual(record["authentication_method"], "local_authentication")
         self.assertEqual(calls[0]["approval_id"], record["approval_id"])
         self.assertEqual(calls[0]["nonce"], record["nonce"])
+        self.assertEqual(calls[0]["action"], "schema_commitment")
+        self.assertEqual(calls[0]["target_type"], "schema")
+        self.assertEqual(calls[0]["target_id"], "SCHEMA-1")
         self.assertEqual(calls[0]["target_hash"], "a" * 64)
+        self.assertEqual(calls[0]["scope"], "exact schema")
+        self.assertTrue(calls[0]["reason"].startswith("Authorize this exact approval; reason SHA-256:"))
         verify_approval(
             record,
             SYNTHETIC_FIXTURE_KEY,
@@ -239,6 +248,240 @@ class ApprovalTests(unittest.TestCase):
                 policy={"tiers": {"schema_commitment": ["keychain_backed"]}},
             )
         self.assertEqual(raised.exception.code, "approval_weaker_method")
+
+    def test_verifier_rejects_every_bound_field_mutation(self) -> None:
+        policy = {"tiers": {"schema_commitment": ["local_authentication"]}}
+        record = _issue_record(
+            key=SYNTHETIC_FIXTURE_KEY,
+            principal="owner",
+            machine_identity="machine",
+            action="schema_commitment",
+            target_type="schema",
+            target_id="SCHEMA-1",
+            target_hash="a" * 64,
+            scope="exact schema",
+            reason="Approve exact schema",
+            policy=policy,
+            authentication_adapter=mock.Mock(
+                authenticate=lambda **kwargs: LocalAuthenticationResult.AUTHENTICATED
+            ),
+        )
+        expectations = {
+            "authorized_action": "schema_commitment",
+            "target_type": "schema",
+            "target_id": "SCHEMA-1",
+            "target_hash": "a" * 64,
+            "scope": "exact schema",
+        }
+        for field, replacement in {
+            "authorized_action": "invariant_change",
+            "target_type": "other-schema",
+            "target_id": "SCHEMA-2",
+            "target_hash": "b" * 64,
+            "scope": "other scope",
+        }.items():
+            with self.subTest(field=field):
+                changed = copy.deepcopy(record)
+                changed[field] = replacement
+                changed = seal_approval(changed, SYNTHETIC_FIXTURE_KEY)
+                with self.assertRaises(ApprovalRejected):
+                    verify_approval(
+                        changed,
+                        SYNTHETIC_FIXTURE_KEY,
+                        expected_action=expectations["authorized_action"],
+                        expected_target_type=expectations["target_type"],
+                        expected_target_id=expectations["target_id"],
+                        expected_target_hash=expectations["target_hash"],
+                        expected_scope=expectations["scope"],
+                        policy=policy,
+                    )
+
+    def test_production_cli_uses_policy_and_registers_strong_record(self) -> None:
+        key = b"k" * 32
+        calls: list[dict[str, str]] = []
+        registered: list[dict] = []
+
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                calls.append(kwargs)
+                return LocalAuthenticationResult.AUTHENTICATED
+
+        class Manager:
+            def __init__(self, store, *, key):
+                self.key = key
+
+            def register(self, record, *, path):
+                registered.append({"record": record, "path": path})
+                return {"state": "registered"}
+
+        class Digest:
+            def hexdigest(self) -> str:
+                return "ffcc68362fffeb7b"
+
+        import hashlib as hashlib_module
+
+        real_sha256 = hashlib_module.sha256
+
+        def fake_sha256(data=b""):
+            if data == key:
+                return Digest()
+            return real_sha256(data)
+
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_root = pathlib.Path(directory).resolve()
+            (temporary_root / "agent-system/policies").mkdir(parents=True)
+            for policy_name in ("approval-policy.json", "approval-principals.json"):
+                source = self.root / "agent-system/policies" / policy_name
+                destination = temporary_root / "agent-system/policies" / policy_name
+                destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+            output = temporary_root / "strong-approval.json"
+            ordinary_output = temporary_root / "ordinary-approval.json"
+            args = [
+                "schema_commitment",
+                "--target-type",
+                "schema",
+                "--target-id",
+                "SCHEMA-1",
+                "--target-hash",
+                "a" * 64,
+                "--scope",
+                "exact schema",
+                "--reason",
+                "Approve exact schema",
+                "--auth-method",
+                "local_authentication",
+                "--out",
+                str(output),
+            ]
+            with (
+                mock.patch.object(approve_command.sys, "stdin", SimpleNamespace(isatty=lambda: True)),
+                mock.patch.object(
+                    approve_command,
+                    "load_config",
+                    return_value=Config(
+                        repo_root=temporary_root,
+                        runtime_dir=temporary_root / "runtime",
+                        seal_key_path=temporary_root / "outside.key",
+                    ),
+                ),
+                mock.patch.object(approve_command, "doctor", return_value={"fingerprint": "ffcc68362fffeb7b"}),
+                mock.patch.object(approve_command.getpass, "getpass", return_value=key.hex()),
+                mock.patch.object(approve_command, "MacOSLocalAuthentication", return_value=Adapter()),
+                mock.patch.object(approve_command, "ApprovalManager", Manager),
+                mock.patch.object(approve_command, "EventStore", return_value=object()),
+                mock.patch.object(approve_command.hashlib, "sha256", side_effect=fake_sha256),
+            ):
+                self.assertEqual(approve_command.run(args), 0)
+                ordinary_args = [
+                    "phase_authorization",
+                    "--target-type",
+                    "phase-gate",
+                    "--target-id",
+                    "GATE-1",
+                    "--target-hash",
+                    "b" * 64,
+                    "--scope",
+                    "exact gate",
+                    "--reason",
+                    "Approve exact gate",
+                    "--out",
+                    str(ordinary_output),
+                ]
+                self.assertEqual(approve_command.run(ordinary_args), 0)
+            self.assertEqual(registered[1]["record"]["authentication_method"], "interactive_tty_with_key_unlock")
+            self.assertTrue(ordinary_output.is_file())
+        self.assertEqual(len(registered), 2)
+        self.assertEqual(registered[0]["record"]["authentication_method"], "local_authentication")
+        self.assertEqual(calls[0]["target_type"], "schema")
+        self.assertEqual(calls[0]["target_id"], "SCHEMA-1")
+        self.assertEqual(calls[0]["scope"], "exact schema")
+
+    def test_preflight_rejects_malformed_and_stale_targets_without_prompts(self) -> None:
+        proposal = json.loads(
+            (self.root / "agent-system/work/P0/proposals/governance-change-set.json").read_text()
+        )
+        with (
+            mock.patch.object(approve_command, "doctor") as doctor,
+            mock.patch.object(approve_command.getpass, "getpass") as getpass,
+        ):
+            for target_hash, expected_code in (("not-a-hash", "approval_wrong_target_hash"), ("0" * 64, "approval_wrong_target_hash")):
+                with self.subTest(target_hash=target_hash):
+                    args = [
+                        "schema_commitment",
+                        "--target-type",
+                        "governance-change-set",
+                        "--target-id",
+                        proposal["proposal_id"],
+                        "--target-hash",
+                        target_hash,
+                        "--reason",
+                        "Approve exact governance change set",
+                        "--scope",
+                        "exact proposal bytes",
+                        "--preflight",
+                        "--auth-method",
+                        "local_authentication",
+                    ]
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        approve_command.run(args)
+                    self.assertEqual(raised.exception.code, expected_code)
+            doctor.assert_not_called()
+            getpass.assert_not_called()
+
+    def test_production_cli_auth_failure_emits_no_record(self) -> None:
+        key = b"k" * 32
+        registered: list[dict] = []
+
+        class CancelAdapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                return LocalAuthenticationResult.CANCELLED
+
+        class Manager:
+            def __init__(self, store, *, key):
+                pass
+
+            def register(self, record, *, path):
+                registered.append(record)
+
+        class Digest:
+            def hexdigest(self) -> str:
+                return "ffcc68362fffeb7b"
+
+        import hashlib as hashlib_module
+
+        real_sha256 = hashlib_module.sha256
+
+        def fake_sha256(data=b""):
+            return Digest() if data == key else real_sha256(data)
+
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_root = pathlib.Path(directory).resolve()
+            policy_root = temporary_root / "agent-system/policies"
+            policy_root.mkdir(parents=True)
+            for policy_name in ("approval-policy.json", "approval-principals.json"):
+                source = self.root / "agent-system/policies" / policy_name
+                (policy_root / policy_name).write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+            output = temporary_root / "cancelled.json"
+            args = [
+                "schema_commitment", "--target-type", "schema", "--target-id", "SCHEMA-1",
+                "--target-hash", "a" * 64, "--scope", "exact schema", "--reason", "Approve exact schema",
+                "--auth-method", "local_authentication", "--out", str(output),
+            ]
+            with (
+                mock.patch.object(approve_command.sys, "stdin", SimpleNamespace(isatty=lambda: True)),
+                mock.patch.object(approve_command, "load_config", return_value=Config(temporary_root, temporary_root / "runtime", temporary_root / "outside.key")),
+                mock.patch.object(approve_command, "doctor", return_value={"fingerprint": "ffcc68362fffeb7b"}),
+                mock.patch.object(approve_command.getpass, "getpass", return_value=key.hex()),
+                mock.patch.object(approve_command, "MacOSLocalAuthentication", return_value=CancelAdapter()),
+                mock.patch.object(approve_command, "ApprovalManager", Manager),
+                mock.patch.object(approve_command, "EventStore", return_value=object()),
+                mock.patch.object(approve_command.hashlib, "sha256", side_effect=fake_sha256),
+            ):
+                with self.assertRaises(ApprovalRejected) as raised:
+                    approve_command.run(args)
+            self.assertEqual(raised.exception.code, "approval_authentication_cancelled")
+            self.assertFalse(output.exists())
+            self.assertEqual(registered, [])
 
     def test_auth_method_flag_cannot_select_a_weaker_method(self) -> None:
         with self.assertRaises(ApprovalRejected) as raised:

@@ -32,10 +32,12 @@ make -C tools/agentctl test
 ### Strong local authentication boundary
 
 `agentctl.local_authentication` contains the macOS LocalAuthentication adapter for
-consequential approval flows. It receives the action, the exact lowercase
-SHA-256 target hash, the displayed reason, and the generated approval identity
-and nonce so the human signal is bound to the exact record that will later be
-MAC-sealed; it never receives seal-key bytes.
+consequential approval flows. It receives the action, target type and ID, exact
+lowercase SHA-256 target hash, scope, a reason digest, and the generated approval
+identity and nonce so the human signal is bound to the exact record that will
+later be MAC-sealed. The biometric prompt labels each target field explicitly;
+free-form reason text is represented only by its digest, so document text and
+PII are not sent to the helper. It never receives seal-key bytes.
 The adapter fails closed on unsupported platforms, unavailable services, helper
 errors, failed prompts, or cancellation. Tests inject its narrow adapter protocol,
 so no test invokes a biometric or passcode prompt. The currently accepted ordinary

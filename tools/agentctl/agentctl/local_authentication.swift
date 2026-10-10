@@ -4,7 +4,7 @@ import LocalAuthentication
 let context = LAContext()
 let semaphore = DispatchSemaphore(value: 0)
 let arguments = Array(CommandLine.arguments.dropFirst())
-guard arguments.count == 3 || arguments.count == 5 else {
+guard arguments.count == 3 || arguments.count == 8 else {
     exit(3)
 }
 let action = arguments[0]
@@ -13,14 +13,20 @@ let reason = arguments[2]
 guard !action.isEmpty, targetHash.count == 64 else {
     exit(3)
 }
-if arguments.count == 5 {
-    let approvalID = arguments[3]
-    let nonce = arguments[4]
-    guard !approvalID.isEmpty, nonce.count == 32 else {
+var prompt = reason
+if arguments.count == 8 {
+    let targetType = arguments[2]
+    let targetID = arguments[3]
+    let scope = arguments[4]
+    let boundReason = arguments[5]
+    let approvalID = arguments[6]
+    let nonce = arguments[7]
+    guard !targetType.isEmpty, !targetID.isEmpty, !scope.isEmpty,
+          !boundReason.isEmpty, !approvalID.isEmpty, nonce.count == 32 else {
         exit(3)
     }
+    prompt = "Authorize exact approval\nAction: \(action)\nTarget type: \(targetType)\nTarget ID: \(targetID)\nTarget hash: \(targetHash)\nScope: \(scope)\nReason: \(boundReason)"
 }
-let prompt = "\(reason) [\(action) \(targetHash)]"
 var authenticated = false
 var cancelled = false
 

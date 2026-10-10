@@ -7,6 +7,7 @@ import datetime as dt
 import getpass
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from ..local_authentication import (
     MacOSLocalAuthentication,
     authenticate_exact_hash,
 )
+from ..hashing import sha256_of_json
 from ..store import EventStore
 
 NAME = "approve"
@@ -38,6 +40,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--reason", required=True)
     parser.add_argument("--scope")
     parser.add_argument("--auth-method")
+    parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--out")
     return parser
 
@@ -95,16 +98,29 @@ def _issue_record(
         provisional["approval_id"],
         provisional["nonce"],
         provisional["authorized_action"],
+        provisional["target_type"],
+        provisional["target_id"],
         provisional["target_hash"],
+        provisional["scope"],
         provisional["reason"],
     )
     if method == "local_authentication":
         adapter = authentication_adapter or MacOSLocalAuthentication()
+        # Do not place the caller's free-form reason in a biometric prompt.
+        # The reason digest binds the exact MAC-covered field without exposing
+        # document text or PII; the target identity/hash/scope remain explicit.
+        authentication_reason = (
+            "Authorize this exact approval; reason SHA-256: "
+            + hashlib.sha256(provisional["reason"].encode("utf-8")).hexdigest()
+        )
         authenticate_exact_hash(
             adapter,
             action=provisional["authorized_action"],
             target_hash=provisional["target_hash"],
-            reason=provisional["reason"],
+            reason=authentication_reason,
+            target_type=provisional["target_type"],
+            target_id=provisional["target_id"],
+            scope=provisional["scope"],
             approval_id=provisional["approval_id"],
             nonce=provisional["nonce"],
         )
@@ -117,7 +133,10 @@ def _issue_record(
             provisional["approval_id"],
             provisional["nonce"],
             provisional["authorized_action"],
+            provisional["target_type"],
+            provisional["target_id"],
             provisional["target_hash"],
+            provisional["scope"],
             provisional["reason"],
         ):
             raise ApprovalRejected(
@@ -130,22 +149,84 @@ def _issue_record(
     return seal_approval(provisional, key)
 
 
+_TARGET_HASH = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _load_json(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ApprovalRejected(
+            "approval_target_unreadable", "approval target cannot be read"
+        ) from exc
+    if not isinstance(value, dict):
+        raise ApprovalRejected("approval_target_unreadable", "approval target is not an object")
+    return value
+
+
+def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict[str, str]:
+    """Validate all non-secret issuance inputs without prompts or writes."""
+    for field in ("action", "target_type", "target_id", "reason"):
+        value = getattr(args, field)
+        if not isinstance(value, str) or not value.strip() or any(
+            character in value for character in "\r\n\x00"
+        ):
+            raise ApprovalRejected("approval_input_invalid", f"{field} is malformed")
+    if not _TARGET_HASH.fullmatch(args.target_hash):
+        raise ApprovalRejected(
+            "approval_wrong_target_hash", "target hash must be lowercase SHA-256"
+        )
+    scope = args.scope or args.reason
+    if not scope.strip() or any(character in scope for character in "\r\n\x00"):
+        raise ApprovalRejected("approval_input_invalid", "scope is malformed")
+    method = authentication_method_for_action(args.action, policy)
+    if args.auth_method is not None and args.auth_method != method:
+        raise ApprovalRejected(
+            "approval_weaker_method",
+            "requested authentication method is not the policy-selected method",
+            action=args.action,
+            required=method,
+            actual=args.auth_method,
+        )
+    if args.target_type == "governance-change-set":
+        target = _load_json(root / "agent-system/work/P0/proposals/governance-change-set.json")
+        if target.get("proposal_id") != args.target_id:
+            raise ApprovalRejected("approval_wrong_target", "governance proposal ID is stale")
+        if sha256_of_json(target) != args.target_hash:
+            raise ApprovalRejected(
+                "approval_wrong_target_hash", "governance proposal hash is stale"
+            )
+    if args.out:
+        destination = Path(args.out).expanduser().resolve()
+        try:
+            destination.relative_to(root)
+        except ValueError as exc:
+            raise ApprovalRejected(
+                "approval_output_outside_repository",
+                "approval artifact output must be in the repository",
+            ) from exc
+    return {"method": method, "scope": scope}
+
+
 def run(argv: list[str]) -> int:
+    args = _parser().parse_args(argv)
+    config = load_config()
+    policy = _load_json(config.repo_root / "agent-system/policies/approval-policy.json")
+    principal_policy = _load_json(
+        config.repo_root / "agent-system/policies/approval-principals.json"
+    )
+    validated = _validate_inputs(args, config.repo_root, policy)
+    if args.preflight:
+        print(json.dumps({"status": "ok", **validated}, sort_keys=True))
+        return 0
     if not sys.stdin.isatty():
         raise ApprovalRejected(
             "approval_non_tty", "human approval issuance requires an interactive TTY"
         )
-    args = _parser().parse_args(argv)
-    config = load_config()
     health = doctor()
-    policy = json.loads(
-        (config.repo_root / "agent-system/policies/approval-principals.json").read_text(
-            encoding="utf-8"
-        )
-    )
     matching = [
         principal
-        for principal in policy["principals"]
+        for principal in principal_policy["principals"]
         if principal["seal_key_fingerprint"] == health["fingerprint"]
     ]
     if len(matching) != 1:
@@ -174,7 +255,7 @@ def run(argv: list[str]) -> int:
         target_type=args.target_type,
         target_id=args.target_id,
         target_hash=args.target_hash,
-        scope=args.scope or args.reason,
+        scope=validated["scope"],
         reason=args.reason,
         policy=policy,
         requested_authentication_method=args.auth_method,
