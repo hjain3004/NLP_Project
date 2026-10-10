@@ -1,0 +1,72 @@
+{
+  "artifact_type": "bootstrap-policy-proposal",
+  "proposal_id": "P0-LOCAL-AUTHENTICATION-BOOTSTRAP-2026-10-09",
+  "schema_version": 1,
+  "status": "proposed",
+  "authoritative": false,
+  "base_commit": "da0418e0044ddd555fe70ace3ba897d57c077f33",
+  "proposal_identity_definition": "sha256(canonical_json_utf8(proposal with proposal_identity_hash, manifest_hash, and human_authorization_text omitted))",
+  "proposal_identity_hash": "d7e4d693a7cf1ead028c77f7cd5b9f882b642b28e21515700fe6988ed2e654ad",
+  "manifest_hash_definition": "sha256(canonical_json_utf8(operations))",
+  "manifest_hash": "e188e58b75110130a9f3120d16521a3a433c4d585ba082f1aeb34b29029948ab",
+  "hash_command": "PYTHONPATH=tools/agentctl python3 -c 'import hashlib,json; from agentctl.hashing import canonical_json; from pathlib import Path; p=json.loads(Path(\"agent-system/work/P0/proposals/local-authentication-bootstrap-policy.json\").read_text()); [p.pop(k) for k in (\"proposal_identity_hash\",\"manifest_hash\",\"human_authorization_text\")]; print(hashlib.sha256(canonical_json(p).encode()).hexdigest())'",
+  "operations": [
+    {
+      "path": "agent-system/policies/approval-policy.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "246833afa63356f23a48a59ea7228ef425c447d209bd2dc0b56c34f078909d97",
+      "before_canonical_json_sha256": "c2ac070d3afb0404e72be72265daf491cd05d63401d597e83e6fdf12c0e88faa",
+      "after_canonical_json_sha256": "c2ac070d3afb0404e72be72265daf491cd05d63401d597e83e6fdf12c0e88faa",
+      "patches": [],
+      "exact_change": "No policy bytes change. The existing approve_command.requires_key_unlock_passphrase=true is explicitly method-scoped: require the passphrase only when the selected method is interactive_tty_with_key_unlock; after successful local_authentication, permit runtime external-key access without a raw seal-key prompt."
+    },
+    {
+      "path": "agent-system/policies/approval-principals.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "ab8eba17f14d31ec11f10d714a9345e2f090be403b6c6f452bc98ce92adca512",
+      "before_canonical_json_sha256": "f5b3c611124d5c0ee421e2ee6043e8d5c9c74f325502e0fce060078598fdfd13",
+      "after_canonical_json_sha256": "bd7e809d941307282113107ae244483bad2b0c2dd77cc2cf53649440735e43f7",
+      "patches": [
+        {
+          "op": "append",
+          "pointer": "/principals/0/authentication_methods",
+          "value": "local_authentication"
+        }
+      ],
+      "exact_change": "Permit the currently configured human principal to use local_authentication in addition to interactive_tty_with_key_unlock; no role, scope, grant, fingerprint, or principal identity changes."
+    }
+  ],
+  "protected_base_assertions": [
+    {
+      "path": "agent-system/policies/approval-policy.json",
+      "sha256": "246833afa63356f23a48a59ea7228ef425c447d209bd2dc0b56c34f078909d97",
+      "assertion": "No active approval-policy bytes change. In particular, approve_command.requires_key_unlock_passphrase remains true and all action tiers remain unchanged."
+    },
+    {
+      "path": "agent-system/schemas/human-approval.schema.json",
+      "sha256": "7882ccb56c95116a52d85fcc51ff40d81a41680234a62a5f67c10bfeef460b05",
+      "assertion": "No active approval schema bytes change; local_authentication remains the existing schema method."
+    }
+  ],
+  "required_implementation_followup": {
+    "scope": "approval command/library and focused tests only",
+    "files": [
+      "tools/agentctl/agentctl/commands/approve.py",
+      "tools/agentctl/agentctl/approval.py",
+      "tools/agentctl/tests/test_approval.py"
+    ],
+    "requirements": [
+      "Select only a method permitted by the requested action tier and the principal allow-list.",
+      "For interactive_tty_with_key_unlock, retain TTY and key-unlock-passphrase requirements.",
+      "For local_authentication, complete no-prompt target validation and authenticate the full approval binding before reading or using the external seal key; do not prompt for the raw seal-key passphrase.",
+      "Do not alter action tiers, risk tiers, principal role/scope/grants, fingerprints, seal/MAC/expiry/single-use controls, or governance schema payload.",
+      "Add focused tests for conditional key-unlock behavior, principal-method enforcement, and fail-closed ordering."
+    ]
+  },
+  "human_authorization_text": "I authorize application of only the bootstrap policy proposal P0-LOCAL-AUTHENTICATION-BOOTSTRAP-2026-10-09 identified by proposal_identity_hash d7e4d693a7cf1ead028c77f7cd5b9f882b642b28e21515700fe6988ed2e654ad. This is a bounded author-level amendment to the circular prerequisite only: the control plane may apply this exact proposal without first requiring a typed, MAC-sealed approval for this proposal. It may not apply any other policy, schema, ADR, governance, phase, release, destructive, or public-claim change. All later governance schema and G0 approvals remain required as typed, MAC-sealed approvals using LocalAuthentication or another policy-permitted strong method.",
+  "forbidden_changes": [
+    "No self-authorizing approval command or approval artifact.",
+    "No seal-key read, prompt, issuance, or approval record creation as part of proposal preparation.",
+    "No live protected or authority file modification before the bounded human amendment and normal control-plane checks."
+  ]
+}
