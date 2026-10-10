@@ -79,6 +79,19 @@ independent review identity when it consumes this candidate.
 |---|---|---|---|---|---|
 | `/root/wire_local_auth_luna` | recorded by the coordinating integrator | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-09 | 25 focused approval/CLI tests, 192-test full suite, docs verify, no-prompt proposal preflight, governance proposal validation |
 
+## Explicit bootstrap amendment — 2026-10-10
+
+The author-level human rule amendment supplied for this bootstrap is recorded here
+verbatim as an instruction trace, not as a typed approval artifact or MAC record:
+
+> For this bootstrap only, I amend the AGENTS.md approval rule to authorize applying the LocalAuthentication bootstrap proposal with hash `91f3ba80302d044bfa2a4edbc579fb616b41fdc6cfe420f997359dc9cdeddb43` without a prior typed approval. All other typed approval requirements remain in force.
+
+This amendment authorizes only the exact proposal identified by that canonical hash.
+It does not authorize approval issuance, seal-key access before authentication, schema or
+invariant changes, governance proposal application, G0 closure, or any other policy/action
+tier/principal/scope/fingerprint change. The applied result commit is recorded by the
+coordinating integrator after independent verification.
+
 ## Verification note
 
 The Task 18 plan names `agentctl plan validate` and `agentctl docs generate gates`, but those

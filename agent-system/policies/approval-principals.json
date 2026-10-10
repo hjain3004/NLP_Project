@@ -8,7 +8,8 @@
       "machine_identity": "local-owner-workstation",
       "seal_key_fingerprint": "ffcc68362fffeb7b",
       "authentication_methods": [
-        "interactive_tty_with_key_unlock"
+        "interactive_tty_with_key_unlock",
+        "local_authentication"
       ]
     }
   ]

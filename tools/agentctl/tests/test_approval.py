@@ -213,6 +213,58 @@ class ApprovalTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "approval_authentication_cancelled")
 
+    def test_local_authentication_reads_seal_key_only_after_success(self) -> None:
+        state = {"authenticated": False}
+
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                state["authenticated"] = True
+                return LocalAuthenticationResult.AUTHENTICATED
+
+        def load_key() -> bytes:
+            self.assertTrue(state["authenticated"])
+            return SYNTHETIC_FIXTURE_KEY
+
+        record = _issue_record(
+            key=None,
+            seal_key_loader=load_key,
+            principal="owner",
+            machine_identity="machine",
+            action="schema_commitment",
+            target_type="schema",
+            target_id="SCHEMA-1",
+            target_hash="a" * 64,
+            scope="exact schema",
+            reason="Approve exact schema",
+            policy={"tiers": {"schema_commitment": ["local_authentication"]}},
+            authentication_adapter=Adapter(),
+        )
+        self.assertEqual(record["authentication_method"], "local_authentication")
+
+    def test_principal_method_permission_is_required_when_policy_is_supplied(self) -> None:
+        with self.assertRaises(ApprovalRejected) as raised:
+            _issue_record(
+                key=SYNTHETIC_FIXTURE_KEY,
+                principal="owner",
+                machine_identity="machine",
+                action="schema_commitment",
+                target_type="schema",
+                target_id="SCHEMA-1",
+                target_hash="a" * 64,
+                scope="exact schema",
+                reason="Approve exact schema",
+                policy={"tiers": {"schema_commitment": ["local_authentication"]}},
+                principal_policy={
+                    "principals": [
+                        {
+                            "principal_id": "owner",
+                            "authentication_methods": ["interactive_tty_with_key_unlock"],
+                        }
+                    ]
+                },
+            )
+        self.assertEqual(raised.exception.code, "approval_weaker_method")
+
     def test_malformed_helper_output_is_not_authentication(self) -> None:
         def runner(command: list[str], **kwargs):
             return subprocess.CompletedProcess(command, 0, "authenticated\nextra\n", "")
@@ -336,6 +388,7 @@ class ApprovalTests(unittest.TestCase):
                 destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
             output = temporary_root / "strong-approval.json"
             ordinary_output = temporary_root / "ordinary-approval.json"
+            (temporary_root / "outside.key").write_bytes(key)
             args = [
                 "schema_commitment",
                 "--target-type",

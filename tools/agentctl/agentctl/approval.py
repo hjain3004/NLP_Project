@@ -127,6 +127,62 @@ def _load_policy(repository_root: Path | None = None) -> dict[str, Any]:
     )
 
 
+def _load_principal_policy(repository_root: Path | None = None) -> dict[str, Any]:
+    root = repository_root or load_config().repo_root
+    return json.loads(
+        (root / "agent-system/policies/approval-principals.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def _require_principal_method(
+    principal: object,
+    method: object,
+    *,
+    principal_policy: Mapping[str, Any] | None = None,
+    repository_root: Path | None = None,
+) -> None:
+    """Require the principal allow-list and action tier to agree.
+
+    The public synthetic fixture deliberately has no live principal and is
+    checked with ``SYNTHETIC_FIXTURE_KEY`` only.  Every real approval must be
+    attributable to exactly one configured principal that explicitly permits
+    the selected method.
+    """
+    if not isinstance(principal, str) or not isinstance(method, str):
+        raise ApprovalRejected(
+            "approval_principal_unknown", "approval principal or method is malformed"
+        )
+    try:
+        principals = (principal_policy or _load_principal_policy(repository_root)).get(
+            "principals", []
+        )
+    except (OSError, json.JSONDecodeError, AttributeError) as exc:
+        raise ApprovalRejected(
+            "approval_principal_unknown", "approval principals policy cannot be loaded"
+        ) from exc
+    matching = [
+        item
+        for item in principals
+        if isinstance(item, Mapping) and item.get("principal_id") == principal
+    ]
+    if len(matching) != 1:
+        raise ApprovalRejected(
+            "approval_principal_unknown",
+            "approval principal is not uniquely configured",
+            principal=principal,
+        )
+    methods = matching[0].get("authentication_methods")
+    if not isinstance(methods, list) or method not in methods:
+        raise ApprovalRejected(
+            "approval_weaker_method",
+            "principal is not permitted to use the selected authentication method",
+            principal=principal,
+            actual=method,
+        )
+
+
 def _validate_shape(
     approval: Mapping[str, Any], repository_root: Path | None = None
 ) -> None:
@@ -164,6 +220,7 @@ def verify_approval(
     expected_scope: str | None = None,
     now: dt.datetime | None = None,
     policy: Mapping[str, Any] | None = None,
+    principal_policy: Mapping[str, Any] | None = None,
     repository_root: Path | None = None,
 ) -> Mapping[str, Any]:
     """Verify policy, binding, seal, lifetime, revocation, and consumption."""
@@ -219,6 +276,19 @@ def verify_approval(
             required=required_method,
             actual=method,
         )
+    if principal_policy is not None:
+        _require_principal_method(
+            approval.get("approver_principal"),
+            method,
+            principal_policy=principal_policy,
+            repository_root=repository_root,
+        )
+    if key != SYNTHETIC_FIXTURE_KEY:
+        _require_principal_method(
+            approval.get("approver_principal"),
+            method,
+            repository_root=repository_root,
+        )
 
     supplied = approval.get("control_plane_seal")
     if not isinstance(supplied, str) or len(supplied) != 64:
@@ -252,6 +322,7 @@ class ApprovalManager:
         key: bytes | None = None,
         key_path: str | os.PathLike[str] | None = None,
         policy: Mapping[str, Any] | None = None,
+        principal_policy: Mapping[str, Any] | None = None,
     ) -> None:
         self.store = store
         if key is None:
@@ -259,12 +330,18 @@ class ApprovalManager:
             key = path.read_bytes()
         self.key = key
         self.policy = dict(policy or _load_policy(store.repository_root))
+        self.principal_policy = (
+            dict(principal_policy)
+            if principal_policy is not None
+            else None
+        )
 
     def register(self, approval: Mapping[str, Any], *, path: str = "") -> dict[str, Any]:
         verify_approval(
             approval,
             self.key,
             policy=self.policy,
+            principal_policy=self.principal_policy,
             repository_root=self.store.repository_root,
         )
         approval_id = str(approval["approval_id"])
@@ -310,6 +387,7 @@ class ApprovalManager:
             expected_scope=request["expected_scope"],
             now=now,
             policy=self.policy,
+            principal_policy=self.principal_policy,
             repository_root=self.store.repository_root,
         )
 
@@ -424,6 +502,7 @@ class ApprovalManager:
                     expected_scope=request["expected_scope"],
                     now=now,
                     policy=self.policy,
+                    principal_policy=self.principal_policy,
                     repository_root=self.store.repository_root,
                 )
                 verified.append((approval_id, record))

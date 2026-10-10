@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from ..approval import (
@@ -18,6 +19,7 @@ from ..approval import (
     build_approval,
     doctor,
     seal_approval,
+    _require_principal_method,
 )
 from ..config import load as load_config
 from ..local_authentication import (
@@ -57,7 +59,7 @@ def _output_path(root: Path, action: str, target_id: str) -> Path:
 
 def _issue_record(
     *,
-    key: bytes,
+    key: bytes | None,
     principal: str,
     machine_identity: str,
     action: str,
@@ -69,6 +71,8 @@ def _issue_record(
     policy: dict,
     requested_authentication_method: str | None = None,
     authentication_adapter: LocalAuthenticationAdapter | None = None,
+    seal_key_loader: Callable[[], bytes] | None = None,
+    principal_policy: dict | None = None,
 ) -> dict:
     """Authenticate and seal one policy-selected immutable approval binding."""
     method = authentication_method_for_action(action, policy)
@@ -82,6 +86,14 @@ def _issue_record(
             action=action,
             required=method,
             actual=requested_authentication_method,
+        )
+    if key is None and seal_key_loader is None:
+        raise ApprovalRejected(
+            "approval_unlock_failed", "seal key is unavailable after authentication"
+        )
+    if principal_policy is not None:
+        _require_principal_method(
+            principal, method, principal_policy=principal_policy
         )
     provisional = build_approval(
         principal=principal,
@@ -146,7 +158,8 @@ def _issue_record(
         # The record is not an approval artifact until this post-authentication
         # MAC seal is produced.  No file or event-store mutation occurs before
         # this point.
-    return seal_approval(provisional, key)
+    selected_key = key if key is not None else seal_key_loader()
+    return seal_approval(provisional, selected_key)
 
 
 _TARGET_HASH = re.compile(r"^[0-9a-f]{64}$")
@@ -208,6 +221,21 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
     return {"method": method, "scope": scope}
 
 
+def _load_local_auth_seal_key(config, principal: dict) -> bytes:
+    """Load the external seal key only after LocalAuthentication succeeds."""
+    health = doctor()
+    if health["fingerprint"] != principal.get("seal_key_fingerprint"):
+        raise ApprovalRejected(
+            "approval_principal_unknown", "seal key does not identify the authenticated principal"
+        )
+    try:
+        return config.seal_key_path.read_bytes()
+    except OSError as exc:
+        raise ApprovalRejected(
+            "approval_unlock_failed", "seal key cannot be loaded after authentication"
+        ) from exc
+
+
 def run(argv: list[str]) -> int:
     args = _parser().parse_args(argv)
     config = load_config()
@@ -223,43 +251,80 @@ def run(argv: list[str]) -> int:
         raise ApprovalRejected(
             "approval_non_tty", "human approval issuance requires an interactive TTY"
         )
-    health = doctor()
-    matching = [
-        principal
-        for principal in principal_policy["principals"]
-        if principal["seal_key_fingerprint"] == health["fingerprint"]
-    ]
-    if len(matching) != 1:
-        raise ApprovalRejected(
-            "approval_principal_unknown", "seal key does not identify exactly one principal"
+    method = validated["method"]
+    if method == "local_authentication":
+        matching = [
+            principal
+            for principal in principal_policy["principals"]
+            if method in principal.get("authentication_methods", [])
+        ]
+        if len(matching) != 1:
+            raise ApprovalRejected(
+                "approval_principal_unknown",
+                "local authentication does not identify exactly one permitted principal",
+            )
+        principal = matching[0]
+        loaded_key: list[bytes] = []
+
+        def load_key_after_authentication() -> bytes:
+            selected = _load_local_auth_seal_key(config, principal)
+            loaded_key.append(selected)
+            return selected
+
+        record = _issue_record(
+            key=None,
+            seal_key_loader=load_key_after_authentication,
+            principal=principal["principal_id"],
+            machine_identity=principal["machine_identity"],
+            action=args.action,
+            target_type=args.target_type,
+            target_id=args.target_id,
+            target_hash=args.target_hash,
+            scope=validated["scope"],
+            reason=args.reason,
+            policy=policy,
+            requested_authentication_method=args.auth_method,
+            principal_policy=principal_policy,
         )
-    principal = matching[0]
-    # The provisioning plan creates a raw 32-byte secret.  At Level 1, fresh
-    # key unlock means the human supplies those bytes as 64 hex characters via
-    # no-echo TTY input; agentctl never accepts a flag, environment variable,
-    # pipe, or committed value as a substitute.
-    supplied = getpass.getpass("Seal-key unlock (64 hex characters): ")
-    try:
-        key = bytes.fromhex(supplied)
-    except ValueError as exc:
-        raise ApprovalRejected("approval_unlock_failed", "seal-key unlock failed") from exc
-    if len(key) != 32 or hashlib.sha256(key).hexdigest()[:16] != health["fingerprint"]:
-        raise ApprovalRejected("approval_unlock_failed", "seal-key unlock failed")
-    if len(args.target_hash) != 64 or any(c not in "0123456789abcdef" for c in args.target_hash):
-        raise ApprovalRejected("approval_wrong_target_hash", "target hash must be lowercase SHA-256")
-    record = _issue_record(
-        key=key,
-        principal=principal["principal_id"],
-        machine_identity=principal["machine_identity"],
-        action=args.action,
-        target_type=args.target_type,
-        target_id=args.target_id,
-        target_hash=args.target_hash,
-        scope=validated["scope"],
-        reason=args.reason,
-        policy=policy,
-        requested_authentication_method=args.auth_method,
-    )
+        key_for_registration = loaded_key[0]
+    else:
+        health = doctor()
+        matching = [
+            principal
+            for principal in principal_policy["principals"]
+            if principal["seal_key_fingerprint"] == health["fingerprint"]
+        ]
+        if len(matching) != 1:
+            raise ApprovalRejected(
+                "approval_principal_unknown", "seal key does not identify exactly one principal"
+            )
+        principal = matching[0]
+        # The provisioning plan creates a raw 32-byte secret.  At Level 1, fresh
+        # key unlock means the human supplies those bytes as 64 hex characters via
+        # no-echo TTY input; agentctl never accepts a flag, environment variable,
+        # pipe, or committed value as a substitute.
+        supplied = getpass.getpass("Seal-key unlock (64 hex characters): ")
+        try:
+            key = bytes.fromhex(supplied)
+        except ValueError as exc:
+            raise ApprovalRejected("approval_unlock_failed", "seal-key unlock failed") from exc
+        if len(key) != 32 or hashlib.sha256(key).hexdigest()[:16] != health["fingerprint"]:
+            raise ApprovalRejected("approval_unlock_failed", "seal-key unlock failed")
+        record = _issue_record(
+            key=key,
+            principal=principal["principal_id"],
+            machine_identity=principal["machine_identity"],
+            action=args.action,
+            target_type=args.target_type,
+            target_id=args.target_id,
+            target_hash=args.target_hash,
+            scope=validated["scope"],
+            reason=args.reason,
+            policy=policy,
+            requested_authentication_method=args.auth_method,
+            principal_policy=principal_policy,
+        )
+        key_for_registration = key
     destination = Path(args.out).expanduser().resolve() if args.out else _output_path(
         config.repo_root, args.action, args.target_id
     )
@@ -271,7 +336,7 @@ def run(argv: list[str]) -> int:
         ) from exc
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    ApprovalManager(EventStore(), key=key).register(
+    ApprovalManager(EventStore(), key=key_for_registration).register(
         record, path=destination.relative_to(config.repo_root).as_posix()
     )
     print(destination.relative_to(config.repo_root).as_posix())
