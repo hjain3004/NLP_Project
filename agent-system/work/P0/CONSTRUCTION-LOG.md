@@ -67,6 +67,18 @@ issued, and no G0 criteria or live schema/policy file was replaced.
 |---|---|---|---|---|---|
 | `/root/g0_authority_prep_luna` | recorded by the coordinating integrator | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-07 | 182-test suite, docs verify, proposal validators, canonical replay-only checks |
 
+## Delegated implementation session — 2026-10-09
+
+This session wired the already-permitted `local_authentication` method into the
+Level-1 approval issuer and verifier. It did not alter live policy/schema
+contents, issue an approval, read or request the seal key, or invoke a real
+biometric prompt. The coordinating integrator records the result commit and
+independent review identity when it consumes this candidate.
+
+| Session | Result commit | Provider | Model | Date | Verification |
+|---|---|---|---|---|---|
+| `/root/wire_local_auth_luna` | recorded by the coordinating integrator | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-09 | 21 focused approval tests, 187-test full suite, docs verify, G0 canonical replay-only check, governance proposal validation |
+
 ## Verification note
 
 The Task 18 plan names `agentctl plan validate` and `agentctl docs generate gates`, but those

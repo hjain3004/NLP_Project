@@ -3,14 +3,27 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import getpass
 import hashlib
 import json
 import sys
 from pathlib import Path
 
-from ..approval import ApprovalManager, ApprovalRejected, create_approval, doctor
+from ..approval import (
+    ApprovalManager,
+    ApprovalRejected,
+    authentication_method_for_action,
+    build_approval,
+    doctor,
+    seal_approval,
+)
 from ..config import load as load_config
+from ..local_authentication import (
+    LocalAuthenticationAdapter,
+    MacOSLocalAuthentication,
+    authenticate_exact_hash,
+)
 from ..store import EventStore
 
 NAME = "approve"
@@ -24,6 +37,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-hash", required=True)
     parser.add_argument("--reason", required=True)
     parser.add_argument("--scope")
+    parser.add_argument("--auth-method")
     parser.add_argument("--out")
     return parser
 
@@ -36,6 +50,84 @@ def _output_path(root: Path, action: str, target_id: str) -> Path:
     else:
         name = f"{target_id}-{action.replace('_authorization', '')}-approval.json"
     return root / "agent-system/work/P0/approvals" / name
+
+
+def _issue_record(
+    *,
+    key: bytes,
+    principal: str,
+    machine_identity: str,
+    action: str,
+    target_type: str,
+    target_id: str,
+    target_hash: str,
+    scope: str,
+    reason: str,
+    policy: dict,
+    requested_authentication_method: str | None = None,
+    authentication_adapter: LocalAuthenticationAdapter | None = None,
+) -> dict:
+    """Authenticate and seal one policy-selected immutable approval binding."""
+    method = authentication_method_for_action(action, policy)
+    if (
+        requested_authentication_method is not None
+        and requested_authentication_method != method
+    ):
+        raise ApprovalRejected(
+            "approval_weaker_method",
+            "requested authentication method is not the policy-selected method",
+            action=action,
+            required=method,
+            actual=requested_authentication_method,
+        )
+    provisional = build_approval(
+        principal=principal,
+        machine_identity=machine_identity,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        target_hash=target_hash,
+        scope=scope,
+        reason=reason,
+        authentication_method=method,
+    )
+    binding = (
+        provisional["approval_id"],
+        provisional["nonce"],
+        provisional["authorized_action"],
+        provisional["target_hash"],
+        provisional["reason"],
+    )
+    if method == "local_authentication":
+        adapter = authentication_adapter or MacOSLocalAuthentication()
+        authenticate_exact_hash(
+            adapter,
+            action=provisional["authorized_action"],
+            target_hash=provisional["target_hash"],
+            reason=provisional["reason"],
+            approval_id=provisional["approval_id"],
+            nonce=provisional["nonce"],
+        )
+        provisional["authenticated_at"] = (
+            dt.datetime.now(dt.timezone.utc)
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z")
+        )
+        if binding != (
+            provisional["approval_id"],
+            provisional["nonce"],
+            provisional["authorized_action"],
+            provisional["target_hash"],
+            provisional["reason"],
+        ):
+            raise ApprovalRejected(
+                "approval_authentication_failed",
+                "approval binding changed during authentication",
+            )
+        # The record is not an approval artifact until this post-authentication
+        # MAC seal is produced.  No file or event-store mutation occurs before
+        # this point.
+    return seal_approval(provisional, key)
 
 
 def run(argv: list[str]) -> int:
@@ -74,7 +166,7 @@ def run(argv: list[str]) -> int:
         raise ApprovalRejected("approval_unlock_failed", "seal-key unlock failed")
     if len(args.target_hash) != 64 or any(c not in "0123456789abcdef" for c in args.target_hash):
         raise ApprovalRejected("approval_wrong_target_hash", "target hash must be lowercase SHA-256")
-    record = create_approval(
+    record = _issue_record(
         key=key,
         principal=principal["principal_id"],
         machine_identity=principal["machine_identity"],
@@ -84,6 +176,8 @@ def run(argv: list[str]) -> int:
         target_hash=args.target_hash,
         scope=args.scope or args.reason,
         reason=args.reason,
+        policy=policy,
+        requested_authentication_method=args.auth_method,
     )
     destination = Path(args.out).expanduser().resolve() if args.out else _output_path(
         config.repo_root, args.action, args.target_id

@@ -25,6 +25,7 @@ from agentctl.local_authentication import (
     MacOSLocalAuthentication,
     authenticate_exact_hash,
 )
+from agentctl.commands.approve import _issue_record
 from agentctl.config import PermissionViolation
 from agentctl.errors import ConfigError
 from agentctl.store import EventStore
@@ -143,6 +144,141 @@ class ApprovalTests(unittest.TestCase):
         self.assertEqual(result, LocalAuthenticationResult.AUTHENTICATED)
         self.assertEqual(calls[0][0][0], "/usr/bin/swift")
         self.assertEqual(calls[0][0][2:], ["invariant_change", "d" * 64, "Exact hash approval"])
+
+    def test_strong_issuance_authenticates_binding_before_seal(self) -> None:
+        calls: list[dict[str, str]] = []
+
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                calls.append(kwargs.copy())
+                # A helper cannot rewrite the immutable provisional record: the
+                # issuer passes a copy of each bound scalar.
+                kwargs["target_hash"] = "0" * 64
+                return LocalAuthenticationResult.AUTHENTICATED
+
+        policy = {"tiers": {"schema_commitment": ["keychain_backed", "local_authentication"]}}
+        record = _issue_record(
+            key=SYNTHETIC_FIXTURE_KEY,
+            principal="owner",
+            machine_identity="machine",
+            action="schema_commitment",
+            target_type="schema",
+            target_id="SCHEMA-1",
+            target_hash="a" * 64,
+            scope="exact schema",
+            reason="Approve exact schema",
+            policy=policy,
+            authentication_adapter=Adapter(),
+        )
+        self.assertEqual(record["authentication_method"], "local_authentication")
+        self.assertEqual(calls[0]["approval_id"], record["approval_id"])
+        self.assertEqual(calls[0]["nonce"], record["nonce"])
+        self.assertEqual(calls[0]["target_hash"], "a" * 64)
+        verify_approval(
+            record,
+            SYNTHETIC_FIXTURE_KEY,
+            expected_action="schema_commitment",
+            expected_target_hash="a" * 64,
+            expected_scope="exact schema",
+            policy=policy,
+        )
+
+    def test_strong_issuance_cancellation_produces_no_sealed_record(self) -> None:
+        class Adapter:
+            def authenticate(self, **kwargs: str) -> LocalAuthenticationResult:
+                return LocalAuthenticationResult.CANCELLED
+
+        with self.assertRaises(ApprovalRejected) as raised:
+            _issue_record(
+                key=SYNTHETIC_FIXTURE_KEY,
+                principal="owner",
+                machine_identity="machine",
+                action="schema_commitment",
+                target_type="schema",
+                target_id="SCHEMA-1",
+                target_hash="a" * 64,
+                scope="exact schema",
+                reason="Approve exact schema",
+                policy={"tiers": {"schema_commitment": ["local_authentication"]}},
+                authentication_adapter=Adapter(),
+            )
+        self.assertEqual(raised.exception.code, "approval_authentication_cancelled")
+
+    def test_malformed_helper_output_is_not_authentication(self) -> None:
+        def runner(command: list[str], **kwargs):
+            return subprocess.CompletedProcess(command, 0, "authenticated\nextra\n", "")
+
+        adapter = MacOSLocalAuthentication(
+            helper=self.root / "agent-system/work/P0/gates/G0-criteria.json",
+            runner=runner,
+            platform="darwin",
+        )
+        with self.assertRaises(ApprovalRejected) as raised:
+            authenticate_exact_hash(
+                adapter,
+                action="schema_commitment",
+                target_hash="a" * 64,
+                reason="Approve exact schema",
+                approval_id="approval-1",
+                nonce="0123456789abcdef0123456789abcdef",
+            )
+        self.assertEqual(raised.exception.code, "approval_authentication_failed")
+
+    def test_unsupported_strong_method_is_hard_refused(self) -> None:
+        with self.assertRaises(ApprovalRejected) as raised:
+            _issue_record(
+                key=SYNTHETIC_FIXTURE_KEY,
+                principal="owner",
+                machine_identity="machine",
+                action="schema_commitment",
+                target_type="schema",
+                target_id="SCHEMA-1",
+                target_hash="a" * 64,
+                scope="exact schema",
+                reason="Approve exact schema",
+                policy={"tiers": {"schema_commitment": ["keychain_backed"]}},
+            )
+        self.assertEqual(raised.exception.code, "approval_weaker_method")
+
+    def test_auth_method_flag_cannot_select_a_weaker_method(self) -> None:
+        with self.assertRaises(ApprovalRejected) as raised:
+            _issue_record(
+                key=SYNTHETIC_FIXTURE_KEY,
+                principal="owner",
+                machine_identity="machine",
+                action="schema_commitment",
+                target_type="schema",
+                target_id="SCHEMA-1",
+                target_hash="a" * 64,
+                scope="exact schema",
+                reason="Approve exact schema",
+                policy={"tiers": {"schema_commitment": ["keychain_backed", "local_authentication"]}},
+                requested_authentication_method="interactive_tty_with_key_unlock",
+            )
+        self.assertEqual(raised.exception.code, "approval_weaker_method")
+
+    def test_ordinary_tty_issuance_remains_unchanged(self) -> None:
+        record = _issue_record(
+            key=SYNTHETIC_FIXTURE_KEY,
+            principal="owner",
+            machine_identity="machine",
+            action="phase_authorization",
+            target_type="phase_gate",
+            target_id="GATE-1",
+            target_hash="a" * 64,
+            scope="exact gate",
+            reason="Approve exact gate",
+            policy={"tiers": {"phase_authorization": "interactive_tty_with_key_unlock"}},
+        )
+        self.assertEqual(record["authentication_method"], "interactive_tty_with_key_unlock")
+        verify_approval(
+            record,
+            SYNTHETIC_FIXTURE_KEY,
+            expected_action="phase_authorization",
+            expected_target_hash="a" * 64,
+            expected_scope="exact gate",
+            policy={"tiers": {"phase_authorization": "interactive_tty_with_key_unlock"}},
+        )
 
     def test_one_changed_target_hash_byte_is_rejected(self) -> None:
         changed = copy.deepcopy(self.fixture)

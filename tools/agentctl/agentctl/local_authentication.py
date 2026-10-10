@@ -36,7 +36,13 @@ class LocalAuthenticationAdapter(Protocol):
     """Minimal injected boundary around platform authentication."""
 
     def authenticate(
-        self, *, action: str, target_hash: str, reason: str
+        self,
+        *,
+        action: str,
+        target_hash: str,
+        reason: str,
+        approval_id: str | None = None,
+        nonce: str | None = None,
     ) -> LocalAuthenticationResult: ...
 
 
@@ -49,6 +55,8 @@ def authenticate_exact_hash(
     action: str,
     target_hash: str,
     reason: str,
+    approval_id: str | None = None,
+    nonce: str | None = None,
 ) -> None:
     """Require local authentication for one exact target hash.
 
@@ -59,14 +67,37 @@ def authenticate_exact_hash(
         raise ApprovalRejected(
             "approval_wrong_target_hash", "target hash must be lowercase SHA-256"
         )
-    if not isinstance(action, str) or not action.strip() or not isinstance(reason, str) or not reason.strip():
+    if (
+        not isinstance(action, str)
+        or not action.strip()
+        or not isinstance(reason, str)
+        or not reason.strip()
+    ):
         raise ApprovalRejected(
             "approval_authentication_failed", "local authentication request is malformed"
         )
-    try:
-        outcome = adapter.authenticate(
-            action=action, target_hash=target_hash, reason=reason
+    if (approval_id is None) != (nonce is None):
+        raise ApprovalRejected(
+            "approval_authentication_failed", "approval binding is malformed"
         )
+    if approval_id is not None and (
+        not approval_id.strip() or not isinstance(nonce, str)
+    ):
+        raise ApprovalRejected(
+            "approval_authentication_failed", "approval binding is malformed"
+        )
+    if approval_id is not None and (
+        len(nonce or "") != 32
+        or any(character not in "0123456789abcdef" for character in nonce or "")
+    ):
+        raise ApprovalRejected(
+            "approval_authentication_failed", "approval binding is malformed"
+        )
+    request = {"action": action, "target_hash": target_hash, "reason": reason}
+    if approval_id is not None:
+        request.update({"approval_id": approval_id, "nonce": nonce})
+    try:
+        outcome = adapter.authenticate(**request)
     except Exception as exc:  # platform adapters must fail closed
         raise ApprovalRejected(
             "approval_authentication_unavailable",
@@ -108,15 +139,32 @@ class MacOSLocalAuthentication:
         self.platform = platform or sys.platform
 
     def authenticate(
-        self, *, action: str, target_hash: str, reason: str
+        self,
+        *,
+        action: str,
+        target_hash: str,
+        reason: str,
+        approval_id: str | None = None,
+        nonce: str | None = None,
     ) -> LocalAuthenticationResult:
         if self.platform != "darwin":
             return LocalAuthenticationResult.UNAVAILABLE
         if not self.helper.is_file():
             return LocalAuthenticationResult.UNAVAILABLE
+        if (approval_id is None) != (nonce is None):
+            return LocalAuthenticationResult.FAILED
+        if approval_id is not None and (
+            not approval_id.strip()
+            or len(nonce or "") != 32
+            or any(character not in "0123456789abcdef" for character in nonce or "")
+        ):
+            return LocalAuthenticationResult.FAILED
+        command = ["/usr/bin/swift", str(self.helper), action, target_hash, reason]
+        if approval_id is not None:
+            command.extend([approval_id, nonce or ""])
         try:
             completed = self.runner(
-                ["/usr/bin/swift", str(self.helper), action, target_hash, reason],
+                command,
                 capture_output=True,
                 check=False,
                 text=True,

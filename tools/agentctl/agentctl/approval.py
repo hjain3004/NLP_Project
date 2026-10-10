@@ -35,6 +35,8 @@ __all__ = [
     "SYNTHETIC_FIXTURE_KEY",
     "ApprovalManager",
     "ApprovalRejected",
+    "authentication_method_for_action",
+    "build_approval",
     "create_approval",
     "doctor",
     "seal_approval",
@@ -44,7 +46,30 @@ __all__ = [
 
 SYNTHETIC_FIXTURE_KEY = b"cashbooks-public-synthetic-approval-fixture-key-v1"
 _SEAL_EXCLUDED = frozenset({"control_plane_seal", "consumed_at", "revoked_at"})
-_IMPLEMENTED_AUTHENTICATION = frozenset({"interactive_tty_with_key_unlock"})
+_LOCAL_AUTHENTICATION = "local_authentication"
+
+
+def authentication_method_for_action(
+    action: str, policy: Mapping[str, Any]
+) -> str:
+    """Select one implemented method allowed by the action's policy tier.
+
+    Strong tiers are deliberately selected only when the policy explicitly
+    permits the LocalAuthentication method.  ``keychain_backed`` is not an
+    implemented fallback at Level 1, and no caller-provided method can change
+    this decision.
+    """
+    tier = policy.get("tiers", {}).get(action)
+    if tier == "interactive_tty_with_key_unlock":
+        return "interactive_tty_with_key_unlock"
+    if isinstance(tier, list) and _LOCAL_AUTHENTICATION in tier:
+        return _LOCAL_AUTHENTICATION
+    raise ApprovalRejected(
+        "approval_weaker_method",
+        "the required authentication tier has no implemented method",
+        action=action,
+        required=tier,
+    )
 
 
 class ApprovalRejected(HumanGate):
@@ -182,19 +207,16 @@ def verify_approval(
     action = approval.get("authorized_action")
     tier = selected_policy.get("tiers", {}).get(action)
     method = approval.get("authentication_method")
-    if isinstance(tier, list) or tier not in _IMPLEMENTED_AUTHENTICATION:
-        raise ApprovalRejected(
-            "approval_weaker_method",
-            "the required authentication tier is not implemented at Level 1",
-            action=action,
-            required=tier,
-        )
-    if method != tier:
+    try:
+        required_method = authentication_method_for_action(str(action), selected_policy)
+    except ApprovalRejected:
+        raise
+    if method != required_method:
         raise ApprovalRejected(
             "approval_weaker_method",
             "approval used a weaker authentication method",
             action=action,
-            required=tier,
+            required=required_method,
             actual=method,
         )
 
@@ -428,9 +450,8 @@ class ApprovalManager:
         )
 
 
-def create_approval(
+def build_approval(
     *,
-    key: bytes,
     principal: str,
     machine_identity: str,
     action: str,
@@ -439,17 +460,27 @@ def create_approval(
     target_hash: str,
     scope: str,
     reason: str,
+    authentication_method: str = "interactive_tty_with_key_unlock",
     lifetime_seconds: int = 3600,
     now: dt.datetime | None = None,
+    approval_id: str | None = None,
+    nonce: str | None = None,
 ) -> dict[str, Any]:
+    """Build an unsealed approval for synchronous authentication binding.
+
+    The returned record is intentionally not an approval artifact until
+    ``seal_approval`` is called after the required authentication signal.
+    ``approval_id`` and ``nonce`` are generated here so they are the exact
+    values presented to the platform helper and then MAC-sealed.
+    """
     issued = (now or _utc_now()).astimezone(dt.timezone.utc)
     record = {
         "artifact_type": "human-approval",
-        "approval_id": str(uuid.uuid4()),
+        "approval_id": approval_id or str(uuid.uuid4()),
         "schema_version": 1,
         "approver_principal": principal,
         "machine_identity": machine_identity,
-        "authentication_method": "interactive_tty_with_key_unlock",
+        "authentication_method": authentication_method,
         "authenticated_at": _timestamp(issued),
         "authorized_action": action,
         "target_type": target_type,
@@ -464,9 +495,43 @@ def create_approval(
         "consumed_at": None,
         "revoked_at": None,
         "revocation_reason": None,
-        "nonce": secrets.token_hex(16),
+        "nonce": nonce or secrets.token_hex(16),
         "control_plane_seal": "",
     }
+    return record
+
+
+def create_approval(
+    *,
+    key: bytes,
+    principal: str,
+    machine_identity: str,
+    action: str,
+    target_type: str,
+    target_id: str,
+    target_hash: str,
+    scope: str,
+    reason: str,
+    lifetime_seconds: int = 3600,
+    now: dt.datetime | None = None,
+) -> dict[str, Any]:
+    """Create a sealed approval for existing synthetic/library callers.
+
+    Production issuance uses :func:`build_approval`, performs its required
+    authentication, and seals only afterward.
+    """
+    record = build_approval(
+        principal=principal,
+        machine_identity=machine_identity,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        target_hash=target_hash,
+        scope=scope,
+        reason=reason,
+        lifetime_seconds=lifetime_seconds,
+        now=now,
+    )
     return seal_approval(record, key)
 
 
