@@ -20,6 +20,7 @@ import subprocess
 import time
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ __all__ = [
     "build_approval",
     "create_approval",
     "doctor",
+    "resolve_approval_target",
     "seal_approval",
     "verify_approval",
 ]
@@ -47,6 +49,120 @@ __all__ = [
 SYNTHETIC_FIXTURE_KEY = b"cashbooks-public-synthetic-approval-fixture-key-v1"
 _SEAL_EXCLUDED = frozenset({"control_plane_seal", "consumed_at", "revoked_at"})
 _LOCAL_AUTHENTICATION = "local_authentication"
+
+
+@dataclass(frozen=True)
+class ApprovalTarget:
+    """One repository-owned immutable target bound to an approval."""
+
+    target_type: str
+    target_id: str
+    path: Path
+    payload: Mapping[str, Any]
+    target_hash: str
+
+
+# Governance proposals are intentionally resolved through one fixed path.  The
+# approval record cannot select a filename, directory, or alternate proposal.
+_APPROVAL_TARGETS = {
+    "governance-change-set": (
+        "agent-system/work/P0/proposals/governance-change-set.json",
+        "governance-change-set-proposal",
+        "proposal_id",
+    ),
+}
+
+
+def resolve_approval_target(
+    target_type: str,
+    target_id: str,
+    *,
+    repository_root: str | os.PathLike[str] | None = None,
+) -> ApprovalTarget:
+    """Resolve a supported approval target using an explicit trusted mapping.
+
+    This resolver is deliberately narrower than artifact discovery: a target
+    record never supplies the path used to find its own payload.  Proposal
+    status, discriminator, identifier, declared operation hashes, and the
+    canonical payload hash are all checked before returning the target.
+    """
+    spec = _APPROVAL_TARGETS.get(target_type)
+    if spec is None:
+        raise ApprovalRejected(
+            "approval_unknown_target",
+            "approval target type is not registered",
+            target_type=target_type,
+        )
+    root = (Path(repository_root) if repository_root is not None else load_config().repo_root).resolve()
+    relative_path, expected_artifact_type, id_field = spec
+    path = (root / relative_path).resolve(strict=False)
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ApprovalRejected(
+            "approval_target_unreadable",
+            "approval target mapping escapes the repository",
+            target_type=target_type,
+        ) from exc
+    if not path.is_file():
+        raise ApprovalRejected(
+            "approval_target_unreadable",
+            "approval target cannot be read",
+            path=relative_path,
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ApprovalRejected(
+            "approval_target_unreadable",
+            "approval target cannot be read",
+            path=relative_path,
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ApprovalRejected(
+            "approval_target_mismatch",
+            "approval target payload is not an object",
+            path=relative_path,
+        )
+    if payload.get("artifact_type") != expected_artifact_type:
+        raise ApprovalRejected(
+            "approval_target_mismatch",
+            "approval target artifact type is not the registered type",
+            expected=expected_artifact_type,
+            actual=payload.get("artifact_type"),
+        )
+    if payload.get(id_field) != target_id:
+        raise ApprovalRejected(
+            "approval_wrong_target",
+            "approval target identifier does not match the registered payload",
+            expected=payload.get(id_field),
+            actual=target_id,
+        )
+    if payload.get("status") != "proposed" or payload.get("authoritative") is not False:
+        raise ApprovalRejected(
+            "approval_target_stale",
+            "governance proposal is no longer a proposed non-authoritative target",
+            path=relative_path,
+        )
+    try:
+        # Import lazily to keep the approval primitive independent of proposal
+        # command wiring while still enforcing every declared before-hash.
+        from .proposals import validate_governance_change_set
+
+        validate_governance_change_set(path, repository_root=root)
+    except (OSError, ValueError) as exc:
+        raise ApprovalRejected(
+            "approval_target_stale",
+            "governance proposal no longer matches its declared immutable operations",
+            path=relative_path,
+        ) from exc
+    return ApprovalTarget(
+        target_type=target_type,
+        target_id=target_id,
+        path=path,
+        payload=payload,
+        target_hash=sha256_of_json(payload),
+    )
 
 
 def authentication_method_for_action(
@@ -259,6 +375,20 @@ def verify_approval(
         raise ApprovalRejected(
             "approval_wrong_scope", "approval scope does not match", expected=expected_scope
         )
+
+    if approval.get("target_type") in _APPROVAL_TARGETS:
+        target = resolve_approval_target(
+            str(approval["target_type"]),
+            str(approval["target_id"]),
+            repository_root=repository_root,
+        )
+        if approval.get("target_hash") != target.target_hash:
+            raise ApprovalRejected(
+                "approval_wrong_target_hash",
+                "approval target hash does not match the current registered payload",
+                expected=target.target_hash,
+                actual=approval.get("target_hash"),
+            )
 
     selected_policy = dict(policy or _load_policy())
     action = approval.get("authorized_action")

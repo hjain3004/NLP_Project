@@ -18,6 +18,7 @@ from ..approval import (
     authentication_method_for_action,
     build_approval,
     doctor,
+    resolve_approval_target,
     seal_approval,
     _require_principal_method,
 )
@@ -27,7 +28,6 @@ from ..local_authentication import (
     MacOSLocalAuthentication,
     authenticate_exact_hash,
 )
-from ..hashing import sha256_of_json
 from ..store import EventStore
 
 NAME = "approve"
@@ -202,10 +202,10 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
             actual=args.auth_method,
         )
     if args.target_type == "governance-change-set":
-        target = _load_json(root / "agent-system/work/P0/proposals/governance-change-set.json")
-        if target.get("proposal_id") != args.target_id:
-            raise ApprovalRejected("approval_wrong_target", "governance proposal ID is stale")
-        if sha256_of_json(target) != args.target_hash:
+        target = resolve_approval_target(
+            args.target_type, args.target_id, repository_root=root
+        )
+        if target.target_hash != args.target_hash:
             raise ApprovalRejected(
                 "approval_wrong_target_hash", "governance proposal hash is stale"
             )
