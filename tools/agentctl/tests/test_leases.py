@@ -269,7 +269,7 @@ class LeaseTests(unittest.TestCase):
         )
         approval = create_approval(
             key=key,
-            principal="owner",
+            principal="himanshu_jain",
             machine_identity="owner-machine",
             action="destructive_operation",
             target_type="task-contract",
@@ -332,7 +332,7 @@ class LeaseTests(unittest.TestCase):
                 }
                 approval = create_approval(
                     key=key,
-                    principal="owner",
+                    principal="himanshu_jain",
                     machine_identity="owner-machine",
                     reason="Exercise a wrong approval binding",
                     now=datetime.now(timezone.utc),

@@ -131,7 +131,7 @@ class GateTests(unittest.TestCase):
             key = b"g" * 32
             approval = create_approval(
                 key=key,
-                principal="owner",
+                principal="himanshu_jain",
                 machine_identity="owner-machine",
                 action="phase_authorization",
                 target_type="phase_gate",
@@ -189,7 +189,7 @@ class GateTests(unittest.TestCase):
             key = b"g" * 32
             approval = create_approval(
                 key=key,
-                principal="owner",
+                principal="himanshu_jain",
                 machine_identity="owner-machine",
                 action="phase_authorization",
                 target_type="phase_gate",

@@ -265,6 +265,30 @@ class ApprovalTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "approval_weaker_method")
 
+    def test_unregistered_principal_is_rejected(self) -> None:
+        with self.assertRaises(ApprovalRejected) as raised:
+            _issue_record(
+                key=SYNTHETIC_FIXTURE_KEY,
+                principal="unregistered-principal",
+                machine_identity="machine",
+                action="schema_commitment",
+                target_type="schema",
+                target_id="SCHEMA-1",
+                target_hash="a" * 64,
+                scope="exact schema",
+                reason="Approve exact schema",
+                policy={"tiers": {"schema_commitment": ["local_authentication"]}},
+                principal_policy={
+                    "principals": [
+                        {
+                            "principal_id": "himanshu_jain",
+                            "authentication_methods": ["local_authentication"],
+                        }
+                    ]
+                },
+            )
+        self.assertEqual(raised.exception.code, "approval_principal_unknown")
+
     def test_malformed_helper_output_is_not_authentication(self) -> None:
         def runner(command: list[str], **kwargs):
             return subprocess.CompletedProcess(command, 0, "authenticated\nextra\n", "")

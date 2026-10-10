@@ -92,6 +92,15 @@ invariant changes, governance proposal application, G0 closure, or any other pol
 tier/principal/scope/fingerprint change. The applied result commit is recorded by the
 coordinating integrator after independent verification.
 
+## Bounded verification repair — 2026-10-10
+
+The first candidate's eight full-suite errors shared one fixture-setup cause: gate and lease
+tests created synthetic approvals for unregistered principal `owner`. The P0 protected-test
+registry is empty, so the isolated setup was corrected to use the configured
+`himanshu_jain` principal; production principal, method, action-tier, expiry, and MAC checks
+were not relaxed. A focused unknown-principal rejection test was added. The affected tests
+then passed and the full control-plane suite completed 195/195.
+
 ## Verification note
 
 The Task 18 plan names `agentctl plan validate` and `agentctl docs generate gates`, but those
