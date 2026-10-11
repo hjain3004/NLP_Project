@@ -130,8 +130,9 @@ class UnsupportedKeywordTests(unittest.TestCase):
         with self.assertRaises(UnsupportedKeyword):
             validate({}, {"type": "object", "multipleOf": 2})
 
-    def test_supported_set_is_exactly_thirteen(self) -> None:
-        self.assertEqual(len(SUPPORTED_KEYWORDS), 13)
+    def test_supported_set_includes_declared_conditionals(self) -> None:
+        self.assertEqual(len(SUPPORTED_KEYWORDS), 17)
+        self.assertLessEqual({"allOf", "if", "then", "else"}, SUPPORTED_KEYWORDS)
 
 
 class PlanSnippetTests(unittest.TestCase):

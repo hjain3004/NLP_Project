@@ -62,14 +62,25 @@ class ApprovalTarget:
     target_hash: str
 
 
-# Governance proposals are intentionally resolved through one fixed path.  The
-# approval record cannot select a filename, directory, or alternate proposal.
+# Governance proposals are intentionally resolved through an explicit fixed
+# identifier-to-path table. The approval record cannot select a filename,
+# directory, or alternate proposal.
 _APPROVAL_TARGETS = {
-    "governance-change-set": (
-        "agent-system/work/P0/proposals/governance-change-set.json",
-        "governance-change-set-proposal",
-        "proposal_id",
-    ),
+    "governance-change-set": {
+        # Keep the original mapping so an already-committed v1 application can
+        # be replayed against its historical target without consulting an
+        # arbitrary caller-supplied path.
+        "P0-GOVERNANCE-CHANGESET-2026-10-07": (
+            "agent-system/work/P0/proposals/governance-change-set.json",
+            "governance-change-set-proposal",
+            "proposal_id",
+        ),
+        "P0-GOVERNANCE-CHANGESET-2026-10-11-V2": (
+            "agent-system/work/P0/proposals/governance-change-set-v2.json",
+            "governance-change-set-proposal",
+            "proposal_id",
+        ),
+    },
 }
 
 
@@ -78,6 +89,7 @@ def resolve_approval_target(
     target_id: str,
     *,
     repository_root: str | os.PathLike[str] | None = None,
+    validate_operations: bool = True,
 ) -> ApprovalTarget:
     """Resolve a supported approval target using an explicit trusted mapping.
 
@@ -86,12 +98,20 @@ def resolve_approval_target(
     status, discriminator, identifier, declared operation hashes, and the
     canonical payload hash are all checked before returning the target.
     """
-    spec = _APPROVAL_TARGETS.get(target_type)
-    if spec is None:
+    target_specs = _APPROVAL_TARGETS.get(target_type)
+    if target_specs is None:
         raise ApprovalRejected(
             "approval_unknown_target",
             "approval target type is not registered",
             target_type=target_type,
+        )
+    spec = target_specs.get(target_id)
+    if spec is None:
+        raise ApprovalRejected(
+            "approval_wrong_target",
+            "approval target identifier is not registered",
+            target_type=target_type,
+            target_id=target_id,
         )
     root = (Path(repository_root) if repository_root is not None else load_config().repo_root).resolve()
     relative_path, expected_artifact_type, id_field = spec
@@ -147,9 +167,10 @@ def resolve_approval_target(
     try:
         # Import lazily to keep the approval primitive independent of proposal
         # command wiring while still enforcing every declared before-hash.
-        from .proposals import validate_governance_change_set
+        if validate_operations:
+            from .proposals import validate_governance_change_set
 
-        validate_governance_change_set(path, repository_root=root)
+            validate_governance_change_set(path, repository_root=root)
     except (OSError, ValueError) as exc:
         raise ApprovalRejected(
             "approval_target_stale",

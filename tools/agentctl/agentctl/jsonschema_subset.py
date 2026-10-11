@@ -7,6 +7,7 @@ ADR-0003 enumerates and nothing more:
     type   required   properties   additionalProperties   items
     enum   const      pattern      minItems               minLength
     maximum            format: date-time                  oneOf
+    allOf              if/then/else
     $defs / $ref within a single file
 
 Every rejection is a ``(json_pointer, keyword, message)`` tuple — machine-
@@ -38,6 +39,7 @@ Error = tuple[str, str, str]
 #: Keywords this validator actively enforces (ADR-0003).
 SUPPORTED_KEYWORDS: frozenset[str] = frozenset(
     {
+        "allOf",
         "type",
         "required",
         "properties",
@@ -51,6 +53,9 @@ SUPPORTED_KEYWORDS: frozenset[str] = frozenset(
         "maximum",
         "format",
         "oneOf",
+        "if",
+        "then",
+        "else",
     }
 )
 
@@ -153,6 +158,24 @@ def _validate(
             errors.append(
                 (pointer, "oneOf", f"matched {matched} of {len(schema['oneOf'])} branches, expected exactly 1")
             )
+
+    if "allOf" in schema:
+        branches = schema["allOf"]
+        if not isinstance(branches, list):
+            raise UnsupportedKeyword(
+                "allOf must be an array of subschemas",
+                json_pointer=pointer,
+                keyword="allOf",
+            )
+        for branch in branches:
+            _validate(instance, branch, pointer, root, ref_chain, errors)
+
+    if "if" in schema:
+        probe: list[Error] = []
+        _validate(instance, schema["if"], pointer, root, ref_chain, probe)
+        branch = schema.get("then") if not probe else schema.get("else")
+        if branch is not None:
+            _validate(instance, branch, pointer, root, ref_chain, errors)
 
     if isinstance(instance, str):
         if "minLength" in schema and len(instance) < schema["minLength"]:

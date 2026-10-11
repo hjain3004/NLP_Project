@@ -1,0 +1,131 @@
+{
+  "artifact_type": "governance-change-set-proposal",
+  "proposal_id": "P0-GOVERNANCE-CHANGESET-2026-10-11-V2",
+  "schema_version": 2,
+  "status": "proposed",
+  "authoritative": false,
+  "base_commit": "ebab3cd31aa644aa95c063c736028375aff656ba",
+  "hash_command": "PYTHONPATH=tools/agentctl python3 -m agentctl hash --json --digest-only agent-system/work/P0/proposals/governance-change-set-v2.json",
+  "operations": [
+    {
+      "path": "agent-system/schemas/task-contract.schema.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "6f6447b8819b6c48ffc927c45700a29e1958952ebf9431e29202aba434f4f3ec",
+      "after_canonical_json_sha256": "d0de8a8739bb4ca5d2631e8009b6c7f7cd17e379539836d31d46215abb33a13d",
+      "patches": [
+        {"op": "append", "pointer": "/properties/routing/required", "value": "required_skills"},
+        {"op": "append", "pointer": "/properties/routing/required", "value": "preferred_worker"},
+        {"op": "append", "pointer": "/properties/routing/required", "value": "required_provider_diversity"}
+      ],
+      "exact_change": "Make routing.required_skills, routing.preferred_worker, and routing.required_provider_diversity mandatory task-contract fields."
+    },
+    {
+      "path": "agent-system/schemas/implementation-manifest.schema.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "8a849e370a72f7a18d2a09ff41ba4a5f0b44d310c616baf9b325295b668832aa",
+      "after_canonical_json_sha256": "7cd00d80f967e714067a2bf0f849ddcfb5ec9f88666cba7ef58c24cece267d3e",
+      "patches": [
+        {"op": "append", "pointer": "/properties/commands_executed/items/required", "value": "log_ref"}
+      ],
+      "exact_change": "Require every executed command to point at an immutable log reference."
+    },
+    {
+      "path": "agent-system/schemas/work-package.schema.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "317cf3aa88846f3a7edd92fcf0b27f81f6bfaf2651e137714387905c3712abad",
+      "after_canonical_json_sha256": "94aa3c62cc7c71864c7fecd902207f369de53966181a40d9ffde043d4cc6129d",
+      "patches": [
+        {"op": "set", "pointer": "/allOf", "value": [{"if": {"required": ["status"], "properties": {"status": {"enum": ["unassigned", "canceled"]}}}, "then": {"required": ["reason"]}}]}
+      ],
+      "exact_change": "Require work-package.reason only when status is unassigned or canceled."
+    },
+    {
+      "path": "agent-system/schemas/human-approval.schema.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "7882ccb56c95116a52d85fcc51ff40d81a41680234a62a5f67c10bfeef460b05",
+      "after_canonical_json_sha256": "4811766bac62fb39e0f77c29348348bc07548cb29f269c4eeea62550398f94c9",
+      "patches": [
+        {"op": "append", "pointer": "/properties/authorized_action/enum", "value": "consequential_adr_acceptance"}
+      ],
+      "exact_change": "Add consequential_adr_acceptance as an explicit typed approval action."
+    },
+    {
+      "path": "agent-system/policies/approval-policy.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "246833afa63356f23a48a59ea7228ef425c447d209bd2dc0b56c34f078909d97",
+      "after_canonical_json_sha256": "81bce255c7f7ac35eb3108a7bfb44b2ee22be1aef312b70124a55f6c9c42e847",
+      "patches": [
+        {"op": "set", "pointer": "/tiers/consequential_adr_acceptance", "value": ["keychain_backed", "local_authentication"]}
+      ],
+      "exact_change": "Bind consequential ADR acceptance to the existing strong authentication alternatives with fallback disabled.",
+      "consumer": "approval verification must reject weaker methods; task-contract validation must consume consequential_adr_acceptance as a required human approval action."
+    },
+    {
+      "path": "agent-system/templates/task-contract.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "f48255a7cfe0120c1f8ad63538b93ab27cb13b71a4296a597f2ee95608c89752",
+      "after_canonical_json_sha256": "22712ad1e86b3fee652c55753602204a2e31a4d5d74c38f3c3426b0a855aae63",
+      "patches": [
+        {"op": "set", "pointer": "/routing/required_skills", "value": ["REPLACE:required skill"]},
+        {"op": "set", "pointer": "/routing/preferred_worker", "value": "REPLACE:preferred worker"},
+        {"op": "set", "pointer": "/routing/required_provider_diversity", "value": "REPLACE:true or false"}
+      ],
+      "exact_change": "Expose the three newly required routing fields in the task template."
+    },
+    {
+      "path": "agent-system/templates/implementation-manifest.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "7237babe60b279595fe70280ba7e5a97e68ab836a513113c38b21de88763ed3a",
+      "after_canonical_json_sha256": "aad85104fb2dc34b2e6913292c6dff15131430fb70d52702edc17a63961d4384",
+      "patches": [
+        {"op": "set", "pointer": "/commands_executed/0/log_ref", "value": "REPLACE:relative immutable log reference"}
+      ],
+      "exact_change": "Expose log_ref in the implementation-manifest command template."
+    },
+    {
+      "path": "agent-system/templates/work-package.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "4bf8addcadfd8326880a2b75120df9b8f584ac9d2e631a412fa8422b840383d5",
+      "after_canonical_json_sha256": "7a5ba88401520ea68d0801af6c779a67fe74f09d26ba14ede5bf513055f1df24",
+      "patches": [
+        {"op": "set", "pointer": "/reason", "value": "REPLACE:required when status is unassigned or canceled"}
+      ],
+      "exact_change": "Expose the conditional semantic reason in the work-package template."
+    },
+    {
+      "path": "agent-system/templates/human-approval.json",
+      "encoding": "canonical_json_utf8",
+      "before_bytes_sha256": "53f21af228db2b6f86f448036b0ba2b8e921e9e9dd263a7c229812258e197099",
+      "after_canonical_json_sha256": "c26b43bd2b72e6a7b10f23e27821484b788cd0677745beccfc88c211b4760af2",
+      "patches": [
+        {"op": "set", "pointer": "/authorized_action", "value": "REPLACE:allowed authorized action, including consequential_adr_acceptance"}
+      ],
+      "exact_change": "Document the new typed approval action in the human-approval template."
+    },
+    {
+      "path": "tools/agentctl/agentctl/validate.py",
+      "encoding": "utf8_patch",
+      "before_bytes_sha256": "a05f285d62632c2e981ab7ff8f8b70e94e648b68c7bf35e7a9c3ce7e4f3edae6",
+      "after_bytes_sha256": "014b58f72e28b69588e806d9e8749ca0db96cc9940afaa89ae3426c623031a54",
+      "replace": "    if permissions[\"destructive_commands\"]:\n        approval_requirements.append(\"destructive_operation\")\n",
+      "with": "    if permissions[\"destructive_commands\"]:\n        approval_requirements.append(\"destructive_operation\")\n    if permissions.get(\"required_human_approval_action\") == \"consequential_adr_acceptance\":\n        approval_requirements.append(\"consequential_adr_acceptance\")\n",
+      "exact_change": "Make task-contract validation consume consequential_adr_acceptance as a required human approval action.",
+      "consumer": "validate.py"
+    }
+  ],
+  "required_followups": [
+    {"path": "agent-system/examples/valid/02-task-contract.json", "change": "Add the three required routing fields and recompute contract_hash."},
+    {"path": "agent-system/examples/invalid/static/01-task-contract-missing-required-field.json", "change": "Add a must-fail omission fixture for each new required routing field."},
+    {"path": "agent-system/examples/valid/08-human-approval.json", "change": "Add a synthetic consequential_adr_acceptance approval sealed with the fixture key."},
+    {"path": "tools/agentctl/tests/test_validate_valid.py", "change": "Assert new required task fields validate."},
+    {"path": "tools/agentctl/tests/test_validate_invalid.py", "change": "Assert omissions and missing conditional reason fail deterministically."},
+    {"path": "tools/agentctl/tests/test_approval.py", "change": "Assert consequential_adr_acceptance requires local_authentication or keychain_backed."},
+    {"path": "docs/decisions/README.md", "change": "Document that consequential ADR acceptance requires a typed approval artifact."}
+  ],
+  "validation_scope": "Proposal validation compares each current canonical file byte hash, applies only the declared in-memory replacement, and never loads proposal content as live schema or policy.",
+  "consumer_requirements": [
+    "approval verification rejects a consequential ADR approval with a weaker or unimplemented method",
+    "task-contract validation requires a bound consequential_adr_acceptance approval reference when requested",
+    "docs verification rejects an accepted consequential ADR without a typed approval artifact reference"
+  ]
+}

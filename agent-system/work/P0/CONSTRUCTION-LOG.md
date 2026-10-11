@@ -101,6 +101,19 @@ registry is empty, so the isolated setup was corrected to use the configured
 were not relaxed. A focused unknown-principal rejection test was added. The affected tests
 then passed and the full control-plane suite completed 195/195.
 
+## Versioned governance proposal correction session — 2026-10-11
+
+This bounded preparation corrected the non-authoritative governance payload's nested
+schema pointers, preserved the original v1 proposal and expired approval as historical
+evidence, and added fixed v1/v2 target resolution plus the schema-subset support needed
+to exercise the declared work-package conditional. It ran only synthetic overlay checks;
+it did not issue or consume approval, read a seal key, apply canonical targets, or claim a
+phase gate.
+
+| Session | Provider | Model | Date | Verification |
+|---|---|---|---|---|
+| `/root/governance_payload_v2_luna` | OpenAI Codex desktop | GPT-5.6-Luna | 2026-10-11 | v2 operation manifest validation, synthetic after-overlay fixture checks, v2 CLI preflight, 211-test control-plane suite |
+
 ## Verification note
 
 The Task 18 plan names `agentctl plan validate` and `agentctl docs generate gates`, but those

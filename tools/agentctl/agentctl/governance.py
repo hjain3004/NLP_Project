@@ -37,6 +37,12 @@ class GovernanceApplyError(InvalidArtifact):
 
 
 _PROPOSAL_RELATIVE = Path("agent-system/work/P0/proposals/governance-change-set.json")
+_PROPOSAL_RELATIVES = frozenset(
+    {
+        _PROPOSAL_RELATIVE,
+        Path("agent-system/work/P0/proposals/governance-change-set-v2.json"),
+    }
+)
 _APPROVAL_DIRECTORY = Path("agent-system/work/P0/approvals")
 _JOURNAL_RELATIVE = Path("agent-system/runtime/governance-apply-journal.json")
 _EXPECTED_SCOPE = "Apply only the exact governance-change-set proposal operations"
@@ -125,6 +131,26 @@ def _safe_path(root: Path, supplied: str | Path, *, required_relative: Path | No
     if not resolved.is_file() or resolved.is_symlink():
         raise GovernanceApplyError("artifact path is not a regular file", path=str(relative))
     return resolved
+
+
+def _trusted_proposal_path(root: Path, supplied: str | Path) -> Path:
+    """Resolve only one of the repository-owned versioned proposal paths."""
+    resolved = _safe_path(root, supplied)
+    relative = resolved.relative_to(root)
+    if relative not in _PROPOSAL_RELATIVES:
+        raise GovernanceApplyError("proposal path is not a registered fixed target", path=str(relative))
+    return resolved
+
+
+def _assert_registered_proposal_path(root: Path, proposal_path: Path, proposal_id: str) -> None:
+    target = resolve_approval_target(
+        _EXPECTED_TYPE,
+        proposal_id,
+        repository_root=root,
+        validate_operations=False,
+    )
+    if target.path != proposal_path:
+        raise GovernanceApplyError("proposal path does not match its registered target", path=str(proposal_path.relative_to(root)))
 
 
 def _strict_patch(document: Any, patch: Mapping[str, Any], *, path: str) -> Any:
@@ -368,7 +394,7 @@ class GovernanceApplier:
         self.journal_path = self.root / _JOURNAL_RELATIVE
 
     def _load_plan(self, proposal_source: str | Path, approval_source: str | Path) -> GovernancePlan:
-        proposal_path = _safe_path(self.root, proposal_source, required_relative=_PROPOSAL_RELATIVE)
+        proposal_path = _trusted_proposal_path(self.root, proposal_source)
         approval_path = _safe_path(self.root, approval_source)
         try:
             approval_path.relative_to(self.root / _APPROVAL_DIRECTORY)
@@ -376,6 +402,7 @@ class GovernanceApplier:
             raise GovernanceApplyError("approval path is outside the fixed approval directory") from exc
         proposal = _read_json(proposal_path)
         proposal_id, _manifest = _proposal_manifest(proposal)
+        _assert_registered_proposal_path(self.root, proposal_path, proposal_id)
         operations = proposal["operations"]
         replacements = tuple(_replacement(self.root, operation) for operation in operations if isinstance(operation, Mapping))
         proposal_hash = sha256_of_json(proposal)
@@ -440,9 +467,20 @@ class GovernanceApplier:
         """Validate all journal claims and filesystem artifacts before mutation."""
         if journal.get("schema_version") != 1 or journal.get("state") not in {"preparing", "prepared", "applying", "applied"}:
             raise GovernanceApplyError("recovery journal state is malformed")
-        proposal_path = _safe_path(self.root, _PROPOSAL_RELATIVE, required_relative=_PROPOSAL_RELATIVE)
+        proposal_id_in_journal = journal.get("proposal_id")
+        if not isinstance(proposal_id_in_journal, str) or not proposal_id_in_journal:
+            raise GovernanceApplyError("recovery journal proposal identity is malformed")
+        proposal_target = resolve_approval_target(
+            _EXPECTED_TYPE,
+            proposal_id_in_journal,
+            repository_root=self.root,
+            validate_operations=False,
+        )
+        proposal_path = proposal_target.path
         proposal = _read_json(proposal_path)
         proposal_id, manifest = _proposal_manifest(proposal)
+        if proposal_id != proposal_id_in_journal:
+            raise GovernanceApplyError("recovery journal proposal binding is invalid")
         proposal_hash = sha256_of_json(proposal)
         if journal.get("proposal_id") != proposal_id or journal.get("proposal_hash") != proposal_hash:
             raise GovernanceApplyError("recovery journal proposal binding is invalid")
@@ -601,7 +639,7 @@ class GovernanceApplier:
         self, proposal_source: str | Path, approval_source: str | Path, recovery: Mapping[str, Any]
     ) -> dict[str, Any] | None:
         """Return a read-only result only for an exact committed historical run."""
-        proposal_path = _safe_path(self.root, proposal_source, required_relative=_PROPOSAL_RELATIVE)
+        proposal_path = _trusted_proposal_path(self.root, proposal_source)
         approval_path = _safe_path(self.root, approval_source)
         try:
             approval_relative = approval_path.relative_to(self.root / _APPROVAL_DIRECTORY)
@@ -609,6 +647,7 @@ class GovernanceApplier:
             raise GovernanceApplyError("approval path is outside the fixed approval directory") from exc
         proposal = _read_json(proposal_path)
         proposal_id, manifest = _proposal_manifest(proposal)
+        _assert_registered_proposal_path(self.root, proposal_path, proposal_id)
         proposal_hash = sha256_of_json(proposal)
         approval = _read_json(approval_path)
         approval_id = approval.get("approval_id")
