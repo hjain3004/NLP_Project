@@ -7,8 +7,11 @@ import datetime as dt
 import getpass
 import hashlib
 import json
+import os
 import re
+import shlex
 import sys
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 
@@ -42,7 +45,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--reason", required=True)
     parser.add_argument("--scope")
     parser.add_argument("--auth-method")
+    parser.add_argument("--approval-id")
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--recover-output", action="store_true")
     parser.add_argument("--out")
     return parser
 
@@ -73,6 +78,7 @@ def _issue_record(
     authentication_adapter: LocalAuthenticationAdapter | None = None,
     seal_key_loader: Callable[[], bytes] | None = None,
     principal_policy: dict | None = None,
+    approval_id: str | None = None,
 ) -> dict:
     """Authenticate and seal one policy-selected immutable approval binding."""
     method = authentication_method_for_action(action, policy)
@@ -105,6 +111,7 @@ def _issue_record(
         scope=scope,
         reason=reason,
         authentication_method=method,
+        approval_id=approval_id,
     )
     binding = (
         provisional["approval_id"],
@@ -192,6 +199,22 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
     scope = args.scope or args.reason
     if not scope.strip() or any(character in scope for character in "\r\n\x00"):
         raise ApprovalRejected("approval_input_invalid", "scope is malformed")
+    approval_id = None
+    if args.approval_id is not None:
+        try:
+            approval_id = str(uuid.UUID(args.approval_id))
+        except (ValueError, AttributeError) as exc:
+            raise ApprovalRejected("approval_input_invalid", "approval_id must be a lowercase UUID") from exc
+        if approval_id != args.approval_id:
+            raise ApprovalRejected("approval_input_invalid", "approval_id must be a lowercase UUID")
+    if args.recover_output and approval_id is None:
+        raise ApprovalRejected("approval_input_invalid", "recovery requires approval_id")
+    if args.recover_output and args.auth_method is not None:
+        raise ApprovalRejected(
+            "approval_input_invalid", "authentication method is not valid for recovery"
+        )
+    if args.recover_output and not args.out:
+        raise ApprovalRejected("approval_input_invalid", "recovery requires an output path")
     method = authentication_method_for_action(args.action, policy)
     if args.auth_method is not None and args.auth_method != method:
         raise ApprovalRejected(
@@ -210,15 +233,85 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
                 "approval_wrong_target_hash", "governance proposal hash is stale"
             )
     if args.out:
-        destination = Path(args.out).expanduser().resolve()
+        if approval_id is None:
+            _legacy_destination(root, args.out)
+        else:
+            _contained_destination(root, args.out)
+    result = {"method": method, "scope": scope}
+    if approval_id is not None:
+        result["approval_id"] = approval_id
+    return result
+
+
+def _contained_destination(root: Path, value: str) -> Path:
+    """Return a lexical contained destination without following its final link."""
+    candidate = Path(value).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    destination = candidate.absolute()
+    try:
+        destination.relative_to(root)
+        destination.parent.resolve(strict=False).relative_to(root.resolve())
+    except ValueError as exc:
+        raise ApprovalRejected(
+            "approval_output_outside_repository",
+            "approval artifact output must be in the repository",
+        ) from exc
+    if destination.is_symlink():
+        raise ApprovalRejected("approval_output_invalid", "approval output cannot be a symlink")
+    return destination
+
+
+def _legacy_destination(root: Path, value: str) -> Path:
+    """Resolve a no-ID output exactly as the legacy command did."""
+    destination = Path(value).expanduser().resolve()
+    try:
+        destination.relative_to(root)
+    except ValueError as exc:
+        raise ApprovalRejected(
+            "approval_output_outside_repository",
+            "approval artifact output must be in the repository",
+        ) from exc
+    return destination
+
+
+def _write_exclusive_json(destination: Path, record: dict) -> None:
+    """Create one approval mirror without following or replacing an output path."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(destination, flags, 0o600)
+    created = os.fstat(descriptor)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True, indent=2) + "\n")
+    except BaseException:
+        # Only remove the file opened by this call.  An exclusive open proves
+        # that it did not replace a pre-existing output; inode comparison keeps
+        # ordinary cleanup from unlinking a subsequently substituted path.
         try:
-            destination.relative_to(root)
-        except ValueError as exc:
-            raise ApprovalRejected(
-                "approval_output_outside_repository",
-                "approval artifact output must be in the repository",
-            ) from exc
-    return {"method": method, "scope": scope}
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            current = destination.stat(follow_symlinks=False)
+            if (current.st_dev, current.st_ino) == (created.st_dev, created.st_ino):
+                destination.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _recovery_command(
+    args: argparse.Namespace, approval_id: str, scope: str, destination: Path
+) -> str:
+    """Render a safe, repeatable recovery command without the original reason."""
+    command = [
+        "agentctl", "approve", args.action, "--target-type", args.target_type,
+        "--target-id", args.target_id, "--target-hash", args.target_hash,
+        "--scope", scope, "--reason", "recovery", "--approval-id", approval_id,
+        "--recover-output", "--out", str(destination),
+    ]
+    return shlex.join(command)
 
 
 def _load_local_auth_seal_key(config, principal: dict) -> bytes:
@@ -246,6 +339,26 @@ def run(argv: list[str]) -> int:
     validated = _validate_inputs(args, config.repo_root, policy)
     if args.preflight:
         print(json.dumps({"status": "ok", **validated}, sort_keys=True))
+        return 0
+    if args.recover_output:
+        destination = _contained_destination(config.repo_root, args.out)
+        manager = ApprovalManager(EventStore())
+        record = dict(manager.verify_registered({
+            "approval_id": validated["approval_id"],
+            "expected_action": args.action,
+            "expected_target_type": args.target_type,
+            "expected_target_id": args.target_id,
+            "expected_target_hash": args.target_hash,
+            "expected_scope": validated["scope"],
+        }))
+        if record.get("approval_id") != validated["approval_id"]:
+            raise ApprovalRejected("approval_unsigned", "registered approval identifier does not match")
+        _write_exclusive_json(destination, record)
+        print(json.dumps({
+            "status": "recovered_registered_approval",
+            "approval_id": validated["approval_id"],
+            "output": destination.relative_to(config.repo_root).as_posix(),
+        }, sort_keys=True))
         return 0
     if not sys.stdin.isatty():
         raise ApprovalRejected(
@@ -285,6 +398,7 @@ def run(argv: list[str]) -> int:
             policy=policy,
             requested_authentication_method=args.auth_method,
             principal_policy=principal_policy,
+            approval_id=validated.get("approval_id"),
         )
         key_for_registration = loaded_key[0]
     else:
@@ -323,21 +437,42 @@ def run(argv: list[str]) -> int:
             policy=policy,
             requested_authentication_method=args.auth_method,
             principal_policy=principal_policy,
+            approval_id=validated.get("approval_id"),
         )
         key_for_registration = key
-    destination = Path(args.out).expanduser().resolve() if args.out else _output_path(
-        config.repo_root, args.action, args.target_id
-    )
-    try:
-        destination.relative_to(config.repo_root)
-    except ValueError as exc:
-        raise ApprovalRejected(
-            "approval_output_outside_repository", "approval artifact output must be in the repository"
-        ) from exc
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    ApprovalManager(EventStore(), key=key_for_registration).register(
-        record, path=destination.relative_to(config.repo_root).as_posix()
-    )
+    if validated.get("approval_id") is None:
+        # No-ID invocation remains the legacy command: its parent creation,
+        # overwrite behavior, and CWD-relative explicit outputs are preserved.
+        destination = _legacy_destination(
+            config.repo_root,
+            args.out or str(_output_path(config.repo_root, args.action, args.target_id)),
+        )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+        ApprovalManager(EventStore(), key=key_for_registration).register(
+            record, path=destination.relative_to(config.repo_root).as_posix()
+        )
+    else:
+        destination = _contained_destination(
+            config.repo_root,
+            args.out or str(_output_path(config.repo_root, args.action, args.target_id)),
+        )
+        ApprovalManager(EventStore(), key=key_for_registration).register(
+            record, path=destination.relative_to(config.repo_root).as_posix()
+        )
+        try:
+            _write_exclusive_json(destination, record)
+        except OSError:
+            print(json.dumps({
+                "status": "approval_issued_output_failed",
+                "approval_id": record["approval_id"],
+                "target_hash": record["target_hash"],
+                "recovery_command": _recovery_command(
+                    args, record["approval_id"], validated["scope"], destination
+                ),
+            }, sort_keys=True))
+            return 1
     print(destination.relative_to(config.repo_root).as_posix())
     return 0

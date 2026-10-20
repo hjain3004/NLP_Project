@@ -497,24 +497,73 @@ class ApprovalManager:
         )
         approval_id = str(approval["approval_id"])
         payload = json.dumps(dict(approval), sort_keys=True, separators=(",", ":"))
+        payload_hash = sha256_of_json(approval)
+        legacy_idempotency_key = f"approval-register:{approval_id}"
         event = make_event(
             event_type="human_approval_registered",
             reason_code="approval_registered",
             actor_role="human_owner",
-            artifact_refs=[approval_id],
+            artifact_refs=[approval_id, f"approval-payload:{payload_hash}"],
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
             connection.execute(
                 "INSERT INTO artifacts(artifact_id, artifact_type, content_hash, path, "
                 "integrable, payload_json) VALUES (?, 'human-approval', ?, ?, 1, ?)",
-                (approval_id, sha256_of_json(approval), path, payload),
+                (approval_id, payload_hash, path, payload),
             )
             return {"approval_id": approval_id, "state": "registered"}
 
-        return dict(
-            self.store.execute(f"approval-register:{approval_id}", event, mutation)
-        )
+        try:
+            return dict(
+                self.store.execute(
+                    f"approval-register:{approval_id}:{payload_hash}", event, mutation
+                )
+            )
+        except sqlite3.IntegrityError as exc:
+            rows = self.store.rows(
+                "SELECT payload_json FROM artifacts WHERE artifact_id = ? "
+                "AND artifact_type = 'human-approval'",
+                (approval_id,),
+            )
+            existing: object = None
+            if rows:
+                try:
+                    existing = json.loads(rows[0]["payload_json"])
+                except (TypeError, json.JSONDecodeError):
+                    existing = None
+            # Legacy registrations use an ID-only idempotency key.  Consumption
+            # and revocation update fields deliberately excluded from the MAC,
+            # so compare only the seal-covered projection when deciding whether
+            # a replay is the same authority.  Do not rewrite the legacy row or
+            # event while recovering its original result.
+            if (
+                rows
+                and (
+                    not isinstance(existing, Mapping)
+                    or _seal_payload(existing) != _seal_payload(approval)
+                )
+            ):
+                raise ApprovalRejected(
+                    "approval_id_collision",
+                    "approval identifier is already bound to another sealed payload",
+                    approval_id=approval_id,
+                ) from exc
+            if rows:
+                legacy_events = self.store.rows(
+                    "SELECT result_json FROM events WHERE idempotency_key = ? "
+                    "AND event_type = 'human_approval_registered' "
+                    "AND reason_code = 'approval_registered'",
+                    (legacy_idempotency_key,),
+                )
+                if legacy_events:
+                    result = json.loads(legacy_events[0]["result_json"])
+                    if (
+                        result.get("approval_id") == approval_id
+                        and result.get("state") == "registered"
+                    ):
+                        return result
+            raise
 
     def verify_registered(
         self, request: Mapping[str, str], *, now: dt.datetime | None = None
