@@ -24,6 +24,94 @@ def _repo_root() -> pathlib.Path:
     )
 
 
+def _build_g0_replay_fixture(
+    temporary_root: pathlib.Path,
+    *,
+    criterion_command: str | None = None,
+) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, dict, EventStore, GateEvaluator]:
+    root = temporary_root / "repository"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    for relative in (
+        "agent-system/policies/approval-policy.json",
+        "agent-system/policies/approval-principals.json",
+        "agent-system/schemas/human-approval.schema.json",
+        "agent-system/schemas/event.schema.json",
+    ):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(_repo_root() / relative, target)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "test@example.invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "Gate Test"], check=True
+    )
+    source = root / "agent-system/work/P0/gates/G0-criteria.json"
+    approval_path = root / "agent-system/work/P0/approvals/G0-phase-approval.json"
+    approval_ref = approval_path.relative_to(root).as_posix()
+    source.parent.mkdir(parents=True, exist_ok=True)
+    approval_path.parent.mkdir(parents=True, exist_ok=True)
+    criteria = {
+        "artifact_type": "phase-gate",
+        "gate_id": "G0",
+        "phase_id": "P0",
+        "criteria": [],
+        "human_approval_refs": [approval_ref],
+    }
+    if criterion_command is not None:
+        criteria["criteria"].append(
+            {
+                "criterion_id": "FRESH-CHECK",
+                "statement": "A deterministic criterion is recomputed at the new HEAD",
+                "evidence_type": "deterministic_check",
+                "evidence_command": criterion_command,
+                "expected_exit_code": 0,
+            }
+        )
+    criteria["criteria"].append(
+        {
+            "criterion_id": "APPROVAL-1",
+            "statement": "A human authorizes these exact criteria",
+            "evidence_type": "human_approval",
+            "evidence_ref": approval_ref,
+        }
+    )
+    source.write_text(json.dumps(criteria), encoding="utf-8")
+    key = b"g" * 32
+    approval = create_approval(
+        key=key,
+        principal="himanshu_jain",
+        machine_identity="owner-machine",
+        action="phase_authorization",
+        target_type="phase_gate",
+        target_id="G0",
+        target_hash=sha256_of_json(criteria),
+        scope="Close G0 against its immutable criteria",
+        reason="Exercise post-commit gate replay",
+    )
+    approval_path.write_text(json.dumps(approval), encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "agent-system"], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-qm", "initial gate evidence"], check=True
+    )
+    store = EventStore(temporary_root / "runtime.sqlite3", repository_root=root)
+    ApprovalManager(store, key=key).register(approval, path=approval_ref)
+    evaluator = GateEvaluator(root, approval_key=key, store=store)
+    result = evaluator.evaluate(source)
+    if result["gate_result"] != "passed":
+        raise AssertionError("synthetic initial G0 evaluation did not pass")
+    result_path = root / "agent-system/work/P0/gates/G0-result.json"
+    original_result_bytes = result_path.read_bytes()
+    subprocess.run(
+        ["git", "-C", str(root), "add", result_path.relative_to(root).as_posix()],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "close G0"], check=True)
+    return root, source, approval_path, approval, store, evaluator
+
+
 class GateTests(unittest.TestCase):
     root = _repo_root()
 
@@ -164,6 +252,218 @@ class GateTests(unittest.TestCase):
                 ),
                 1,
             )
+
+    def test_post_commit_closure_evidence_replay_does_not_reconsume_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = pathlib.Path(temporary)
+            root = temporary_root / "repository"
+            root.mkdir()
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            for relative in (
+                "agent-system/policies/approval-policy.json",
+                "agent-system/policies/approval-principals.json",
+                "agent-system/schemas/human-approval.schema.json",
+                "agent-system/schemas/event.schema.json",
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(self.root / relative, target)
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.email", "test@example.invalid"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.name", "Gate Test"],
+                check=True,
+            )
+            source = root / "agent-system/work/P0/gates/G0-criteria.json"
+            approval_path = root / "agent-system/work/P0/approvals/G0-phase-approval.json"
+            approval_ref = approval_path.relative_to(root).as_posix()
+            source.parent.mkdir(parents=True, exist_ok=True)
+            approval_path.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(
+                json.dumps(
+                    {
+                        **self._criteria(
+                            {
+                                "criterion_id": "APPROVAL-1",
+                                "statement": "A human authorizes these exact criteria",
+                                "evidence_type": "human_approval",
+                                "evidence_ref": approval_ref,
+                            }
+                        ),
+                        "gate_id": "G0",
+                        "human_approval_refs": [approval_ref],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            key = b"g" * 32
+            approval = create_approval(
+                key=key,
+                principal="himanshu_jain",
+                machine_identity="owner-machine",
+                action="phase_authorization",
+                target_type="phase_gate",
+                target_id="G0",
+                target_hash=sha256_of_json(json.loads(source.read_text())),
+                scope="Close G0 against its immutable criteria",
+                reason="Exercise post-commit gate replay",
+            )
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "add", "agent-system"], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "initial gate evidence"], check=True)
+
+            store = EventStore(temporary_root / "runtime.sqlite3", repository_root=root)
+            ApprovalManager(store, key=key).register(approval, path=approval_ref)
+            evaluator = GateEvaluator(root, approval_key=key, store=store)
+            first = evaluator.evaluate(source)
+            self.assertEqual(first["gate_result"], "passed")
+            original_consumed_at = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                    (approval["approval_id"],),
+                )[0]["payload_json"]
+            )["consumed_at"]
+            committed_result = root / "agent-system/work/P0/gates/G0-result.json"
+            original_result_bytes = committed_result.read_bytes()
+            subprocess.run(["git", "-C", str(root), "add", committed_result.relative_to(root).as_posix()], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "close G0"], check=True)
+
+            replay = evaluator.evaluate(source)
+            self.assertEqual(replay["gate_result"], "passed")
+            self.assertEqual(replay["evaluated_against_commit"], subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+            ).strip())
+            self.assertEqual(committed_result.read_bytes(), original_result_bytes)
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM events WHERE event_type = 'phase_gate_evaluated'"
+                ),
+                1,
+            )
+            self.assertEqual(
+                json.loads(
+                    store.rows(
+                        "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                        (approval["approval_id"],),
+                    )[0]["payload_json"]
+                )["consumed_at"],
+                original_consumed_at,
+            )
+
+    def test_post_commit_replay_rejects_invalid_replay_proofs(self) -> None:
+        scenarios = (
+            "non_closure_change",
+            "criteria_change",
+            "approval_identity_change",
+            "non_ancestor_prior_commit",
+            "prior_non_passed_result",
+            "fresh_criterion_failure",
+        )
+        for scenario in scenarios:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                command = (
+                    'test "$(git log -1 --format=%s)" != "close G0"'
+                    if scenario == "fresh_criterion_failure"
+                    else None
+                )
+                root, source, approval_path, approval, store, evaluator = (
+                    _build_g0_replay_fixture(pathlib.Path(temporary), criterion_command=command)
+                )
+                result_path = root / "agent-system/work/P0/gates/G0-result.json"
+                original_result_bytes = result_path.read_bytes()
+
+                if scenario == "non_closure_change":
+                    (root / "README.md").write_text("unrelated source change\n", encoding="utf-8")
+                    subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True)
+                    subprocess.run(["git", "-C", str(root), "commit", "-qm", "source change"], check=True)
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        evaluator.evaluate(source)
+                    self.assertEqual(raised.exception.code, "approval_replay_rejected")
+                elif scenario == "criteria_change":
+                    changed = json.loads(source.read_text(encoding="utf-8"))
+                    changed["criteria"][0]["statement"] = "Changed criteria"
+                    source.write_text(json.dumps(changed), encoding="utf-8")
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        evaluator.evaluate(source)
+                    self.assertEqual(raised.exception.code, "approval_replay_rejected")
+                elif scenario == "approval_identity_change":
+                    new_approval = create_approval(
+                        key=b"g" * 32,
+                        principal="himanshu_jain",
+                        machine_identity="owner-machine",
+                        action="phase_authorization",
+                        target_type="phase_gate",
+                        target_id="G0",
+                        target_hash=sha256_of_json(json.loads(source.read_text())),
+                        scope="Close G0 against its immutable criteria",
+                        reason="Exercise changed approval identity",
+                    )
+                    approval_path.write_text(json.dumps(new_approval), encoding="utf-8")
+                    ApprovalManager(store, key=b"g" * 32).register(
+                        new_approval,
+                        path=approval_path.relative_to(root).as_posix(),
+                    )
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        evaluator.evaluate(source)
+                    self.assertEqual(raised.exception.code, "approval_replay_rejected")
+                    stored = json.loads(
+                        store.rows(
+                            "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                            (new_approval["approval_id"],),
+                        )[0]["payload_json"]
+                    )
+                    self.assertIsNone(stored["consumed_at"])
+                elif scenario == "non_ancestor_prior_commit":
+                    tree = subprocess.check_output(
+                        ["git", "-C", str(root), "rev-parse", "HEAD^{tree}"], text=True
+                    ).strip()
+                    orphan_commit = subprocess.check_output(
+                        ["git", "-C", str(root), "commit-tree", tree, "-m", "unrelated history"],
+                        text=True,
+                    ).strip()
+                    row = store.rows(
+                        "SELECT artifact_id, payload_json FROM artifacts "
+                        "WHERE artifact_type = 'phase-gate'"
+                    )[0]
+                    payload = json.loads(row["payload_json"])
+                    payload["evaluated_against_commit"] = orphan_commit
+                    with store._connection() as connection:
+                        connection.execute(
+                            "UPDATE artifacts SET payload_json = ? WHERE artifact_id = ?",
+                            (json.dumps(payload), row["artifact_id"]),
+                        )
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        evaluator.evaluate(source)
+                    self.assertEqual(raised.exception.code, "approval_replay_rejected")
+                elif scenario == "prior_non_passed_result":
+                    row = store.rows(
+                        "SELECT artifact_id, payload_json FROM artifacts "
+                        "WHERE artifact_type = 'phase-gate'"
+                    )[0]
+                    payload = json.loads(row["payload_json"])
+                    payload["gate_result"] = "failed"
+                    with store._connection() as connection:
+                        connection.execute(
+                            "UPDATE artifacts SET payload_json = ? WHERE artifact_id = ?",
+                            (json.dumps(payload), row["artifact_id"]),
+                        )
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        evaluator.evaluate(source)
+                    self.assertEqual(raised.exception.code, "approval_consumed")
+                else:
+                    with self.assertRaises(ApprovalRejected) as raised:
+                        evaluator.evaluate(source)
+                    self.assertEqual(raised.exception.code, "approval_replay_rejected")
+
+                self.assertEqual(result_path.read_bytes(), original_result_bytes)
 
     def test_gate_approval_consumption_and_authoritative_result_are_one_transaction(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

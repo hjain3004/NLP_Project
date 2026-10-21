@@ -23,6 +23,18 @@ from .validate import validate_artifact
 
 __all__ = ["GateEvaluator", "ingest_audit"]
 
+_G0_CLOSURE_PATHS = frozenset(
+    {
+        "agent-system/work/P0/gates/G0-result.json",
+        "agent-system/work/P0/gates/G0-scope-statement.json",
+        *(f"agent-system/work/P0/gates/G0-audit-pass-{number}.json" for number in range(1, 6)),
+        "agent-system/work/P0/gates/G0-architecture-audit.json",
+        "agent-system/work/P0/approvals/G0-scope-approval.json",
+        "agent-system/work/P0/approvals/G0-phase-approval.json",
+        "docs/program/PHASE_GATES.md",
+    }
+)
+
 
 def _timestamp() -> str:
     return (
@@ -306,6 +318,219 @@ class GateEvaluator:
                 )
             return completed
 
+    def _is_g0_closure_replay(
+        self,
+        source: Mapping[str, Any],
+        *,
+        source_path: Path,
+        criteria_hash: str,
+        head: str,
+        approval_requests: tuple[Mapping[str, str], ...],
+    ) -> bool:
+        """Prove a post-commit G0 verification is the original closure replay."""
+        if self.store is None or source.get("gate_id") != "G0" or not approval_requests:
+            return False
+        candidates = self.store.rows(
+            "SELECT artifact_id, content_hash, payload_json FROM artifacts "
+            "WHERE artifact_type = 'phase-gate' AND integrable = 1 "
+            "AND artifact_id LIKE ? ORDER BY rowid DESC",
+            (f"gate:G0:{criteria_hash}:%",),
+        )
+        for candidate in candidates:
+            try:
+                prior = json.loads(candidate["payload_json"])
+                prior_commit = str(prior["evaluated_against_commit"])
+                if prior.get("gate_id") != "G0" or prior.get("gate_result") != "passed":
+                    continue
+                if candidate["artifact_id"] != f"gate:G0:{criteria_hash}:{prior_commit}":
+                    continue
+                if candidate["content_hash"] != sha256_of_json(prior):
+                    continue
+                if prior_commit == head:
+                    continue
+                prior_events = self.store.rows(
+                    "SELECT result_json FROM events WHERE idempotency_key = ? "
+                    "AND event_type = 'phase_gate_evaluated' AND reason_code = 'gate_passed'",
+                    (f"gate-evaluate:G0:{criteria_hash}:{prior_commit}",),
+                )
+                if len(prior_events) != 1:
+                    continue
+                event_result = json.loads(prior_events[0]["result_json"])
+                if event_result != {"gate_id": "G0", "gate_result": "passed"}:
+                    continue
+                ancestor = subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", prior_commit, head],
+                    cwd=self.root,
+                    capture_output=True,
+                    check=False,
+                )
+                if ancestor.returncode != 0:
+                    continue
+                changed = subprocess.run(
+                    ["git", "diff", "--name-only", "--no-renames", prior_commit, head],
+                    cwd=self.root,
+                    capture_output=True,
+                    check=True,
+                ).stdout.decode("utf-8").splitlines()
+                if not changed or any(path not in _G0_CLOSURE_PATHS for path in changed):
+                    continue
+                worktree = subprocess.run(
+                    ["git", "status", "--porcelain", "--untracked-files=all"],
+                    cwd=self.root,
+                    capture_output=True,
+                    check=True,
+                )
+                if worktree.stdout:
+                    continue
+
+                refs = list(source.get("human_approval_refs", []))
+                if prior.get("human_approval_refs") != refs:
+                    continue
+                prior_criteria = prior.get("criteria")
+                if not isinstance(prior_criteria, list) or any(
+                    item.get("result") != "pass"
+                    for item in prior_criteria
+                    if item.get("evidence_type") == "human_approval"
+                ):
+                    continue
+                source_criteria = [
+                    {key: value for key, value in item.items() if key != "result"}
+                    for item in source.get("criteria", [])
+                ]
+                if [
+                    {key: value for key, value in item.items() if key != "result"}
+                    for item in prior_criteria
+                ] != source_criteria:
+                    continue
+                if sum(
+                    item.get("evidence_type") == "human_approval"
+                    for item in prior_criteria
+                ) != len(approval_requests):
+                    continue
+
+                # Approval source records must be the exact committed records
+                # the original gate could have evaluated, and their registered
+                # authoritative copies must show consumption by that closure.
+                committed_approval_paths: set[str] = set()
+                for request in approval_requests:
+                    approval_id = str(request["approval_id"])
+                    rows = self.store.rows(
+                        "SELECT path, payload_json FROM artifacts "
+                        "WHERE artifact_id = ? AND artifact_type = 'human-approval'",
+                        (approval_id,),
+                    )
+                    if len(rows) != 1:
+                        break
+                    registered = json.loads(rows[0]["payload_json"])
+                    relative = str(rows[0]["path"])
+                    if relative not in refs or relative not in _G0_CLOSURE_PATHS:
+                        break
+                    current_path = self._path(relative)
+                    if not current_path.is_file():
+                        break
+                    prior_blob = subprocess.run(
+                        ["git", "show", f"{prior_commit}:{relative}"],
+                        cwd=self.root,
+                        capture_output=True,
+                        check=True,
+                    ).stdout
+                    head_blob = subprocess.run(
+                        ["git", "show", f"{head}:{relative}"],
+                        cwd=self.root,
+                        capture_output=True,
+                        check=True,
+                    ).stdout
+                    if (
+                        prior_blob != head_blob
+                        or current_path.read_bytes() != head_blob
+                        or registered.get("approval_id") != approval_id
+                        or registered.get("consumed_at") is None
+                        or registered.get("revoked_at") is not None
+                    ):
+                        break
+                    expected_fields = (
+                        "approval_id",
+                        "authorized_action",
+                        "target_type",
+                        "target_id",
+                        "target_hash",
+                        "scope",
+                        "control_plane_seal",
+                    )
+                    current_record = json.loads(current_path.read_text(encoding="utf-8"))
+                    if any(
+                        current_record.get(field) != registered.get(field)
+                        for field in expected_fields
+                    ):
+                        break
+                    key = self.approval_key
+                    if key is None:
+                        try:
+                            key = load_config().seal_key_path.read_bytes()
+                        except OSError:
+                            key = None
+                    if key is None:
+                        break
+                    try:
+                        verify_approval(
+                            registered,
+                            key,
+                            **{
+                                key: value
+                                for key, value in request.items()
+                                if key.startswith("expected_")
+                            },
+                            repository_root=self.root,
+                        )
+                    except ApprovalRejected as exc:
+                        if exc.code != "approval_consumed":
+                            break
+                    else:
+                        break
+                    committed_approval_paths.add(relative)
+                if len(committed_approval_paths) != len(approval_requests):
+                    continue
+
+                criteria_relative = source_path.relative_to(self.root).as_posix()
+                if criteria_relative not in _G0_CLOSURE_PATHS:
+                    # The immutable criteria are not closure evidence, so any
+                    # legitimate G0 criteria file must predate the replay base.
+                    if subprocess.run(
+                        ["git", "diff", "--quiet", prior_commit, head, "--", criteria_relative],
+                        cwd=self.root,
+                        check=False,
+                    ).returncode != 0:
+                        continue
+                return True
+            except (KeyError, OSError, ValueError, subprocess.SubprocessError, json.JSONDecodeError):
+                continue
+        return False
+
+    def _has_prior_passed_g0_result(
+        self, criteria_hash: str | None, head: str
+    ) -> bool:
+        if self.store is None:
+            return False
+        artifact_pattern = (
+            f"gate:G0:{criteria_hash}:%" if criteria_hash is not None else "gate:G0:%"
+        )
+        for row in self.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = 'phase-gate' "
+            "AND integrable = 1 AND artifact_id LIKE ?",
+            (artifact_pattern,),
+        ):
+            try:
+                result = json.loads(row["payload_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if (
+                result.get("gate_id") == "G0"
+                and result.get("gate_result") == "passed"
+                and result.get("evaluated_against_commit") != head
+            ):
+                return True
+        return False
+
     def evaluate(
         self,
         criteria_path: str | os.PathLike[str],
@@ -368,6 +593,16 @@ class GateEvaluator:
             raise PlanningError("phase gate has no criteria", path=str(source_path))
         results = {item["result"] for item in criteria}
         gate_result = "failed" if "fail" in results else "open" if "open" in results else "passed"
+        if (
+            gate_result != "passed"
+            and source.get("gate_id") == "G0"
+            and self._has_prior_passed_g0_result(None, head)
+        ):
+            raise ApprovalRejected(
+                "approval_replay_rejected",
+                "fresh G0 replay criteria did not pass",
+                gate_id="G0",
+            )
         result: dict[str, Any] = {
             "artifact_type": "phase-gate",
             "gate_id": source["gate_id"],
@@ -395,6 +630,21 @@ class GateEvaluator:
                 )
                 approval_requests.append(
                     {"approval_id": str(record["approval_id"]), **expectations}
+                )
+        if gate_result == "passed" and source.get("gate_id") == "G0":
+            if self._is_g0_closure_replay(
+                source,
+                source_path=source_path,
+                criteria_hash=criteria_hash,
+                head=head,
+                approval_requests=tuple(approval_requests),
+            ):
+                return result
+            if self._has_prior_passed_g0_result(criteria_hash, head):
+                raise ApprovalRejected(
+                    "approval_replay_rejected",
+                    "post-commit G0 replay does not match the original closure evidence",
+                    gate_id="G0",
                 )
         if self.store is not None:
             self._record(
