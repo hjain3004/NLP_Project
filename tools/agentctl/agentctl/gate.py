@@ -538,6 +538,89 @@ class GateEvaluator:
                 return True
         return False
 
+    def _has_passed_g0_with_different_criteria(self, criteria_hash: str) -> bool:
+        """Prevent a second G0 closure under altered criteria, even at the same HEAD."""
+        if self.store is None:
+            return False
+        rows = self.store.rows(
+            "SELECT artifact_id, content_hash, payload_json FROM artifacts "
+            "WHERE artifact_type = 'phase-gate' AND integrable = 1"
+        )
+        for row in rows:
+            try:
+                payload = json.loads(row["payload_json"])
+                parts = str(row["artifact_id"]).split(":", 3)
+                if (
+                    len(parts) != 4
+                    or parts[0:2] != ["gate", "G0"]
+                    or payload.get("gate_id") != "G0"
+                    or payload.get("gate_result") != "passed"
+                    or row["content_hash"] != sha256_of_json(payload)
+                    or parts[3] != str(payload.get("evaluated_against_commit"))
+                ):
+                    continue
+                if parts[2] != criteria_hash:
+                    return True
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+        return False
+
+    def _is_same_head_g0_result(
+        self,
+        source: Mapping[str, Any],
+        *,
+        artifact_id: str,
+        criteria_hash: str,
+        head: str,
+        approval_requests: tuple[Mapping[str, str], ...],
+        all_criteria_recomputed: bool,
+    ) -> bool:
+        """Recognize an existing same-HEAD close, including legacy event refs."""
+        if self.store is None or source.get("gate_id") != "G0" or not all_criteria_recomputed:
+            return False
+        rows = self.store.rows(
+            "SELECT content_hash, payload_json FROM artifacts WHERE artifact_id = ? "
+            "AND artifact_type = 'phase-gate' AND integrable = 1",
+            (artifact_id,),
+        )
+        if len(rows) != 1:
+            return False
+        try:
+            prior = json.loads(rows[0]["payload_json"])
+            if (
+                rows[0]["content_hash"] != sha256_of_json(prior)
+                or prior.get("gate_id") != "G0"
+                or prior.get("gate_result") != "passed"
+                or prior.get("evaluated_against_commit") != head
+                or artifact_id != f"gate:G0:{criteria_hash}:{head}"
+                or prior.get("human_approval_refs") != list(source.get("human_approval_refs", []))
+            ):
+                return False
+            prior_criteria = prior.get("criteria")
+            current_criteria = source.get("criteria", [])
+            if not isinstance(prior_criteria, list) or [
+                {key: value for key, value in item.items() if key != "result"}
+                for item in prior_criteria
+            ] != [
+                {key: value for key, value in item.items() if key != "result"}
+                for item in current_criteria
+            ]:
+                return False
+            events = self.store.rows(
+                "SELECT result_json, payload_json FROM events WHERE idempotency_key = ? "
+                "AND event_type = 'phase_gate_evaluated' AND reason_code = 'gate_passed'",
+                (f"gate-evaluate:G0:{criteria_hash}:{head}",),
+            )
+            if len(events) != 1:
+                return False
+            if json.loads(events[0]["result_json"]) != {"gate_id": "G0", "gate_result": "passed"}:
+                return False
+            refs = json.loads(events[0]["payload_json"]).get("artifact_refs")
+            current_refs = [artifact_id, *(str(item["approval_id"]) for item in approval_requests)]
+            return refs == [artifact_id] or refs == current_refs
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+
     def evaluate(
         self,
         criteria_path: str | os.PathLike[str],
@@ -560,6 +643,14 @@ class GateEvaluator:
         )
         head = commit.stdout.strip() if commit.returncode == 0 else "0" * 40
         criteria_hash = sha256_of_json(source)
+        if source.get("gate_id") == "G0" and self._has_passed_g0_with_different_criteria(
+            criteria_hash
+        ):
+            raise ApprovalRejected(
+                "approval_replay_rejected",
+                "G0 criteria differ from an already-passed authoritative closure",
+                gate_id="G0",
+            )
         if result_path is None:
             name = source_path.name.replace("-criteria.json", "-result.json")
             if name == source_path.name:
@@ -590,7 +681,17 @@ class GateEvaluator:
         ]
         replay_candidate = (
             source.get("gate_id") == "G0"
-            and self._has_prior_passed_g0_result(criteria_hash, head)
+            and (
+                self._has_prior_passed_g0_result(None, head)
+                or bool(
+                    self.store is not None
+                    and self.store.rows(
+                        "SELECT 1 FROM artifacts WHERE artifact_id = ? "
+                        "AND artifact_type = 'phase-gate' AND integrable = 1",
+                        (artifact_id,),
+                    )
+                )
+            )
         )
         criteria = [
             self._evaluate_criterion(
@@ -644,27 +745,37 @@ class GateEvaluator:
                     {"approval_id": str(record["approval_id"]), **expectations}
                 )
         if gate_result == "passed" and source.get("gate_id") == "G0":
+            all_criteria_recomputed = (
+                evidence_types is None
+                and len(selected_criteria) == len(source.get("criteria", []))
+                and [
+                    {key: value for key, value in item.items() if key != "result"}
+                    for item in criteria
+                ]
+                == [
+                    {key: value for key, value in item.items() if key != "result"}
+                    for item in source.get("criteria", [])
+                ]
+            )
+            if self._is_same_head_g0_result(
+                source,
+                artifact_id=artifact_id,
+                criteria_hash=criteria_hash,
+                head=head,
+                approval_requests=tuple(approval_requests),
+                all_criteria_recomputed=all_criteria_recomputed,
+            ):
+                return result
             if self._is_g0_closure_replay(
                 source,
                 source_path=source_path,
                 criteria_hash=criteria_hash,
                 head=head,
                 approval_requests=tuple(approval_requests),
-                all_criteria_recomputed=(
-                    evidence_types is None
-                    and len(selected_criteria) == len(source.get("criteria", []))
-                    and [
-                        {key: value for key, value in item.items() if key != "result"}
-                        for item in criteria
-                    ]
-                    == [
-                        {key: value for key, value in item.items() if key != "result"}
-                        for item in source.get("criteria", [])
-                    ]
-                ),
+                all_criteria_recomputed=all_criteria_recomputed,
             ):
                 return result
-            if self._has_prior_passed_g0_result(criteria_hash, head):
+            if self._has_prior_passed_g0_result(None, head):
                 raise ApprovalRejected(
                     "approval_replay_rejected",
                     "post-commit G0 replay does not match the original closure evidence",

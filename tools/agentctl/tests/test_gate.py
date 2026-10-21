@@ -30,6 +30,8 @@ def _build_g0_replay_fixture(
     criterion_command: str | None = None,
     commit_approval_initially: bool = True,
     consumed_alternate_approval: bool = False,
+    commit_result_after_close: bool = True,
+    legacy_event_without_approval_ids: bool = False,
 ) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, dict, EventStore, GateEvaluator]:
     root = temporary_root / "repository"
     root.mkdir()
@@ -126,7 +128,19 @@ def _build_g0_replay_fixture(
         manager.register(alternate_approval, path=approval_ref)
         approval_path.write_text(json.dumps(approval), encoding="utf-8")
     evaluator = GateEvaluator(root, approval_key=key, store=store)
-    result = evaluator.evaluate(source)
+    if legacy_event_without_approval_ids:
+        from agentctl import gate as gate_module
+
+        make_event = gate_module.make_event
+
+        def legacy_make_event(*args, **kwargs):
+            kwargs["artifact_refs"] = kwargs["artifact_refs"][:1]
+            return make_event(*args, **kwargs)
+
+        with mock.patch("agentctl.gate.make_event", side_effect=legacy_make_event):
+            result = evaluator.evaluate(source)
+    else:
+        result = evaluator.evaluate(source)
     if result["gate_result"] != "passed":
         raise AssertionError("synthetic initial G0 evaluation did not pass")
     result_path = root / "agent-system/work/P0/gates/G0-result.json"
@@ -143,18 +157,19 @@ def _build_g0_replay_fixture(
             "expected_scope": expectation["expected_scope"],
         })
     original_result_bytes = result_path.read_bytes()
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(root),
-            "add",
-            result_path.relative_to(root).as_posix(),
-            *([] if commit_approval_initially or alternate_approval is not None else [approval_ref]),
-        ],
-        check=True,
-    )
-    subprocess.run(["git", "-C", str(root), "commit", "-qm", "close G0"], check=True)
+    if commit_result_after_close:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "add",
+                result_path.relative_to(root).as_posix(),
+                *([] if commit_approval_initially or alternate_approval is not None else [approval_ref]),
+            ],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(root), "commit", "-qm", "close G0"], check=True)
     return root, source, approval_path, approval, store, evaluator
 
 
@@ -694,6 +709,113 @@ class GateTests(unittest.TestCase):
             self.assertEqual(
                 store.scalar(
                     "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+
+    def test_any_prior_passed_g0_blocks_changed_criteria_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _, _, store, evaluator = _build_g0_replay_fixture(
+                pathlib.Path(temporary)
+            )
+            result_path = root / "agent-system/work/P0/gates/G0-result.json"
+            original_result_bytes = result_path.read_bytes()
+            changed = json.loads(source.read_text(encoding="utf-8"))
+            changed["criteria"] = [
+                {
+                    "criterion_id": "CHANGED-PASSING-CHECK",
+                    "statement": "A passing deterministic check cannot re-close G0",
+                    "evidence_type": "deterministic_check",
+                    "evidence_command": "true",
+                    "expected_exit_code": 0,
+                }
+            ]
+            changed["human_approval_refs"] = []
+            source.write_text(json.dumps(changed), encoding="utf-8")
+
+            with self.assertRaises(ApprovalRejected) as raised:
+                evaluator.evaluate(source)
+            self.assertEqual(raised.exception.code, "approval_replay_rejected")
+            self.assertEqual(result_path.read_bytes(), original_result_bytes)
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM events WHERE event_type = 'phase_gate_evaluated'"
+                ),
+                1,
+            )
+
+    def test_legacy_same_head_closure_is_idempotent_after_event_schema_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _, approval, store, evaluator = _build_g0_replay_fixture(
+                pathlib.Path(temporary),
+                commit_result_after_close=False,
+                legacy_event_without_approval_ids=True,
+            )
+            event_row = store.rows(
+                "SELECT payload_json FROM events "
+                "WHERE event_type = 'phase_gate_evaluated'"
+            )[0]
+            legacy_event = json.loads(event_row["payload_json"])
+            self.assertEqual(len(legacy_event["artifact_refs"]), 1)
+            result_path = root / "agent-system/work/P0/gates/G0-result.json"
+            original_result_bytes = result_path.read_bytes()
+            approval_before = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                    (approval["approval_id"],),
+                )[0]["payload_json"]
+            )
+
+            result = evaluator.evaluate(source)
+
+            self.assertEqual(result["gate_result"], "passed")
+            self.assertEqual(result_path.read_bytes(), original_result_bytes)
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM events WHERE event_type = 'phase_gate_evaluated'"
+                ),
+                1,
+            )
+            approval_after = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                    (approval["approval_id"],),
+                )[0]["payload_json"]
+            )
+            self.assertEqual(approval_after["consumed_at"], approval_before["consumed_at"])
+
+    def test_legacy_descendant_replay_without_approval_ids_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _, _, store, evaluator = _build_g0_replay_fixture(
+                pathlib.Path(temporary), legacy_event_without_approval_ids=True
+            )
+            result_path = root / "agent-system/work/P0/gates/G0-result.json"
+            original_result_bytes = result_path.read_bytes()
+            with self.assertRaises(ApprovalRejected) as raised:
+                evaluator.evaluate(source)
+            self.assertEqual(raised.exception.code, "approval_replay_rejected")
+            self.assertEqual(result_path.read_bytes(), original_result_bytes)
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM events WHERE event_type = 'phase_gate_evaluated'"
                 ),
                 1,
             )
