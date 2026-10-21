@@ -314,6 +314,102 @@ class GateTests(unittest.TestCase):
                 1,
             )
 
+    def test_legacy_non_g0_same_head_closure_preserves_event_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            for relative in (
+                "agent-system/policies/approval-policy.json",
+                "agent-system/policies/approval-principals.json",
+                "agent-system/schemas/human-approval.schema.json",
+                "agent-system/schemas/event.schema.json",
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(self.root / relative, target)
+            source = root / "TEST-GATE-criteria.json"
+            approval_path = root / "phase-approval.json"
+            source.write_text(
+                json.dumps(
+                    {
+                        **self._criteria(
+                            {
+                                "criterion_id": "APPROVAL-1",
+                                "statement": "A human authorizes these exact criteria",
+                                "evidence_type": "human_approval",
+                                "evidence_ref": approval_path.name,
+                            }
+                        ),
+                        "human_approval_refs": [approval_path.name],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            key = b"g" * 32
+            approval = create_approval(
+                key=key,
+                principal="himanshu_jain",
+                machine_identity="owner-machine",
+                action="phase_authorization",
+                target_type="phase_gate",
+                target_id="TEST-GATE",
+                target_hash=sha256_of_json(json.loads(source.read_text())),
+                scope="Close TEST-GATE against its immutable criteria",
+                reason="Exercise legacy non-G0 event compatibility",
+            )
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            store = EventStore(root / "runtime.sqlite3", repository_root=root)
+            ApprovalManager(store, key=key).register(approval, path=approval_path.name)
+            evaluator = GateEvaluator(root, approval_key=key, store=store)
+
+            from agentctl import gate as gate_module
+
+            make_event = gate_module.make_event
+
+            def legacy_make_event(*args, **kwargs):
+                kwargs["artifact_refs"] = kwargs["artifact_refs"][:1]
+                return make_event(*args, **kwargs)
+
+            with mock.patch("agentctl.gate.make_event", side_effect=legacy_make_event):
+                first = evaluator.evaluate(source)
+            self.assertEqual(first["gate_result"], "passed")
+            event = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM events WHERE event_type = 'phase_gate_evaluated'"
+                )[0]["payload_json"]
+            )
+            self.assertEqual(len(event["artifact_refs"]), 1)
+            result_path = root / "TEST-GATE-result.json"
+            approval_before = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                    (approval["approval_id"],),
+                )[0]["payload_json"]
+            )
+
+            repeated = evaluator.evaluate(source)
+
+            self.assertEqual(repeated["gate_result"], "passed")
+            self.assertTrue(result_path.is_file())
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM events WHERE event_type = 'phase_gate_evaluated'"
+                ),
+                1,
+            )
+            approval_after = json.loads(
+                store.rows(
+                    "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+                    (approval["approval_id"],),
+                )[0]["payload_json"]
+            )
+            self.assertEqual(approval_after["consumed_at"], approval_before["consumed_at"])
+
     def test_post_commit_closure_evidence_replay_does_not_reconsume_approval(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = pathlib.Path(temporary)

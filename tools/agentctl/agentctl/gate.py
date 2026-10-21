@@ -813,7 +813,11 @@ class GateEvaluator:
             repository_commits=[result["evaluated_against_commit"]],
             artifact_refs=[
                 artifact_id,
-                *(str(request["approval_id"]) for request in approval_requests),
+                *(
+                    str(request["approval_id"])
+                    for request in approval_requests
+                    if result["gate_id"] == "G0"
+                ),
             ],
         )
 
