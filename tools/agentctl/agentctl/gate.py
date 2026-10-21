@@ -119,6 +119,7 @@ class GateEvaluator:
         *,
         gate_id: str,
         criteria_path: Path,
+        persist_audit: bool = True,
     ) -> dict[str, Any]:
         criterion = {key: copy.deepcopy(value) for key, value in source.items() if key != "result"}
         evidence_type = criterion.get("evidence_type")
@@ -173,7 +174,7 @@ class GateEvaluator:
                                         self.root
                                         / "agent-system/work/P0/CONSTRUCTION-LOG.md"
                                     ),
-                                    store=self.store,
+                                    store=self.store if persist_audit else None,
                                     source_path=reference,
                                     repository_root=self.root,
                                 )
@@ -326,9 +327,15 @@ class GateEvaluator:
         criteria_hash: str,
         head: str,
         approval_requests: tuple[Mapping[str, str], ...],
+        all_criteria_recomputed: bool,
     ) -> bool:
         """Prove a post-commit G0 verification is the original closure replay."""
-        if self.store is None or source.get("gate_id") != "G0" or not approval_requests:
+        if (
+            self.store is None
+            or source.get("gate_id") != "G0"
+            or not approval_requests
+            or not all_criteria_recomputed
+        ):
             return False
         candidates = self.store.rows(
             "SELECT artifact_id, content_hash, payload_json FROM artifacts "
@@ -349,7 +356,7 @@ class GateEvaluator:
                 if prior_commit == head:
                     continue
                 prior_events = self.store.rows(
-                    "SELECT result_json FROM events WHERE idempotency_key = ? "
+                    "SELECT result_json, payload_json FROM events WHERE idempotency_key = ? "
                     "AND event_type = 'phase_gate_evaluated' AND reason_code = 'gate_passed'",
                     (f"gate-evaluate:G0:{criteria_hash}:{prior_commit}",),
                 )
@@ -357,6 +364,13 @@ class GateEvaluator:
                     continue
                 event_result = json.loads(prior_events[0]["result_json"])
                 if event_result != {"gate_id": "G0", "gate_result": "passed"}:
+                    continue
+                closure_event = json.loads(prior_events[0]["payload_json"])
+                expected_refs = [
+                    candidate["artifact_id"],
+                    *(str(request["approval_id"]) for request in approval_requests),
+                ]
+                if closure_event.get("artifact_refs") != expected_refs:
                     continue
                 ancestor = subprocess.run(
                     ["git", "merge-base", "--is-ancestor", prior_commit, head],
@@ -428,12 +442,6 @@ class GateEvaluator:
                     current_path = self._path(relative)
                     if not current_path.is_file():
                         break
-                    prior_blob = subprocess.run(
-                        ["git", "show", f"{prior_commit}:{relative}"],
-                        cwd=self.root,
-                        capture_output=True,
-                        check=True,
-                    ).stdout
                     head_blob = subprocess.run(
                         ["git", "show", f"{head}:{relative}"],
                         cwd=self.root,
@@ -441,8 +449,7 @@ class GateEvaluator:
                         check=True,
                     ).stdout
                     if (
-                        prior_blob != head_blob
-                        or current_path.read_bytes() != head_blob
+                        current_path.read_bytes() != head_blob
                         or registered.get("approval_id") != approval_id
                         or registered.get("consumed_at") is None
                         or registered.get("revoked_at") is not None
@@ -581,11 +588,16 @@ class GateEvaluator:
             for item in source.get("criteria", [])
             if evidence_types is None or item.get("evidence_type") in evidence_types
         ]
+        replay_candidate = (
+            source.get("gate_id") == "G0"
+            and self._has_prior_passed_g0_result(criteria_hash, head)
+        )
         criteria = [
             self._evaluate_criterion(
                 item,
                 gate_id=str(source.get("gate_id", "")),
                 criteria_path=source_path,
+                persist_audit=not replay_candidate,
             )
             for item in selected_criteria
         ]
@@ -638,6 +650,18 @@ class GateEvaluator:
                 criteria_hash=criteria_hash,
                 head=head,
                 approval_requests=tuple(approval_requests),
+                all_criteria_recomputed=(
+                    evidence_types is None
+                    and len(selected_criteria) == len(source.get("criteria", []))
+                    and [
+                        {key: value for key, value in item.items() if key != "result"}
+                        for item in criteria
+                    ]
+                    == [
+                        {key: value for key, value in item.items() if key != "result"}
+                        for item in source.get("criteria", [])
+                    ]
+                ),
             ):
                 return result
             if self._has_prior_passed_g0_result(criteria_hash, head):
@@ -676,7 +700,10 @@ class GateEvaluator:
             actor_role="control_plane",
             phase_id=result["phase_id"],
             repository_commits=[result["evaluated_against_commit"]],
-            artifact_refs=[artifact_id],
+            artifact_refs=[
+                artifact_id,
+                *(str(request["approval_id"]) for request in approval_requests),
+            ],
         )
 
         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:

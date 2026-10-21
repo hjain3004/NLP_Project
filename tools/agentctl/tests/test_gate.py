@@ -28,6 +28,8 @@ def _build_g0_replay_fixture(
     temporary_root: pathlib.Path,
     *,
     criterion_command: str | None = None,
+    commit_approval_initially: bool = True,
+    consumed_alternate_approval: bool = False,
 ) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, dict, EventStore, GateEvaluator]:
     root = temporary_root / "repository"
     root.mkdir()
@@ -92,20 +94,64 @@ def _build_g0_replay_fixture(
         reason="Exercise post-commit gate replay",
     )
     approval_path.write_text(json.dumps(approval), encoding="utf-8")
-    subprocess.run(["git", "-C", str(root), "add", "agent-system"], check=True)
+    alternate_approval = None
+    if consumed_alternate_approval:
+        alternate_approval = create_approval(
+            key=key,
+            principal="himanshu_jain",
+            machine_identity="owner-machine",
+            action="phase_authorization",
+            target_type="phase_gate",
+            target_id="G0",
+            target_hash=sha256_of_json(criteria),
+            scope="Close G0 against its immutable criteria",
+            reason="Exercise alternate consumed approval",
+        )
+        approval_path.write_text(json.dumps(alternate_approval), encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(root), "add", "agent-system/policies", "agent-system/schemas", source.relative_to(root).as_posix()],
+        check=True,
+    )
+    if commit_approval_initially or consumed_alternate_approval:
+        subprocess.run(
+            ["git", "-C", str(root), "add", approval_ref], check=True
+        )
     subprocess.run(
         ["git", "-C", str(root), "commit", "-qm", "initial gate evidence"], check=True
     )
     store = EventStore(temporary_root / "runtime.sqlite3", repository_root=root)
-    ApprovalManager(store, key=key).register(approval, path=approval_ref)
+    manager = ApprovalManager(store, key=key)
+    manager.register(approval, path=approval_ref)
+    if alternate_approval is not None:
+        manager.register(alternate_approval, path=approval_ref)
+        approval_path.write_text(json.dumps(approval), encoding="utf-8")
     evaluator = GateEvaluator(root, approval_key=key, store=store)
     result = evaluator.evaluate(source)
     if result["gate_result"] != "passed":
         raise AssertionError("synthetic initial G0 evaluation did not pass")
     result_path = root / "agent-system/work/P0/gates/G0-result.json"
+    if alternate_approval is not None:
+        approval_path.write_text(json.dumps(alternate_approval), encoding="utf-8")
+        expectation = evaluator._approval_expectations(
+            alternate_approval, gate_id="G0", criteria_path=source
+        )
+        manager.consume(alternate_approval["approval_id"], **{
+            "expected_action": expectation["expected_action"],
+            "expected_target_type": expectation["expected_target_type"],
+            "expected_target_id": expectation["expected_target_id"],
+            "expected_target_hash": expectation["expected_target_hash"],
+            "expected_scope": expectation["expected_scope"],
+        })
     original_result_bytes = result_path.read_bytes()
     subprocess.run(
-        ["git", "-C", str(root), "add", result_path.relative_to(root).as_posix()],
+        [
+            "git",
+            "-C",
+            str(root),
+            "add",
+            result_path.relative_to(root).as_posix(),
+            *([] if commit_approval_initially or alternate_approval is not None else [approval_ref]),
+        ],
         check=True,
     )
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "close G0"], check=True)
@@ -464,6 +510,193 @@ class GateTests(unittest.TestCase):
                     self.assertEqual(raised.exception.code, "approval_replay_rejected")
 
                 self.assertEqual(result_path.read_bytes(), original_result_bytes)
+
+    def test_replay_must_match_approval_ids_consumed_by_original_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _, _, store, evaluator = _build_g0_replay_fixture(
+                pathlib.Path(temporary), consumed_alternate_approval=True
+            )
+            with self.assertRaises(ApprovalRejected) as raised:
+                evaluator.evaluate(source)
+            self.assertEqual(raised.exception.code, "approval_replay_rejected")
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+
+    def test_replay_supports_approval_files_first_committed_with_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _, _, store, evaluator = _build_g0_replay_fixture(
+                pathlib.Path(temporary), commit_approval_initially=False
+            )
+            replay = evaluator.evaluate(source)
+            self.assertEqual(replay["gate_result"], "passed")
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
+
+    def test_filtered_criteria_cannot_satisfy_post_commit_replay(self) -> None:
+        command = 'test "$(git log -1 --format=%s)" != "close G0"'
+        with tempfile.TemporaryDirectory() as temporary:
+            _, source, _, _, _, evaluator = _build_g0_replay_fixture(
+                pathlib.Path(temporary), criterion_command=command
+            )
+            with self.assertRaises(ApprovalRejected) as raised:
+                evaluator.evaluate(source, evidence_types=frozenset({"human_approval"}))
+            self.assertEqual(raised.exception.code, "approval_replay_rejected")
+
+    def test_replay_rechecks_changed_architecture_audit_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = pathlib.Path(temporary)
+            root = temporary_root / "repository"
+            (root / "agent-system/work/P0/gates").mkdir(parents=True)
+            (root / "agent-system/work/P0/approvals").mkdir(parents=True)
+            shutil.copytree(
+                self.root / "agent-system/schemas", root / "agent-system/schemas"
+            )
+            shutil.copytree(
+                self.root / "agent-system/policies", root / "agent-system/policies"
+            )
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.email", "test@example.invalid"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(root), "config", "user.name", "Gate Test"],
+                check=True,
+            )
+            source = root / "agent-system/work/P0/gates/G0-criteria.json"
+            audit_path = root / "agent-system/work/P0/gates/G0-architecture-audit.json"
+            approval_path = root / "agent-system/work/P0/approvals/G0-phase-approval.json"
+            audit_ref = audit_path.relative_to(root).as_posix()
+            approval_ref = approval_path.relative_to(root).as_posix()
+            criteria = {
+                "artifact_type": "phase-gate",
+                "gate_id": "G0",
+                "phase_id": "P0",
+                "criteria": [
+                    {
+                        "criterion_id": "AUDIT-1",
+                        "statement": "The current architecture audit has no blockers",
+                        "evidence_type": "artifact",
+                        "evidence_ref": audit_ref,
+                    },
+                    {
+                        "criterion_id": "APPROVAL-1",
+                        "statement": "A human authorizes these exact criteria",
+                        "evidence_type": "human_approval",
+                        "evidence_ref": approval_ref,
+                    },
+                ],
+                "human_approval_refs": [approval_ref],
+            }
+            source.write_text(json.dumps(criteria), encoding="utf-8")
+            (root / "agent-system/CONSTRUCTION-LOG.md").write_text(
+                "Synthetic audit fixture.\n", encoding="utf-8"
+            )
+            subprocess.run(["git", "-C", str(root), "add", "agent-system"], check=True)
+            subprocess.run(
+                ["git", "-C", str(root), "commit", "-qm", "criteria and schemas"],
+                check=True,
+            )
+            audited_commit = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+            ).strip()
+            audited_tree = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD^{tree}"], text=True
+            ).strip()
+            clean_audit = {
+                "artifact_type": "architecture-audit",
+                "audit_id": "AUDIT-REPLAY-IDEMPOTENCY",
+                "gate_id": "G0",
+                "pass_id": "merge",
+                "auditor_role": "architectural_authority",
+                "auditor_provider": "fixture-provider",
+                "auditor_model": "fixture-model",
+                "auditor_session_id": "fresh-session",
+                "auditor_run_id": "fresh-run",
+                "audited_commit": audited_commit,
+                "audited_tree_hash": audited_tree,
+                "artifact_families": ["all"],
+                "decision_coverage": [
+                    {
+                        "decision_id": "G0",
+                        "assessment": "implemented",
+                        "evidence_ref": "agent-system/work/P0/gates/G0-criteria.json",
+                    }
+                ],
+                "findings": [],
+                "verdict": "no_blocking_findings",
+                "independence_attestation": {"fresh_session": True, "distinct": True},
+            }
+            audit_path.write_text(json.dumps(clean_audit), encoding="utf-8")
+            key = b"g" * 32
+            approval = create_approval(
+                key=key,
+                principal="himanshu_jain",
+                machine_identity="owner-machine",
+                action="phase_authorization",
+                target_type="phase_gate",
+                target_id="G0",
+                target_hash=sha256_of_json(criteria),
+                scope="Close G0 against its immutable criteria",
+                reason="Exercise architecture audit replay",
+            )
+            approval_path.write_text(json.dumps(approval), encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(root), "add", audit_ref, approval_ref], check=True
+            )
+            subprocess.run(
+                ["git", "-C", str(root), "commit", "-qm", "audit and approval evidence"],
+                check=True,
+            )
+            store = EventStore(temporary_root / "runtime.sqlite3", repository_root=root)
+            ApprovalManager(store, key=key).register(approval, path=approval_ref)
+            evaluator = GateEvaluator(root, approval_key=key, store=store)
+            first = evaluator.evaluate(source)
+            self.assertEqual(first["gate_result"], "passed")
+            blocking_audit = json.loads(json.dumps(clean_audit))
+            blocking_audit["findings"] = [
+                {
+                    "finding_id": "BLOCK-REPLAY",
+                    "severity": "critical",
+                    "violated_criterion": "G0",
+                    "file": "agent-system/work/P0/gates/G0-criteria.json",
+                    "location": "criteria[0]",
+                    "reproducible_evidence": "seed",
+                    "observed_behavior": "blocked",
+                    "required_behavior": "clean",
+                    "required_outcome": "repair",
+                    "reviewer_confidence": "high",
+                    "blocking": True,
+                }
+            ]
+            blocking_audit["verdict"] = "blocking_findings"
+            audit_path.write_text(json.dumps(blocking_audit), encoding="utf-8")
+            result_path = root / "agent-system/work/P0/gates/G0-result.json"
+            original_result_bytes = result_path.read_bytes()
+            subprocess.run(
+                ["git", "-C", str(root), "add", audit_ref, result_path.relative_to(root).as_posix()],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(root), "commit", "-qm", "close G0"], check=True)
+
+            with self.assertRaises(ApprovalRejected) as raised:
+                evaluator.evaluate(source)
+            self.assertEqual(raised.exception.code, "approval_replay_rejected")
+            self.assertEqual(result_path.read_bytes(), original_result_bytes)
+            self.assertEqual(
+                store.scalar(
+                    "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'phase-gate'"
+                ),
+                1,
+            )
 
     def test_gate_approval_consumption_and_authoritative_result_are_one_transaction(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
