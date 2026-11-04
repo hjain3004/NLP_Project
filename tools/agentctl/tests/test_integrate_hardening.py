@@ -10,6 +10,7 @@ second review's F1 (GateCannotReachIntegratorTests, GateRepositoryTamperTests) a
 
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import shutil
@@ -41,10 +42,14 @@ class GateContainmentTests(unittest.TestCase):
         probe = self.scratch / "probe.log"
         config = self.lab.root / ".git" / "config"
         before = config.read_bytes()
-        # Only the integrator's gate HOME triggers the probe: the candidate's own
-        # scheduler.verify_candidate run (Lane A's) legitimately executes inside its worktree.
+        # Only the integration copy triggers the probe. Verification now runs through the same
+        # gate runner (same HOME) but in the leased worktree, which legitimately has a `.git`
+        # link file, so the guard is the working directory, not HOME. The integration copy is
+        # created under an `agentctl-integration-gate-*` temporary directory with no `.git`.
+        ran = self.scratch / "ran-in-copy.log"
         gate = (
-            'case "$HOME" in *agentctl-gate-home*) '
+            'case "$PWD" in *agentctl-integration-gate-*) '
+            f'echo COPY >> {ran}; '  # positive control: the probe below really ran in the copy
             f'if [ -e .git ] || git rev-parse --git-dir >/dev/null 2>&1; then echo LINKED >> {probe}; fi; '
             f'case "$PWD" in {self.lab.root}/*) echo INSIDE-CHECKOUT >> {probe};; esac; '
             'git config diff.external "/bin/sh -c true --" 2>/dev/null;; esac; true'
@@ -54,6 +59,7 @@ class GateContainmentTests(unittest.TestCase):
         result = integrate("T-A", store=self.lab.store)
 
         self.assertEqual(result["outcome"], "integrated", result)
+        self.assertEqual(ran.read_text().split() if ran.exists() else [], ["COPY"])  # exactly once
         self.assertFalse(probe.exists(), probe.read_text() if probe.exists() else "")
         self.assertEqual(config.read_bytes(), before)
         self.assertEqual(self.lab.git("config", "--local", "--get", "diff.external", check=False), "")
@@ -101,7 +107,9 @@ class GateCannotReachIntegratorTests(unittest.TestCase):
         from /proc/$PPID/cwd, then used that path to plant a filter driver."""
         leak = self.scratch / "leak.log"
         gate = (
-            'case "$HOME" in *agentctl-gate-home*) '
+            # Log only from the integration copy; verification (leased worktree) runs the same
+            # command through the same runner and must not be what this test measures.
+            'case "$PWD" in *agentctl-integration-gate-*) '
             '{ echo "SENTINEL=$(grep -c s3cr3t-proc /proc/$PPID/environ)"; '
             'echo "ANY=$(grep -ls s3cr3t-proc /proc/[0-9]*/environ | wc -l)"; '
             'for p in /proc/[0-9]*; do readlink "$p/cwd"; done; '
@@ -132,7 +140,13 @@ class GateRepositoryTamperTests(unittest.TestCase):
         self.log = self.scratch / "smudge.log"
 
     def gate(self, body: str) -> str:
-        return f'case "$HOME" in *agentctl-gate-home*) {body};; esac; true'
+        """Run ``body`` only inside the integration copy (no `.git`, `agentctl-integration-gate-*`).
+
+        Verification executes the same contract check in the leased worktree first; tampering
+        there is Lane A's behaviour and is asserted separately by
+        ``test_tampering_at_verification_time_never_reaches_integration``.
+        """
+        return f'case "$PWD" in *agentctl-integration-gate-*) {body};; esac; true'
 
     def assert_not_integrated(self, task_id: str) -> None:
         self.assertIsNone(self.lab.branch_head())
@@ -200,6 +214,32 @@ class GateRepositoryTamperTests(unittest.TestCase):
         self.assertEqual(result.get("reason_code"), "gate_tampered_repository", result)
         self.assertTrue(any(name.startswith("refs:") for name in result["details"]["changed"]), result)
         self.assert_not_integrated("T-A")
+
+    def test_tampering_at_verification_time_never_reaches_integration(self) -> None:
+        """Through the public flow: the same planting command run at VERIFICATION (in the leased
+        worktree, which has a `.git` link file) fails verification with gate_tampered_repository,
+        so the candidate never becomes integration_ready and `integrate` refuses it. The tamper
+        audit itself is Lane A's (scheduler.verify_candidate); this asserts the end-to-end effect."""
+        hook = f"{self.git_dir}/hooks/post-checkout"
+        plant = f'if [ -e .git ]; then printf "#!/bin/sh\\n" > {hook}; chmod +x {hook}; fi; true'
+        candidate = self.lab.candidate("T-A", {"docs/a.txt": "a\n"}, checks=(plant,), review=False)
+
+        self.assertEqual(self.lab.state("T-A"), "repair_required")
+        evidence = json.loads(self.lab.store.scalar(
+            "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
+            (f"verification:T-A:{candidate.attempt_id}",),
+        ))
+        self.assertIs(evidence["passed"], False)
+        self.assertEqual(evidence["repository_tamper"]["reason_code"], "gate_tampered_repository")
+        self.assertIn("hooks/post-checkout", evidence["repository_tamper"]["changed"])
+        os.unlink(hook)  # a human removes what the check planted
+
+        result = integrate("T-A", store=self.lab.store)
+
+        self.assertEqual(result["outcome"], "refused", result)
+        self.assertEqual(result["reason_code"], "task_not_integration_ready")
+        self.assertIsNone(self.lab.branch_head())
+        self.assertEqual(self.lab.artifacts("integration-record", "T-A"), [])
 
     def test_filter_driver_present_before_the_run_is_neutralised_and_never_executed(self) -> None:
         """Planted by a process the integrator does not control (e.g. the candidate's own verification
