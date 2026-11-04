@@ -1,0 +1,176 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "P0-FWD-001",
+    "work_package_id": "P0-FWD",
+    "contract_version": 2,
+    "contract_hash": "bf629ee90800904a7284d4543434666535531d654963ac48b113f3cdec8e404f",
+    "base_commit": "e4dbba9c76ee495e28cc1c403c6513011065749a",
+    "execution_mode": "control_plane",
+    "status": "proposed",
+    "created_at": "2026-10-12T04:44:24Z",
+    "expires_at": "2026-10-13T04:44:24Z"
+  },
+  "intent": {
+    "objective": "In a controller-created clean worktree at e4dbba9c76ee495e28cc1c403c6513011065749a, materialize only the ten governance v2 target files and one non-authoritative capture-evidence file, then return a fenced candidate commit.",
+    "rationale": "The coordinator-approved dirty governance delta must remain untouched while a separately leased candidate captures its exact approved bytes with deterministic evidence.",
+    "non_goals": [
+      "Do not call governance apply, consume or issue an approval, access key material, or reuse the expired/consumed governance approval.",
+      "Do not modify product Swift, UI, invariants, protected tests, documents, ADRs, routing, canonical task registration, gates, proposals, approvals, or policy meaning.",
+      "Do not refresh fixtures or contexts; that is a distinct proposed follow-up after the candidate commit."
+    ],
+    "acceptance_behavior": [
+      "Exactly these writable paths change: the ten approved target files and agent-system/work/P0/evidence/governance-capture.json.",
+      "The ten-target diff SHA-256 equals bffc580350dc7c8375dfd1e1bed821a1c691aad6d840b4a8fe87b008a16ce602.",
+      "The candidate records proposal ID P0-GOVERNANCE-CHANGESET-2026-10-11-V2, canonical proposal hash 188264877cb5648faf7e710ccbbbbdad622af3b0f7ea28640c05bbeecdbb00b1, raw proposal hash 24110dc9ad9aa55cf190a46c2a58455b19ef3d25fd7a8621dcf78e74bc5eae31, and source base commit without asserting governance execution.",
+      "If no immutable, controller-supplied byte source is available in the leased context, stop before modifying target files and return blocked evidence."
+    ],
+    "relevant_decisions": [
+      "ADR-0003",
+      "ADR-0005"
+    ]
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "governance-capture:approved-targets-v2@1"
+    ],
+    "integration_order": 1,
+    "invalidation_triggers": [
+      "The base commit is not e4dbba9c76ee495e28cc1c403c6513011065749a.",
+      "The governance v2 proposal canonical hash, raw hash, target diff hash, or source-byte capture changes.",
+      "The semantic-lock source changes before dispatch."
+    ]
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "agent-system/roles/complex-implementer.md",
+      "agent-system/policies/permissions.json",
+      "agent-system/policies/semantic-locks.json",
+      "agent-system/work/P0/proposals/governance-change-set-v2.json",
+      "agent-system/work/P0/approvals/P0-GOVERNANCE-CHANGESET-2026-10-11-V2-schema_commitment-renewed.json",
+      "agent-system/schemas/task-contract.schema.json",
+      "agent-system/schemas/implementation-manifest.schema.json",
+      "agent-system/schemas/work-package.schema.json",
+      "agent-system/schemas/human-approval.schema.json",
+      "agent-system/policies/approval-policy.json",
+      "agent-system/templates/task-contract.json",
+      "agent-system/templates/implementation-manifest.json",
+      "agent-system/templates/work-package.json",
+      "agent-system/templates/human-approval.json",
+      "tools/agentctl/agentctl/validate.py"
+    ],
+    "writable_paths": [
+      "agent-system/schemas/task-contract.schema.json",
+      "agent-system/schemas/implementation-manifest.schema.json",
+      "agent-system/schemas/work-package.schema.json",
+      "agent-system/schemas/human-approval.schema.json",
+      "agent-system/policies/approval-policy.json",
+      "agent-system/templates/task-contract.json",
+      "agent-system/templates/implementation-manifest.json",
+      "agent-system/templates/work-package.json",
+      "agent-system/templates/human-approval.json",
+      "tools/agentctl/agentctl/validate.py",
+      "agent-system/work/P0/evidence/governance-capture.json"
+    ],
+    "prohibited_paths": [
+      "docs/*",
+      "CashBooks/*",
+      "Tests/*",
+      "tools/agentctl/tests/*",
+      "agent-system/work/P0/proposals/*",
+      "agent-system/work/P0/approvals/*",
+      "agent-system/work/P0/gates/*",
+      "agent-system/work/P0/tasks/*",
+      "agent-system/routing/*",
+      "agent-system/policies/invariants.json"
+    ],
+    "semantic_locks": [
+      "schema:agent-artifacts-v1"
+    ]
+  },
+  "routing": {
+    "capability_class": "complex_implementation",
+    "complexity": "high",
+    "risk": "high",
+    "minimum_reviewer_class": "verifier",
+    "required_skills": [],
+    "preferred_worker": "openai/gpt-5.6-terra",
+    "required_provider_diversity": true
+  },
+  "permissions": {
+    "tool_allowlist": [
+      "read",
+      "search",
+      "edit",
+      "write",
+      "shell"
+    ],
+    "command_allowlist": [
+      "read",
+      "test",
+      "git_read",
+      "git_write_worktree"
+    ],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "none",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "sandboxed_tools",
+    "required_human_approval_action": "schema_commitment"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "git diff --check",
+      "git diff --name-only e4dbba9c76ee495e28cc1c403c6513011065749a",
+      "git diff --no-ext-diff --binary e4dbba9c76ee495e28cc1c403c6513011065749a -- agent-system/schemas/task-contract.schema.json agent-system/schemas/implementation-manifest.schema.json agent-system/schemas/work-package.schema.json agent-system/schemas/human-approval.schema.json agent-system/policies/approval-policy.json agent-system/templates/task-contract.json agent-system/templates/implementation-manifest.json agent-system/templates/work-package.json agent-system/templates/human-approval.json tools/agentctl/agentctl/validate.py | shasum -a 256",
+      "PYTHONPATH=tools/agentctl python3 -m agentctl hash --json agent-system/work/P0/proposals/governance-change-set-v2.json"
+    ],
+    "behavioral_requirements": [
+      "No command makes a network request, accesses a secret, invokes approval issuance or consumption, or invokes governance apply.",
+      "No git command resets, cleans, checks out, rebases, merges, stashes, or alters any path outside the declared worktree and write set.",
+      "The implementation manifest echoes the issued lease ID, epoch, fencing token, contract hash, context hash, and result commit."
+    ],
+    "protected_checks": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "agent-system/work/P0/evidence/governance-capture.json"
+    ],
+    "definition_of_done": [
+      "An independent verifier confirms the exact allowed path set and approved diff hash from the trusted integration base.",
+      "A provider-distinct reviewer returns a no-blocking-finding verdict, and the integrator records an unchanged candidate patch.",
+      "No phase gate, approval, or schema-commitment authority is claimed by this proposal or candidate."
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 1,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 1,
+    "wall_clock_class": "short",
+    "token_class": "small",
+    "tool_call_ceiling": 24,
+    "context_size_ceiling": 20000
+  },
+  "escalation": {
+    "local_repair_conditions": [
+      "One correction is permitted only for a malformed worker manifest before candidate ingestion."
+    ],
+    "capability_escalation_conditions": [
+      "Do not capability-escalate this bounded package; return blocked or replan-required evidence."
+    ],
+    "replan_conditions": [
+      "No immutable source-byte capture is available in the leased context.",
+      "The required target diff or any proposed target hash differs from its binding.",
+      "The controller cannot create an isolated worktree at the bound base commit."
+    ],
+    "architecture_escalation_conditions": [
+      "The approval-reference hash cycle or missing provider-diversity enforcement requires a control-plane design decision."
+    ],
+    "human_approval_conditions": [
+      "Before any schema/policy target write, a fresh schema_commitment approval must be sealed, registered, unexpired, unconsumed, and bound to this exact final task contract under an implementable sequencing mechanism."
+    ]
+  }
+}

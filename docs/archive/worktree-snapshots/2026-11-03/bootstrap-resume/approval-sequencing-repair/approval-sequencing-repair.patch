@@ -1,0 +1,327 @@
+diff --git a/tools/agentctl/agentctl/approval.py b/tools/agentctl/agentctl/approval.py
+--- a/tools/agentctl/agentctl/approval.py
++++ b/tools/agentctl/agentctl/approval.py
+@@ -505,6 +505,14 @@
+         )
+ 
+         def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
++            existing = connection.execute(
++                "SELECT 1 FROM artifacts WHERE artifact_id = ? LIMIT 1",
++                (approval_id,),
++            ).fetchone()
++            if existing is not None:
++                raise ApprovalRejected(
++                    "approval_id_collision", "approval identifier is already registered", approval_id=approval_id
++                )
+             connection.execute(
+                 "INSERT INTO artifacts(artifact_id, artifact_type, content_hash, path, "
+                 "integrable, payload_json) VALUES (?, 'human-approval', ?, ?, 1, ?)",
+
+diff --git a/tools/agentctl/agentctl/commands/approve.py b/tools/agentctl/agentctl/commands/approve.py
+--- a/tools/agentctl/agentctl/commands/approve.py
++++ b/tools/agentctl/agentctl/commands/approve.py
+@@ -8,7 +8,9 @@
+ import hashlib
+ import json
+ import re
++import sqlite3
+ import sys
++import uuid
+ from collections.abc import Callable
+ from pathlib import Path
+ 
+@@ -43,6 +45,7 @@
+     parser.add_argument("--scope")
+     parser.add_argument("--auth-method")
+     parser.add_argument("--preflight", action="store_true")
++    parser.add_argument("--approval-id")
+     parser.add_argument("--out")
+     return parser
+ 
+@@ -69,6 +72,7 @@
+     scope: str,
+     reason: str,
+     policy: dict,
++    approval_id: str | None = None,
+     requested_authentication_method: str | None = None,
+     authentication_adapter: LocalAuthenticationAdapter | None = None,
+     seal_key_loader: Callable[[], bytes] | None = None,
+@@ -105,6 +109,7 @@
+         scope=scope,
+         reason=reason,
+         authentication_method=method,
++        approval_id=approval_id,
+     )
+     binding = (
+         provisional["approval_id"],
+@@ -165,6 +170,54 @@
+ _TARGET_HASH = re.compile(r"^[0-9a-f]{64}$")
+ 
+ 
++def _validate_prebound_approval_id(value: str | None) -> str | None:
++    """Accept one canonical UUID as a future approval identity, not an approval."""
++    if value is None:
++        return None
++    try:
++        parsed = uuid.UUID(value)
++    except (AttributeError, ValueError) as exc:
++        raise ApprovalRejected(
++            "approval_input_invalid", "approval_id must be a canonical UUID"
++        ) from exc
++    if str(parsed) != value:
++        raise ApprovalRejected(
++            "approval_input_invalid", "approval_id must be a canonical UUID"
++        )
++    return value
++
++
++def _assert_prebound_approval_id_unused(database: Path, approval_id: str) -> None:
++    """Read the event store without initializing it; this never reserves an ID."""
++    if not database.exists():
++        return
++    try:
++        with sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True) as connection:
++            existing = connection.execute(
++                "SELECT 1 FROM artifacts WHERE artifact_id = ? LIMIT 1", (approval_id,)
++            ).fetchone()
++    except sqlite3.Error as exc:
++        raise ApprovalRejected(
++            "approval_state_unreadable", "approval state cannot be read before authentication"
++        ) from exc
++    if existing is not None:
++        raise ApprovalRejected(
++            "approval_id_collision", "approval identifier is already registered", approval_id=approval_id
++        )
++
++
++def _write_prebound_record(destination: Path, record: dict) -> None:
++    """Write the post-registration mirror without overwriting any existing file."""
++    destination.parent.mkdir(parents=True, exist_ok=True)
++    try:
++        with destination.open("x", encoding="utf-8") as handle:
++            handle.write(json.dumps(record, sort_keys=True, indent=2) + "\n")
++    except FileExistsError as exc:
++        raise ApprovalRejected(
++            "approval_output_exists", "approval output already exists"
++        ) from exc
++
++
+ def _load_json(path: Path) -> dict:
+     try:
+         value = json.loads(path.read_text(encoding="utf-8"))
+@@ -192,6 +245,7 @@
+     scope = args.scope or args.reason
+     if not scope.strip() or any(character in scope for character in "\r\n\x00"):
+         raise ApprovalRejected("approval_input_invalid", "scope is malformed")
++    approval_id = _validate_prebound_approval_id(args.approval_id)
+     method = authentication_method_for_action(args.action, policy)
+     if args.auth_method is not None and args.auth_method != method:
+         raise ApprovalRejected(
+@@ -218,7 +272,10 @@
+                 "approval_output_outside_repository",
+                 "approval artifact output must be in the repository",
+             ) from exc
+-    return {"method": method, "scope": scope}
++    result = {"method": method, "scope": scope}
++    if approval_id is not None:
++        result["approval_id"] = approval_id
++    return result
+ 
+ 
+ def _load_local_auth_seal_key(config, principal: dict) -> bytes:
+@@ -247,6 +304,18 @@
+     if args.preflight:
+         print(json.dumps({"status": "ok", **validated}, sort_keys=True))
+         return 0
++    prebound_approval_id = validated.get("approval_id")
++    destination = Path(args.out).expanduser().resolve() if args.out else _output_path(
++        config.repo_root, args.action, args.target_id
++    )
++    if prebound_approval_id is not None:
++        if destination.exists():
++            raise ApprovalRejected(
++                "approval_output_exists", "approval output already exists"
++            )
++        _assert_prebound_approval_id_unused(
++            config.runtime_dir / "agentctl.sqlite3", prebound_approval_id
++        )
+     if not sys.stdin.isatty():
+         raise ApprovalRejected(
+             "approval_non_tty", "human approval issuance requires an interactive TTY"
+@@ -284,6 +350,7 @@
+             reason=args.reason,
+             policy=policy,
+             requested_authentication_method=args.auth_method,
++            approval_id=prebound_approval_id,
+             principal_policy=principal_policy,
+         )
+         key_for_registration = loaded_key[0]
+@@ -322,6 +389,7 @@
+             reason=args.reason,
+             policy=policy,
+             requested_authentication_method=args.auth_method,
++            approval_id=prebound_approval_id,
+             principal_policy=principal_policy,
+         )
+         key_for_registration = key
+@@ -334,10 +402,19 @@
+         raise ApprovalRejected(
+             "approval_output_outside_repository", "approval artifact output must be in the repository"
+         ) from exc
+-    destination.parent.mkdir(parents=True, exist_ok=True)
+-    destination.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+-    ApprovalManager(EventStore(), key=key_for_registration).register(
+-        record, path=destination.relative_to(config.repo_root).as_posix()
+-    )
++    manager = ApprovalManager(EventStore(), key=key_for_registration)
++    if prebound_approval_id is not None:
++        # The event-store transaction is the authoritative race barrier. The
++        # pre-authentication read above is advisory and intentionally reserves nothing.
++        manager.register(
++            record, path=destination.relative_to(config.repo_root).as_posix()
++        )
++        _write_prebound_record(destination, record)
++    else:
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        destination.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
++        manager.register(
++            record, path=destination.relative_to(config.repo_root).as_posix()
++        )
+     print(destination.relative_to(config.repo_root).as_posix())
+     return 0
+
+diff --git a/tools/agentctl/tests/test_approval_prebind.py b/tools/agentctl/tests/test_approval_prebind.py
+new file mode 100644
+--- /dev/null
++++ b/tools/agentctl/tests/test_approval_prebind.py
+@@ -0,0 +1,130 @@
++"""Synthetic regression tests for prebound approval identities."""
++
++from __future__ import annotations
++
++import json
++import pathlib
++import subprocess
++import tempfile
++import unittest
++from datetime import datetime, timezone
++
++from agentctl.approval import (
++    SYNTHETIC_FIXTURE_KEY,
++    ApprovalManager,
++    ApprovalRejected,
++    build_approval,
++    seal_approval,
++)
++from agentctl.commands.approve import _assert_prebound_approval_id_unused
++from agentctl.scheduler import Scheduler, TaskSpec, task_approval_scope
++from agentctl.store import EventStore
++from agentctl.validate import _task_contract_hash
++
++
++def _repo_root() -> pathlib.Path:
++    return pathlib.Path(
++        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
++    )
++
++
++class PreboundApprovalIdentityTests(unittest.TestCase):
++    root = _repo_root()
++    approval_id = "2f4dca7b-3e95-49eb-92c6-23b9691d0301"
++
++    def setUp(self) -> None:
++        self.temporary = tempfile.TemporaryDirectory()
++        self.database = pathlib.Path(self.temporary.name) / "runtime.sqlite3"
++        self.store = EventStore(self.database, repository_root=self.root)
++        self.policy = {"tiers": {"schema_commitment": ["local_authentication"]}}
++        self.approvals = ApprovalManager(
++            self.store, key=SYNTHETIC_FIXTURE_KEY, policy=self.policy
++        )
++
++    def tearDown(self) -> None:
++        self.temporary.cleanup()
++
++    def _spec_and_record(self, *, nonce: str = "a" * 32) -> tuple[TaskSpec, dict]:
++        contract = {
++            "artifact_type": "task-contract",
++            "identity": {"task_id": "P0-FWD-001", "contract_hash": ""},
++            "permissions": {"human_approval_ref": self.approval_id},
++        }
++        contract_hash = _task_contract_hash(contract)
++        contract["identity"]["contract_hash"] = contract_hash
++        base_commit = subprocess.check_output(
++            ["git", "rev-parse", "HEAD"], cwd=self.root, text=True
++        ).strip()
++        spec = TaskSpec(
++            task_id="P0-FWD-001",
++            work_package_id="P0-FWD",
++            contract_hash=contract_hash,
++            context_hash="c" * 64,
++            base_commit=base_commit,
++            capability_class="complex_implementation",
++            risk="high",
++            enforcement_class="sandboxed_tools",
++            writable_paths=("agent-system/work/P0/evidence/governance-capture.json",),
++            prohibited_paths=("docs/*",),
++            semantic_locks={},
++            maximum_attempts=1,
++            maximum_artifact_corrections=0,
++            human_approval_ref=self.approval_id,
++            human_approval_action="schema_commitment",
++        )
++        approval = build_approval(
++            principal="synthetic-principal",
++            machine_identity="synthetic-machine",
++            action="schema_commitment",
++            target_type="task-contract",
++            target_id=spec.task_id,
++            target_hash=contract_hash,
++            scope=task_approval_scope(spec),
++            reason="Synthetic exact prebound approval",
++            authentication_method="local_authentication",
++            approval_id=self.approval_id,
++            nonce=nonce,
++            now=datetime.now(timezone.utc),
++        )
++        return spec, seal_approval(approval, SYNTHETIC_FIXTURE_KEY)
++
++    def test_prebound_id_hashes_before_strong_synthetic_approval_and_dispatch(self) -> None:
++        _assert_prebound_approval_id_unused(self.database, self.approval_id)
++        spec, approval = self._spec_and_record()
++        self.assertEqual(approval["approval_id"], self.approval_id)
++        self.assertEqual(approval["target_hash"], spec.contract_hash)
++        self.assertEqual(approval["scope"], task_approval_scope(spec))
++        self.approvals.register(approval)
++        scheduler = Scheduler(self.store, approval_manager=self.approvals)
++        scheduler.register_task(spec)
++        scheduler.dispatch(spec.task_id, worker_identity="synthetic-worker")
++        stored = json.loads(
++            self.store.rows(
++                "SELECT payload_json FROM artifacts WHERE artifact_id = ?", (self.approval_id,)
++            )[0]["payload_json"]
++        )
++        self.assertIsNotNone(stored["consumed_at"])
++
++    def test_existing_id_is_rejected_before_authentication_and_cannot_be_reregistered(self) -> None:
++        spec, first = self._spec_and_record(nonce="a" * 32)
++        self.approvals.register(first)
++        original = self.store.rows(
++            "SELECT payload_json FROM artifacts WHERE artifact_id = ?", (self.approval_id,)
++        )[0]["payload_json"]
++        with self.assertRaises(ApprovalRejected) as raised:
++            _assert_prebound_approval_id_unused(self.database, self.approval_id)
++        self.assertEqual(raised.exception.code, "approval_id_collision")
++        _, second = self._spec_and_record(nonce="b" * 32)
++        with self.assertRaises(ApprovalRejected) as raised:
++            self.approvals.register(second)
++        self.assertEqual(raised.exception.code, "approval_id_collision")
++        self.assertEqual(
++            self.store.rows(
++                "SELECT payload_json FROM artifacts WHERE artifact_id = ?", (self.approval_id,)
++            )[0]["payload_json"],
++            original,
++        )
++
++
++if __name__ == "__main__":
++    unittest.main()

@@ -1,0 +1,36 @@
+{
+  "acceptance_summary": [
+    "A later leased candidate starts from clean commit e4dbba9c76ee495e28cc1c403c6513011065749a and changes only the eleven declared paths.",
+    "The candidate reproduces the approved ten-target diff SHA-256 bffc580350dc7c8375dfd1e1bed821a1c691aad6d840b4a8fe87b008a16ce602 and records non-authoritative capture evidence.",
+    "No governance approval is applied, consumed, renewed, or reused by the candidate."
+  ],
+  "artifact_type": "work-package",
+  "bootstrap_phase": false,
+  "created_at": "2026-10-12T04:44:24Z",
+  "deliverables": [
+    "agent-system/schemas/task-contract.schema.json",
+    "agent-system/schemas/implementation-manifest.schema.json",
+    "agent-system/schemas/work-package.schema.json",
+    "agent-system/schemas/human-approval.schema.json",
+    "agent-system/policies/approval-policy.json",
+    "agent-system/templates/task-contract.json",
+    "agent-system/templates/implementation-manifest.json",
+    "agent-system/templates/work-package.json",
+    "agent-system/templates/human-approval.json",
+    "tools/agentctl/agentctl/validate.py",
+    "agent-system/work/P0/evidence/governance-capture.json"
+  ],
+  "depends_on": [],
+  "initial_capability_class": "complex_implementation",
+  "objective": "Capture the already-approved governance target bytes in one clean, isolated, independently reviewed candidate without re-executing governance authority.",
+  "owning_planner_role": "work_package_planning",
+  "phase_id": "P0",
+  "plan_hash": "ef128d6efedcb61618559d8adc115e554aa9fece7aa0384e5cfefa2474084b4c",
+  "schema_version": 1,
+  "semantic_locks": [
+    "schema:agent-artifacts-v1"
+  ],
+  "status": "proposed",
+  "title": "Forward capture of approved governance bytes",
+  "work_package_id": "P0-FWD"
+}

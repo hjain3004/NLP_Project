@@ -1,0 +1,18 @@
+{
+  "artifact_type": "work-package",
+  "work_package_id": "P0-APR",
+  "schema_version": 1,
+  "phase_id": "P0",
+  "title": "Approval identity prebinding repair",
+  "objective": "Repair the approval-ID sequencing deadlock with one bounded, tested control-plane code change.",
+  "deliverables": ["tools/agentctl/agentctl/approval.py", "tools/agentctl/agentctl/commands/approve.py", "tools/agentctl/tests/test_approval_prebind.py"],
+  "depends_on": [],
+  "initial_capability_class": "complex_implementation",
+  "owning_planner_role": "work_package_planning",
+  "semantic_locks": ["schema:agent-artifacts-v1"],
+  "acceptance_summary": ["Prebound UUID is MAC-bound before contract hashing and remains non-authoritative until registered.", "Registration idempotency includes canonical candidate payload hash: byte-identical payload replay remains valid, while a distinct payload with the same ID reaches the transaction and fails approval_id_collision without a loser mirror.", "Recovery after an issued-but-unmirrored record is exact-binding, authenticated, read-only to authority, and exclusive-output."],
+  "status": "proposed",
+  "bootstrap_phase": false,
+  "created_at": "2026-10-12T07:19:35Z",
+  "plan_hash": "978d8e728a40959378a44bdcf4379604b3c62fffddd977d2c4a73fe0bce022ce"
+}

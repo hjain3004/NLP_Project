@@ -26,6 +26,14 @@ level 7.
 | `docs/ach.md`, `docs/ebook.md`, `docs/money1.md`, `docs/silo.md`, `docs/22365_19_Agents_v8.md` | **Research corpus** | Extracted text from external whitepapers and reports. Git-ignored. Never a requirement source. |
 | `docs/pics/**`, `docs/*.pdf` | **Research corpus** | Source PDFs and page images (~180 MB). Git-ignored. |
 
+## Preserved worktree drafts
+
+`worktree-snapshots/2026-11-03/` contains non-authoritative historical source snapshots from
+the two dirty P0 worktrees, retained to permit cleanup without losing proposed work. Its
+README records the base and original locations. These snapshots do not activate schemas,
+policies, approvals, contracts, tests, or execution instructions. Sensitive/local runtime
+evidence and generated hypothetical writeups remain in ignored local preservation storage.
+
 ## Context-pack policy
 
 Research-corpus documents are **excluded from context packs by default**. The context

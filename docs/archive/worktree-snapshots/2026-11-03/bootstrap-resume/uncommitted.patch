@@ -1,0 +1,1294 @@
+diff --git a/agent-system/policies/approval-policy.json b/agent-system/policies/approval-policy.json
+index e8ca989..67e976e 100644
+--- a/agent-system/policies/approval-policy.json
++++ b/agent-system/policies/approval-policy.json
+@@ -1,50 +1 @@
+-{
+-  "policy_id": "approval-policy-v1",
+-  "version": 1,
+-  "source": "docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md \u00a79.1.1 as amended by ADR-0005",
+-  "fallback_to_weaker_method": false,
+-  "unimplemented_tier_behaviour": "hard refusal; never downgraded",
+-  "seal": {
+-    "algorithm": "HMAC-SHA256",
+-    "field": "control_plane_seal",
+-    "is_digital_signature": false,
+-    "adr": "ADR-0005",
+-    "covered": "canonical_json(approval minus control_plane_seal, consumed_at, revoked_at)"
+-  },
+-  "tiers": {
+-    "phase_authorization": "interactive_tty_with_key_unlock",
+-    "work_package_authorization": "interactive_tty_with_key_unlock",
+-    "scope_authorization": "interactive_tty_with_key_unlock",
+-    "invariant_change": [
+-      "keychain_backed",
+-      "local_authentication"
+-    ],
+-    "protected_test_change": [
+-      "keychain_backed",
+-      "local_authentication"
+-    ],
+-    "schema_commitment": [
+-      "keychain_backed",
+-      "local_authentication"
+-    ],
+-    "destructive_operation": [
+-      "keychain_backed",
+-      "local_authentication"
+-    ],
+-    "release_or_public_claim": [
+-      "keychain_backed",
+-      "local_authentication"
+-    ]
+-  },
+-  "key_requirements": [
+-    "outside the repository and every worktree",
+-    "mode 0600",
+-    "fingerprint recorded in approval-principals.json",
+-    "mtime predates the first agentctl commit"
+-  ],
+-  "approve_command": {
+-    "requires_tty": true,
+-    "requires_key_unlock_passphrase": true,
+-    "scriptable": false
+-  }
+-}
++{"approve_command":{"requires_key_unlock_passphrase":true,"requires_tty":true,"scriptable":false},"fallback_to_weaker_method":false,"key_requirements":["outside the repository and every worktree","mode 0600","fingerprint recorded in approval-principals.json","mtime predates the first agentctl commit"],"policy_id":"approval-policy-v1","seal":{"adr":"ADR-0005","algorithm":"HMAC-SHA256","covered":"canonical_json(approval minus control_plane_seal, consumed_at, revoked_at)","field":"control_plane_seal","is_digital_signature":false},"source":"docs/superpowers/specs/2026-08-31-cashbooks-multi-model-agent-system-design.md §9.1.1 as amended by ADR-0005","tiers":{"consequential_adr_acceptance":["keychain_backed","local_authentication"],"destructive_operation":["keychain_backed","local_authentication"],"invariant_change":["keychain_backed","local_authentication"],"phase_authorization":"interactive_tty_with_key_unlock","protected_test_change":["keychain_backed","local_authentication"],"release_or_public_claim":["keychain_backed","local_authentication"],"schema_commitment":["keychain_backed","local_authentication"],"scope_authorization":"interactive_tty_with_key_unlock","work_package_authorization":"interactive_tty_with_key_unlock"},"unimplemented_tier_behaviour":"hard refusal; never downgraded","version":1}
+\ No newline at end of file
+diff --git a/agent-system/schemas/human-approval.schema.json b/agent-system/schemas/human-approval.schema.json
+index f79b370..379fc09 100644
+--- a/agent-system/schemas/human-approval.schema.json
++++ b/agent-system/schemas/human-approval.schema.json
+@@ -1,145 +1 @@
+-{
+-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+-  "$id": "human-approval.schema.json",
+-  "title": "Human approval",
+-  "description": "The only mechanism by which a human decision enters the system. See ADR-0005: the seal is an HMAC-SHA256 keyed MAC, not a digital signature.",
+-  "type": "object",
+-  "additionalProperties": false,
+-  "required": [
+-    "artifact_type",
+-    "approval_id",
+-    "schema_version",
+-    "approver_principal",
+-    "machine_identity",
+-    "authentication_method",
+-    "authenticated_at",
+-    "authorized_action",
+-    "target_type",
+-    "target_id",
+-    "target_hash",
+-    "scope",
+-    "reason",
+-    "issued_at",
+-    "expires_at",
+-    "single_use",
+-    "nonce",
+-    "control_plane_seal"
+-  ],
+-  "properties": {
+-    "artifact_type": {
+-      "const": "human-approval",
+-      "description": "Discriminator. agentctl selects the schema from this value."
+-    },
+-    "approval_id": {
+-      "type": "string"
+-    },
+-    "schema_version": {
+-      "type": "integer"
+-    },
+-    "approver_principal": {
+-      "type": "string"
+-    },
+-    "machine_identity": {
+-      "type": "string"
+-    },
+-    "authentication_method": {
+-      "type": "string",
+-      "enum": [
+-        "interactive_tty_with_key_unlock",
+-        "keychain_backed",
+-        "local_authentication"
+-      ]
+-    },
+-    "authenticated_at": {
+-      "type": "string",
+-      "format": "date-time"
+-    },
+-    "authorized_action": {
+-      "type": "string",
+-      "enum": [
+-        "phase_authorization",
+-        "work_package_authorization",
+-        "scope_authorization",
+-        "invariant_change",
+-        "protected_test_change",
+-        "schema_commitment",
+-        "destructive_operation",
+-        "release_or_public_claim"
+-      ]
+-    },
+-    "target_type": {
+-      "type": "string"
+-    },
+-    "target_id": {
+-      "type": "string"
+-    },
+-    "target_hash": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{64}$"
+-    },
+-    "scope": {
+-      "type": "string"
+-    },
+-    "conditions": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "reason": {
+-      "type": "string"
+-    },
+-    "issued_at": {
+-      "type": "string",
+-      "format": "date-time"
+-    },
+-    "expires_at": {
+-      "type": "string",
+-      "format": "date-time"
+-    },
+-    "single_use": {
+-      "type": "boolean"
+-    },
+-    "consumed_at": {
+-      "oneOf": [
+-        {
+-          "type": "string",
+-          "format": "date-time"
+-        },
+-        {
+-          "type": "null"
+-        }
+-      ]
+-    },
+-    "revoked_at": {
+-      "oneOf": [
+-        {
+-          "type": "string",
+-          "format": "date-time"
+-        },
+-        {
+-          "type": "null"
+-        }
+-      ]
+-    },
+-    "revocation_reason": {
+-      "oneOf": [
+-        {
+-          "type": "string"
+-        },
+-        {
+-          "type": "null"
+-        }
+-      ]
+-    },
+-    "nonce": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{32}$"
+-    },
+-    "control_plane_seal": {
+-      "type": "string",
+-      "description": "HMAC-SHA256, hex. Not a digital signature (ADR-0005).",
+-      "pattern": "^[0-9a-f]{64}$"
+-    }
+-  }
+-}
++{"$id":"human-approval.schema.json","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"description":"The only mechanism by which a human decision enters the system. See ADR-0005: the seal is an HMAC-SHA256 keyed MAC, not a digital signature.","properties":{"approval_id":{"type":"string"},"approver_principal":{"type":"string"},"artifact_type":{"const":"human-approval","description":"Discriminator. agentctl selects the schema from this value."},"authenticated_at":{"format":"date-time","type":"string"},"authentication_method":{"enum":["interactive_tty_with_key_unlock","keychain_backed","local_authentication"],"type":"string"},"authorized_action":{"enum":["phase_authorization","work_package_authorization","scope_authorization","invariant_change","protected_test_change","schema_commitment","destructive_operation","release_or_public_claim","consequential_adr_acceptance"],"type":"string"},"conditions":{"items":{"type":"string"},"type":"array"},"consumed_at":{"oneOf":[{"format":"date-time","type":"string"},{"type":"null"}]},"control_plane_seal":{"description":"HMAC-SHA256, hex. Not a digital signature (ADR-0005).","pattern":"^[0-9a-f]{64}$","type":"string"},"expires_at":{"format":"date-time","type":"string"},"issued_at":{"format":"date-time","type":"string"},"machine_identity":{"type":"string"},"nonce":{"pattern":"^[0-9a-f]{32}$","type":"string"},"reason":{"type":"string"},"revocation_reason":{"oneOf":[{"type":"string"},{"type":"null"}]},"revoked_at":{"oneOf":[{"format":"date-time","type":"string"},{"type":"null"}]},"schema_version":{"type":"integer"},"scope":{"type":"string"},"single_use":{"type":"boolean"},"target_hash":{"pattern":"^[0-9a-f]{64}$","type":"string"},"target_id":{"type":"string"},"target_type":{"type":"string"}},"required":["artifact_type","approval_id","schema_version","approver_principal","machine_identity","authentication_method","authenticated_at","authorized_action","target_type","target_id","target_hash","scope","reason","issued_at","expires_at","single_use","nonce","control_plane_seal"],"title":"Human approval","type":"object"}
+\ No newline at end of file
+diff --git a/agent-system/schemas/implementation-manifest.schema.json b/agent-system/schemas/implementation-manifest.schema.json
+index 6dfd368..f8d6200 100644
+--- a/agent-system/schemas/implementation-manifest.schema.json
++++ b/agent-system/schemas/implementation-manifest.schema.json
+@@ -1,207 +1 @@
+-{
+-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+-  "$id": "implementation-manifest.schema.json",
+-  "title": "Implementation manifest",
+-  "description": "What a worker returns. Prose may summarize it; prose never replaces it.",
+-  "type": "object",
+-  "additionalProperties": false,
+-  "required": [
+-    "artifact_type",
+-    "task_id",
+-    "attempt_id",
+-    "lease_id",
+-    "lease_epoch",
+-    "fencing_token",
+-    "worker_role",
+-    "provider",
+-    "model",
+-    "model_version",
+-    "contract_hash",
+-    "context_hash",
+-    "base_commit",
+-    "result_commit",
+-    "files_changed",
+-    "commands_executed",
+-    "acceptance_criteria_addressed",
+-    "assumptions",
+-    "decisions",
+-    "deviations",
+-    "discovered_dependencies",
+-    "unresolved_risks",
+-    "usage",
+-    "termination_reason"
+-  ],
+-  "properties": {
+-    "artifact_type": {
+-      "const": "implementation-manifest",
+-      "description": "Discriminator. agentctl selects the schema from this value."
+-    },
+-    "task_id": {
+-      "type": "string"
+-    },
+-    "attempt_id": {
+-      "type": "string"
+-    },
+-    "lease_id": {
+-      "type": "string"
+-    },
+-    "lease_epoch": {
+-      "type": "integer"
+-    },
+-    "fencing_token": {
+-      "type": "string"
+-    },
+-    "worker_role": {
+-      "type": "string"
+-    },
+-    "provider": {
+-      "type": "string"
+-    },
+-    "model": {
+-      "type": "string"
+-    },
+-    "model_version": {
+-      "type": "string"
+-    },
+-    "contract_hash": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{64}$"
+-    },
+-    "context_hash": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{64}$"
+-    },
+-    "base_commit": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{40}$"
+-    },
+-    "result_commit": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{40}$"
+-    },
+-    "files_changed": {
+-      "type": "array",
+-      "items": {
+-        "type": "object",
+-        "additionalProperties": false,
+-        "properties": {
+-          "path": {
+-            "type": "string",
+-            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+-            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+-          },
+-          "change_type": {
+-            "type": "string",
+-            "enum": [
+-              "added",
+-              "modified",
+-              "deleted",
+-              "renamed"
+-            ]
+-          }
+-        },
+-        "required": [
+-          "path",
+-          "change_type"
+-        ]
+-      }
+-    },
+-    "commands_executed": {
+-      "type": "array",
+-      "items": {
+-        "type": "object",
+-        "additionalProperties": false,
+-        "properties": {
+-          "command": {
+-            "type": "string"
+-          },
+-          "exit_code": {
+-            "type": "integer"
+-          },
+-          "duration_ms": {
+-            "type": "integer"
+-          },
+-          "log_ref": {
+-            "type": "string"
+-          }
+-        },
+-        "required": [
+-          "command",
+-          "exit_code",
+-          "duration_ms"
+-        ]
+-      }
+-    },
+-    "acceptance_criteria_addressed": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "assumptions": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "decisions": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "deviations": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "discovered_dependencies": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "unresolved_risks": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "usage": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "input_tokens": {
+-          "type": "integer"
+-        },
+-        "output_tokens": {
+-          "type": "integer"
+-        },
+-        "latency_ms": {
+-          "type": "integer"
+-        },
+-        "cost_usd": {
+-          "type": "number"
+-        }
+-      },
+-      "required": [
+-        "cost_usd",
+-        "input_tokens",
+-        "latency_ms",
+-        "output_tokens"
+-      ]
+-    },
+-    "termination_reason": {
+-      "type": "string",
+-      "enum": [
+-        "completed",
+-        "budget_exhausted",
+-        "blocked",
+-        "escalated",
+-        "canceled",
+-        "error"
+-      ]
+-    }
+-  }
+-}
++{"$id":"implementation-manifest.schema.json","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"description":"What a worker returns. Prose may summarize it; prose never replaces it.","properties":{"acceptance_criteria_addressed":{"items":{"type":"string"},"type":"array"},"artifact_type":{"const":"implementation-manifest","description":"Discriminator. agentctl selects the schema from this value."},"assumptions":{"items":{"type":"string"},"type":"array"},"attempt_id":{"type":"string"},"base_commit":{"pattern":"^[0-9a-f]{40}$","type":"string"},"commands_executed":{"items":{"additionalProperties":false,"properties":{"command":{"type":"string"},"duration_ms":{"type":"integer"},"exit_code":{"type":"integer"},"log_ref":{"type":"string"}},"required":["command","exit_code","duration_ms","log_ref"],"type":"object"},"type":"array"},"context_hash":{"pattern":"^[0-9a-f]{64}$","type":"string"},"contract_hash":{"pattern":"^[0-9a-f]{64}$","type":"string"},"decisions":{"items":{"type":"string"},"type":"array"},"deviations":{"items":{"type":"string"},"type":"array"},"discovered_dependencies":{"items":{"type":"string"},"type":"array"},"fencing_token":{"type":"string"},"files_changed":{"items":{"additionalProperties":false,"properties":{"change_type":{"enum":["added","modified","deleted","renamed"],"type":"string"},"path":{"description":"Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'.","pattern":"^[A-Za-z0-9._][A-Za-z0-9._/*-]*$","type":"string"}},"required":["path","change_type"],"type":"object"},"type":"array"},"lease_epoch":{"type":"integer"},"lease_id":{"type":"string"},"model":{"type":"string"},"model_version":{"type":"string"},"provider":{"type":"string"},"result_commit":{"pattern":"^[0-9a-f]{40}$","type":"string"},"task_id":{"type":"string"},"termination_reason":{"enum":["completed","budget_exhausted","blocked","escalated","canceled","error"],"type":"string"},"unresolved_risks":{"items":{"type":"string"},"type":"array"},"usage":{"additionalProperties":false,"properties":{"cost_usd":{"type":"number"},"input_tokens":{"type":"integer"},"latency_ms":{"type":"integer"},"output_tokens":{"type":"integer"}},"required":["cost_usd","input_tokens","latency_ms","output_tokens"],"type":"object"},"worker_role":{"type":"string"}},"required":["artifact_type","task_id","attempt_id","lease_id","lease_epoch","fencing_token","worker_role","provider","model","model_version","contract_hash","context_hash","base_commit","result_commit","files_changed","commands_executed","acceptance_criteria_addressed","assumptions","decisions","deviations","discovered_dependencies","unresolved_risks","usage","termination_reason"],"title":"Implementation manifest","type":"object"}
+\ No newline at end of file
+diff --git a/agent-system/schemas/task-contract.schema.json b/agent-system/schemas/task-contract.schema.json
+index cf47292..dfa8538 100644
+--- a/agent-system/schemas/task-contract.schema.json
++++ b/agent-system/schemas/task-contract.schema.json
+@@ -1,474 +1 @@
+-{
+-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+-  "$id": "task-contract.schema.json",
+-  "title": "Task contract",
+-  "description": "The immutable unit of dispatched work. Nine sections, all required.",
+-  "type": "object",
+-  "additionalProperties": false,
+-  "required": [
+-    "artifact_type",
+-    "identity",
+-    "intent",
+-    "dependencies",
+-    "scope",
+-    "routing",
+-    "permissions",
+-    "verification",
+-    "budgets",
+-    "escalation"
+-  ],
+-  "properties": {
+-    "artifact_type": {
+-      "const": "task-contract",
+-      "description": "Discriminator. agentctl selects the schema from this value."
+-    },
+-    "identity": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "task_id": {
+-          "type": "string"
+-        },
+-        "work_package_id": {
+-          "type": "string"
+-        },
+-        "contract_version": {
+-          "type": "integer"
+-        },
+-        "contract_hash": {
+-          "type": "string",
+-          "description": "sha256_of_json over this contract with contract_hash removed.",
+-          "pattern": "^[0-9a-f]{64}$"
+-        },
+-        "base_commit": {
+-          "oneOf": [
+-            {
+-              "type": "string",
+-              "pattern": "^[0-9a-f]{40}$"
+-            },
+-            {
+-              "const": "unbound"
+-            }
+-          ],
+-          "description": "'unbound' permitted only while status is 'proposed'."
+-        },
+-        "execution_mode": {
+-          "type": "string",
+-          "enum": [
+-            "control_plane",
+-            "bootstrap_retrospective"
+-          ],
+-          "description": "bootstrap_retrospective records intent only: no lease, attempt, or review is asserted."
+-        },
+-        "status": {
+-          "type": "string",
+-          "enum": [
+-            "proposed",
+-            "validated",
+-            "authorized",
+-            "active",
+-            "complete",
+-            "canceled"
+-          ]
+-        },
+-        "created_at": {
+-          "type": "string",
+-          "format": "date-time"
+-        },
+-        "expires_at": {
+-          "type": "string",
+-          "format": "date-time"
+-        }
+-      },
+-      "required": [
+-        "task_id",
+-        "work_package_id",
+-        "contract_version",
+-        "contract_hash",
+-        "base_commit",
+-        "execution_mode",
+-        "status",
+-        "created_at",
+-        "expires_at"
+-      ]
+-    },
+-    "intent": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "objective": {
+-          "type": "string",
+-          "description": "Exactly one objective."
+-        },
+-        "rationale": {
+-          "type": "string"
+-        },
+-        "non_goals": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "acceptance_behavior": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "relevant_decisions": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        }
+-      },
+-      "required": [
+-        "objective",
+-        "rationale",
+-        "non_goals",
+-        "acceptance_behavior",
+-        "relevant_decisions"
+-      ]
+-    },
+-    "dependencies": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "requires": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "consumes": {
+-          "type": "array",
+-          "items": {
+-            "type": "string",
+-            "pattern": "^[a-z][a-z0-9-]*:[a-z0-9-]+@[0-9]+$"
+-          }
+-        },
+-        "produces": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "integration_order": {
+-          "type": "integer"
+-        },
+-        "invalidation_triggers": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        }
+-      },
+-      "required": [
+-        "requires",
+-        "consumes",
+-        "produces",
+-        "integration_order",
+-        "invalidation_triggers"
+-      ]
+-    },
+-    "scope": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "readable_paths": {
+-          "type": "array",
+-          "items": {
+-            "type": "string",
+-            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+-            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+-          }
+-        },
+-        "writable_paths": {
+-          "type": "array",
+-          "items": {
+-            "type": "string",
+-            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+-            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+-          }
+-        },
+-        "prohibited_paths": {
+-          "type": "array",
+-          "items": {
+-            "type": "string",
+-            "pattern": "^[A-Za-z0-9._][A-Za-z0-9._/*-]*$",
+-            "description": "Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'."
+-          }
+-        },
+-        "semantic_locks": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "expected_change_shape": {
+-          "type": "string"
+-        }
+-      },
+-      "required": [
+-        "readable_paths",
+-        "writable_paths",
+-        "prohibited_paths",
+-        "semantic_locks"
+-      ]
+-    },
+-    "routing": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "capability_class": {
+-          "type": "string",
+-          "enum": [
+-            "architectural_authority",
+-            "work_package_planning",
+-            "complex_implementation",
+-            "standard_implementation",
+-            "mechanical_execution"
+-          ]
+-        },
+-        "complexity": {
+-          "type": "string",
+-          "enum": [
+-            "low",
+-            "medium",
+-            "high"
+-          ]
+-        },
+-        "risk": {
+-          "type": "string",
+-          "enum": [
+-            "low",
+-            "medium",
+-            "high",
+-            "critical"
+-          ]
+-        },
+-        "required_skills": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "preferred_worker": {
+-          "type": "string"
+-        },
+-        "minimum_reviewer_class": {
+-          "type": "string"
+-        },
+-        "required_provider_diversity": {
+-          "type": "boolean"
+-        }
+-      },
+-      "required": [
+-        "capability_class",
+-        "complexity",
+-        "risk",
+-        "minimum_reviewer_class"
+-      ]
+-    },
+-    "permissions": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "tool_allowlist": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "command_allowlist": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "network": {
+-          "type": "boolean",
+-          "default": false
+-        },
+-        "secret_access": {
+-          "const": false,
+-          "description": "No task contract grants secret access."
+-        },
+-        "may_modify_tests": {
+-          "type": "string",
+-          "enum": [
+-            "none",
+-            "task_owned_only",
+-            "protected_with_approval"
+-          ]
+-        },
+-        "destructive_commands": {
+-          "type": "boolean"
+-        },
+-        "external_side_effects": {
+-          "type": "boolean"
+-        },
+-        "enforcement_class": {
+-          "type": "string",
+-          "enum": [
+-            "proposal_only",
+-            "sandboxed_tools",
+-            "unsandboxed_tools"
+-          ],
+-          "description": "risk 'critical' forbids unsandboxed_tools (enforced in validate.py)."
+-        },
+-        "required_human_approval_action": {
+-          "type": "string"
+-        },
+-        "human_approval_ref": {
+-          "type": "string"
+-        }
+-      },
+-      "required": [
+-        "tool_allowlist",
+-        "command_allowlist",
+-        "network",
+-        "secret_access",
+-        "may_modify_tests",
+-        "destructive_commands",
+-        "external_side_effects",
+-        "enforcement_class"
+-      ]
+-    },
+-    "verification": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "deterministic_checks": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "behavioral_requirements": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "protected_checks": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "manual_checkpoints": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "expected_artifacts": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "definition_of_done": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        }
+-      },
+-      "required": [
+-        "deterministic_checks",
+-        "behavioral_requirements",
+-        "protected_checks",
+-        "expected_artifacts",
+-        "definition_of_done"
+-      ]
+-    },
+-    "budgets": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "maximum_attempts": {
+-          "type": "integer",
+-          "maximum": 3,
+-          "default": 3,
+-          "description": "Must be at least 1; the lower bound is enforced in validate.py because minimum is outside ADR-0003."
+-        },
+-        "maximum_repair_cycles": {
+-          "type": "integer",
+-          "maximum": 1,
+-          "default": 1,
+-          "description": "Must be at least 0; the lower bound is enforced in validate.py because minimum is outside ADR-0003."
+-        },
+-        "maximum_artifact_corrections": {
+-          "type": "integer",
+-          "maximum": 1,
+-          "default": 1,
+-          "description": "Must be at least 0; the lower bound is enforced in validate.py because minimum is outside ADR-0003."
+-        },
+-        "wall_clock_class": {
+-          "type": "string"
+-        },
+-        "token_class": {
+-          "type": "string"
+-        },
+-        "context_size_ceiling": {
+-          "type": "integer"
+-        },
+-        "tool_call_ceiling": {
+-          "type": "integer"
+-        }
+-      },
+-      "required": [
+-        "maximum_attempts",
+-        "maximum_repair_cycles",
+-        "maximum_artifact_corrections",
+-        "wall_clock_class",
+-        "token_class"
+-      ]
+-    },
+-    "escalation": {
+-      "type": "object",
+-      "additionalProperties": false,
+-      "properties": {
+-        "local_repair_conditions": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "capability_escalation_conditions": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "replan_conditions": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "architecture_escalation_conditions": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        },
+-        "human_approval_conditions": {
+-          "type": "array",
+-          "items": {
+-            "type": "string"
+-          }
+-        }
+-      },
+-      "required": [
+-        "local_repair_conditions",
+-        "capability_escalation_conditions",
+-        "replan_conditions",
+-        "architecture_escalation_conditions",
+-        "human_approval_conditions"
+-      ]
+-    }
+-  }
+-}
++{"$id":"task-contract.schema.json","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"description":"The immutable unit of dispatched work. Nine sections, all required.","properties":{"artifact_type":{"const":"task-contract","description":"Discriminator. agentctl selects the schema from this value."},"budgets":{"additionalProperties":false,"properties":{"context_size_ceiling":{"type":"integer"},"maximum_artifact_corrections":{"default":1,"description":"Must be at least 0; the lower bound is enforced in validate.py because minimum is outside ADR-0003.","maximum":1,"type":"integer"},"maximum_attempts":{"default":3,"description":"Must be at least 1; the lower bound is enforced in validate.py because minimum is outside ADR-0003.","maximum":3,"type":"integer"},"maximum_repair_cycles":{"default":1,"description":"Must be at least 0; the lower bound is enforced in validate.py because minimum is outside ADR-0003.","maximum":1,"type":"integer"},"token_class":{"type":"string"},"tool_call_ceiling":{"type":"integer"},"wall_clock_class":{"type":"string"}},"required":["maximum_attempts","maximum_repair_cycles","maximum_artifact_corrections","wall_clock_class","token_class"],"type":"object"},"dependencies":{"additionalProperties":false,"properties":{"consumes":{"items":{"pattern":"^[a-z][a-z0-9-]*:[a-z0-9-]+@[0-9]+$","type":"string"},"type":"array"},"integration_order":{"type":"integer"},"invalidation_triggers":{"items":{"type":"string"},"type":"array"},"produces":{"items":{"type":"string"},"type":"array"},"requires":{"items":{"type":"string"},"type":"array"}},"required":["requires","consumes","produces","integration_order","invalidation_triggers"],"type":"object"},"escalation":{"additionalProperties":false,"properties":{"architecture_escalation_conditions":{"items":{"type":"string"},"type":"array"},"capability_escalation_conditions":{"items":{"type":"string"},"type":"array"},"human_approval_conditions":{"items":{"type":"string"},"type":"array"},"local_repair_conditions":{"items":{"type":"string"},"type":"array"},"replan_conditions":{"items":{"type":"string"},"type":"array"}},"required":["local_repair_conditions","capability_escalation_conditions","replan_conditions","architecture_escalation_conditions","human_approval_conditions"],"type":"object"},"identity":{"additionalProperties":false,"properties":{"base_commit":{"description":"'unbound' permitted only while status is 'proposed'.","oneOf":[{"pattern":"^[0-9a-f]{40}$","type":"string"},{"const":"unbound"}]},"contract_hash":{"description":"sha256_of_json over this contract with contract_hash removed.","pattern":"^[0-9a-f]{64}$","type":"string"},"contract_version":{"type":"integer"},"created_at":{"format":"date-time","type":"string"},"execution_mode":{"description":"bootstrap_retrospective records intent only: no lease, attempt, or review is asserted.","enum":["control_plane","bootstrap_retrospective"],"type":"string"},"expires_at":{"format":"date-time","type":"string"},"status":{"enum":["proposed","validated","authorized","active","complete","canceled"],"type":"string"},"task_id":{"type":"string"},"work_package_id":{"type":"string"}},"required":["task_id","work_package_id","contract_version","contract_hash","base_commit","execution_mode","status","created_at","expires_at"],"type":"object"},"intent":{"additionalProperties":false,"properties":{"acceptance_behavior":{"items":{"type":"string"},"type":"array"},"non_goals":{"items":{"type":"string"},"type":"array"},"objective":{"description":"Exactly one objective.","type":"string"},"rationale":{"type":"string"},"relevant_decisions":{"items":{"type":"string"},"type":"array"}},"required":["objective","rationale","non_goals","acceptance_behavior","relevant_decisions"],"type":"object"},"permissions":{"additionalProperties":false,"properties":{"command_allowlist":{"items":{"type":"string"},"type":"array"},"destructive_commands":{"type":"boolean"},"enforcement_class":{"description":"risk 'critical' forbids unsandboxed_tools (enforced in validate.py).","enum":["proposal_only","sandboxed_tools","unsandboxed_tools"],"type":"string"},"external_side_effects":{"type":"boolean"},"human_approval_ref":{"type":"string"},"may_modify_tests":{"enum":["none","task_owned_only","protected_with_approval"],"type":"string"},"network":{"default":false,"type":"boolean"},"required_human_approval_action":{"type":"string"},"secret_access":{"const":false,"description":"No task contract grants secret access."},"tool_allowlist":{"items":{"type":"string"},"type":"array"}},"required":["tool_allowlist","command_allowlist","network","secret_access","may_modify_tests","destructive_commands","external_side_effects","enforcement_class"],"type":"object"},"routing":{"additionalProperties":false,"properties":{"capability_class":{"enum":["architectural_authority","work_package_planning","complex_implementation","standard_implementation","mechanical_execution"],"type":"string"},"complexity":{"enum":["low","medium","high"],"type":"string"},"minimum_reviewer_class":{"type":"string"},"preferred_worker":{"type":"string"},"required_provider_diversity":{"type":"boolean"},"required_skills":{"items":{"type":"string"},"type":"array"},"risk":{"enum":["low","medium","high","critical"],"type":"string"}},"required":["capability_class","complexity","risk","minimum_reviewer_class","required_skills","preferred_worker","required_provider_diversity"],"type":"object"},"scope":{"additionalProperties":false,"properties":{"expected_change_shape":{"type":"string"},"prohibited_paths":{"items":{"description":"Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'.","pattern":"^[A-Za-z0-9._][A-Za-z0-9._/*-]*$","type":"string"},"type":"array"},"readable_paths":{"items":{"description":"Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'.","pattern":"^[A-Za-z0-9._][A-Za-z0-9._/*-]*$","type":"string"},"type":"array"},"semantic_locks":{"items":{"type":"string"},"type":"array"},"writable_paths":{"items":{"description":"Normalized relative POSIX path or glob. No leading '/', no '..', no bare '**'.","pattern":"^[A-Za-z0-9._][A-Za-z0-9._/*-]*$","type":"string"},"type":"array"}},"required":["readable_paths","writable_paths","prohibited_paths","semantic_locks"],"type":"object"},"verification":{"additionalProperties":false,"properties":{"behavioral_requirements":{"items":{"type":"string"},"type":"array"},"definition_of_done":{"items":{"type":"string"},"type":"array"},"deterministic_checks":{"items":{"type":"string"},"type":"array"},"expected_artifacts":{"items":{"type":"string"},"type":"array"},"manual_checkpoints":{"items":{"type":"string"},"type":"array"},"protected_checks":{"items":{"type":"string"},"type":"array"}},"required":["deterministic_checks","behavioral_requirements","protected_checks","expected_artifacts","definition_of_done"],"type":"object"}},"required":["artifact_type","identity","intent","dependencies","scope","routing","permissions","verification","budgets","escalation"],"title":"Task contract","type":"object"}
+\ No newline at end of file
+diff --git a/agent-system/schemas/work-package.schema.json b/agent-system/schemas/work-package.schema.json
+index 6ca1e7d..d03ef7b 100644
+--- a/agent-system/schemas/work-package.schema.json
++++ b/agent-system/schemas/work-package.schema.json
+@@ -1,119 +1 @@
+-{
+-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+-  "$id": "work-package.schema.json",
+-  "title": "Work package",
+-  "description": "A cohesive subsystem or milestone slice, planned as a unit by the work_package_planning role.",
+-  "type": "object",
+-  "additionalProperties": false,
+-  "required": [
+-    "artifact_type",
+-    "work_package_id",
+-    "schema_version",
+-    "phase_id",
+-    "title",
+-    "objective",
+-    "deliverables",
+-    "depends_on",
+-    "initial_capability_class",
+-    "owning_planner_role",
+-    "semantic_locks",
+-    "acceptance_summary",
+-    "status",
+-    "bootstrap_phase",
+-    "created_at",
+-    "plan_hash"
+-  ],
+-  "properties": {
+-    "artifact_type": {
+-      "const": "work-package",
+-      "description": "Discriminator. agentctl selects the schema from this value."
+-    },
+-    "work_package_id": {
+-      "type": "string",
+-      "description": "e.g. P0-C"
+-    },
+-    "schema_version": {
+-      "type": "integer"
+-    },
+-    "phase_id": {
+-      "type": "string",
+-      "enum": [
+-        "P0",
+-        "P1",
+-        "P2",
+-        "P3"
+-      ]
+-    },
+-    "title": {
+-      "type": "string"
+-    },
+-    "objective": {
+-      "type": "string"
+-    },
+-    "deliverables": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "depends_on": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "initial_capability_class": {
+-      "type": "string",
+-      "enum": [
+-        "architectural_authority",
+-        "work_package_planning",
+-        "complex_implementation",
+-        "standard_implementation",
+-        "mechanical_execution"
+-      ]
+-    },
+-    "owning_planner_role": {
+-      "type": "string"
+-    },
+-    "semantic_locks": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "acceptance_summary": {
+-      "type": "array",
+-      "items": {
+-        "type": "string"
+-      }
+-    },
+-    "status": {
+-      "type": "string",
+-      "enum": [
+-        "proposed",
+-        "validated",
+-        "authorized",
+-        "in_progress",
+-        "complete",
+-        "canceled",
+-        "unassigned"
+-      ]
+-    },
+-    "bootstrap_phase": {
+-      "type": "boolean",
+-      "description": "True for P0's own construction. agentctl debug treats these as non-blocking until G0."
+-    },
+-    "reason": {
+-      "type": "string",
+-      "description": "Required explanation when status is 'unassigned' or 'canceled'."
+-    },
+-    "created_at": {
+-      "type": "string",
+-      "format": "date-time"
+-    },
+-    "plan_hash": {
+-      "type": "string",
+-      "pattern": "^[0-9a-f]{64}$"
+-    }
+-  }
+-}
++{"$id":"work-package.schema.json","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"allOf":[{"if":{"properties":{"status":{"enum":["unassigned","canceled"]}},"required":["status"]},"then":{"required":["reason"]}}],"description":"A cohesive subsystem or milestone slice, planned as a unit by the work_package_planning role.","properties":{"acceptance_summary":{"items":{"type":"string"},"type":"array"},"artifact_type":{"const":"work-package","description":"Discriminator. agentctl selects the schema from this value."},"bootstrap_phase":{"description":"True for P0's own construction. agentctl debug treats these as non-blocking until G0.","type":"boolean"},"created_at":{"format":"date-time","type":"string"},"deliverables":{"items":{"type":"string"},"type":"array"},"depends_on":{"items":{"type":"string"},"type":"array"},"initial_capability_class":{"enum":["architectural_authority","work_package_planning","complex_implementation","standard_implementation","mechanical_execution"],"type":"string"},"objective":{"type":"string"},"owning_planner_role":{"type":"string"},"phase_id":{"enum":["P0","P1","P2","P3"],"type":"string"},"plan_hash":{"pattern":"^[0-9a-f]{64}$","type":"string"},"reason":{"description":"Required explanation when status is 'unassigned' or 'canceled'.","type":"string"},"schema_version":{"type":"integer"},"semantic_locks":{"items":{"type":"string"},"type":"array"},"status":{"enum":["proposed","validated","authorized","in_progress","complete","canceled","unassigned"],"type":"string"},"title":{"type":"string"},"work_package_id":{"description":"e.g. P0-C","type":"string"}},"required":["artifact_type","work_package_id","schema_version","phase_id","title","objective","deliverables","depends_on","initial_capability_class","owning_planner_role","semantic_locks","acceptance_summary","status","bootstrap_phase","created_at","plan_hash"],"title":"Work package","type":"object"}
+\ No newline at end of file
+diff --git a/agent-system/templates/human-approval.json b/agent-system/templates/human-approval.json
+index 04e6d72..409f58a 100644
+--- a/agent-system/templates/human-approval.json
++++ b/agent-system/templates/human-approval.json
+@@ -1,26 +1 @@
+-{
+-  "artifact_type": "human-approval",
+-  "approval_id": "REPLACE:approval identifier",
+-  "schema_version": "REPLACE:integer schema version",
+-  "approver_principal": "REPLACE:authenticated principal",
+-  "machine_identity": "REPLACE:local machine identity",
+-  "authentication_method": "REPLACE:allowed authentication method",
+-  "authenticated_at": "REPLACE:RFC 3339 timestamp",
+-  "authorized_action": "REPLACE:allowed authorized action",
+-  "target_type": "REPLACE:target artifact type",
+-  "target_id": "REPLACE:target identifier",
+-  "target_hash": "REPLACE:64-character target SHA-256",
+-  "scope": "REPLACE:bounded approval scope",
+-  "conditions": [
+-    "REPLACE:approval condition or remove this entry"
+-  ],
+-  "reason": "REPLACE:human approval reason",
+-  "issued_at": "REPLACE:RFC 3339 timestamp",
+-  "expires_at": "REPLACE:RFC 3339 timestamp",
+-  "single_use": "REPLACE:true or false",
+-  "consumed_at": null,
+-  "revoked_at": null,
+-  "revocation_reason": null,
+-  "nonce": "REPLACE:32-character hexadecimal nonce",
+-  "control_plane_seal": "REPLACE:64-character HMAC-SHA256 seal"
+-}
++{"approval_id":"REPLACE:approval identifier","approver_principal":"REPLACE:authenticated principal","artifact_type":"human-approval","authenticated_at":"REPLACE:RFC 3339 timestamp","authentication_method":"REPLACE:allowed authentication method","authorized_action":"REPLACE:allowed authorized action, including consequential_adr_acceptance","conditions":["REPLACE:approval condition or remove this entry"],"consumed_at":null,"control_plane_seal":"REPLACE:64-character HMAC-SHA256 seal","expires_at":"REPLACE:RFC 3339 timestamp","issued_at":"REPLACE:RFC 3339 timestamp","machine_identity":"REPLACE:local machine identity","nonce":"REPLACE:32-character hexadecimal nonce","reason":"REPLACE:human approval reason","revocation_reason":null,"revoked_at":null,"schema_version":"REPLACE:integer schema version","scope":"REPLACE:bounded approval scope","single_use":"REPLACE:true or false","target_hash":"REPLACE:64-character target SHA-256","target_id":"REPLACE:target identifier","target_type":"REPLACE:target artifact type"}
+\ No newline at end of file
+diff --git a/agent-system/templates/implementation-manifest.json b/agent-system/templates/implementation-manifest.json
+index b13499b..984e34d 100644
+--- a/agent-system/templates/implementation-manifest.json
++++ b/agent-system/templates/implementation-manifest.json
+@@ -1,54 +1 @@
+-{
+-  "artifact_type": "implementation-manifest",
+-  "task_id": "REPLACE:task identifier",
+-  "attempt_id": "REPLACE:attempt identifier",
+-  "lease_id": "REPLACE:lease identifier",
+-  "lease_epoch": "REPLACE:integer lease epoch",
+-  "fencing_token": "REPLACE:opaque fencing token",
+-  "worker_role": "REPLACE:worker role",
+-  "provider": "REPLACE:provider",
+-  "model": "REPLACE:model",
+-  "model_version": "REPLACE:exact model version",
+-  "contract_hash": "REPLACE:64-character contract SHA-256",
+-  "context_hash": "REPLACE:64-character context SHA-256",
+-  "base_commit": "REPLACE:40-character base commit SHA",
+-  "result_commit": "REPLACE:40-character result commit SHA",
+-  "files_changed": [
+-    {
+-      "path": "REPLACE:changed relative path",
+-      "change_type": "REPLACE:added, modified, deleted, or renamed"
+-    }
+-  ],
+-  "commands_executed": [
+-    {
+-      "command": "REPLACE:executed command",
+-      "exit_code": "REPLACE:integer exit code",
+-      "duration_ms": "REPLACE:integer duration in milliseconds"
+-    }
+-  ],
+-  "acceptance_criteria_addressed": [
+-    "REPLACE:addressed criterion"
+-  ],
+-  "assumptions": [
+-    "REPLACE:assumption or remove this entry"
+-  ],
+-  "decisions": [
+-    "REPLACE:bounded decision or remove this entry"
+-  ],
+-  "deviations": [
+-    "REPLACE:deviation or remove this entry"
+-  ],
+-  "discovered_dependencies": [
+-    "REPLACE:dependency or remove this entry"
+-  ],
+-  "unresolved_risks": [
+-    "REPLACE:risk or remove this entry"
+-  ],
+-  "usage": {
+-    "input_tokens": "REPLACE:integer input token count",
+-    "output_tokens": "REPLACE:integer output token count",
+-    "latency_ms": "REPLACE:integer latency in milliseconds",
+-    "cost_usd": "REPLACE:numeric cost in USD"
+-  },
+-  "termination_reason": "REPLACE:allowed termination reason"
+-}
++{"acceptance_criteria_addressed":["REPLACE:addressed criterion"],"artifact_type":"implementation-manifest","assumptions":["REPLACE:assumption or remove this entry"],"attempt_id":"REPLACE:attempt identifier","base_commit":"REPLACE:40-character base commit SHA","commands_executed":[{"command":"REPLACE:executed command","duration_ms":"REPLACE:integer duration in milliseconds","exit_code":"REPLACE:integer exit code","log_ref":"REPLACE:relative immutable log reference"}],"context_hash":"REPLACE:64-character context SHA-256","contract_hash":"REPLACE:64-character contract SHA-256","decisions":["REPLACE:bounded decision or remove this entry"],"deviations":["REPLACE:deviation or remove this entry"],"discovered_dependencies":["REPLACE:dependency or remove this entry"],"fencing_token":"REPLACE:opaque fencing token","files_changed":[{"change_type":"REPLACE:added, modified, deleted, or renamed","path":"REPLACE:changed relative path"}],"lease_epoch":"REPLACE:integer lease epoch","lease_id":"REPLACE:lease identifier","model":"REPLACE:model","model_version":"REPLACE:exact model version","provider":"REPLACE:provider","result_commit":"REPLACE:40-character result commit SHA","task_id":"REPLACE:task identifier","termination_reason":"REPLACE:allowed termination reason","unresolved_risks":["REPLACE:risk or remove this entry"],"usage":{"cost_usd":"REPLACE:numeric cost in USD","input_tokens":"REPLACE:integer input token count","latency_ms":"REPLACE:integer latency in milliseconds","output_tokens":"REPLACE:integer output token count"},"worker_role":"REPLACE:worker role"}
+\ No newline at end of file
+diff --git a/agent-system/templates/task-contract.json b/agent-system/templates/task-contract.json
+index 87ec5eb..d8c0f84 100644
+--- a/agent-system/templates/task-contract.json
++++ b/agent-system/templates/task-contract.json
+@@ -1,117 +1 @@
+-{
+-  "artifact_type": "task-contract",
+-  "identity": {
+-    "task_id": "REPLACE:task identifier",
+-    "work_package_id": "REPLACE:work package identifier",
+-    "contract_version": "REPLACE:integer contract version",
+-    "contract_hash": "REPLACE:64-character canonical SHA-256",
+-    "base_commit": "REPLACE:40-character commit SHA or unbound while proposed",
+-    "execution_mode": "REPLACE:control_plane or bootstrap_retrospective",
+-    "status": "REPLACE:allowed status",
+-    "created_at": "REPLACE:RFC 3339 timestamp",
+-    "expires_at": "REPLACE:RFC 3339 expiry timestamp"
+-  },
+-  "intent": {
+-    "objective": "REPLACE:single task objective",
+-    "rationale": "REPLACE:why this task exists",
+-    "non_goals": [
+-      "REPLACE:explicit non-goal"
+-    ],
+-    "acceptance_behavior": [
+-      "REPLACE:observable accepted behavior"
+-    ],
+-    "relevant_decisions": [
+-      "REPLACE:accepted ADR or fixed decision identifier"
+-    ]
+-  },
+-  "dependencies": {
+-    "requires": [
+-      "REPLACE:prerequisite task identifier or remove this entry"
+-    ],
+-    "consumes": [
+-      "REPLACE:interface:name@version or remove this entry"
+-    ],
+-    "produces": [
+-      "REPLACE:produced interface or artifact"
+-    ],
+-    "integration_order": "REPLACE:integer topological tie-break",
+-    "invalidation_triggers": [
+-      "REPLACE:dependency or interface invalidation trigger"
+-    ]
+-  },
+-  "scope": {
+-    "readable_paths": [
+-      "REPLACE:normalized relative readable path"
+-    ],
+-    "writable_paths": [
+-      "REPLACE:normalized relative writable path"
+-    ],
+-    "prohibited_paths": [
+-      "REPLACE:normalized relative prohibited path"
+-    ],
+-    "semantic_locks": [
+-      "REPLACE:semantic lock or remove this entry"
+-    ]
+-  },
+-  "routing": {
+-    "capability_class": "REPLACE:capability class",
+-    "complexity": "REPLACE:low, medium, or high",
+-    "risk": "REPLACE:low, medium, high, or critical",
+-    "minimum_reviewer_class": "REPLACE:minimum reviewer capability class"
+-  },
+-  "permissions": {
+-    "tool_allowlist": [
+-      "REPLACE:allowed tool"
+-    ],
+-    "command_allowlist": [
+-      "REPLACE:allowed command or command class"
+-    ],
+-    "network": "REPLACE:false unless explicitly authorized",
+-    "secret_access": "REPLACE:false",
+-    "may_modify_tests": "REPLACE:none, task_owned_only, or protected_with_approval",
+-    "destructive_commands": "REPLACE:false unless human-approved",
+-    "external_side_effects": "REPLACE:false unless explicitly authorized",
+-    "enforcement_class": "REPLACE:proposal_only, sandboxed_tools, or unsandboxed_tools"
+-  },
+-  "verification": {
+-    "deterministic_checks": [
+-      "REPLACE:deterministic verification command"
+-    ],
+-    "behavioral_requirements": [
+-      "REPLACE:behavioral requirement"
+-    ],
+-    "protected_checks": [
+-      "REPLACE:protected check or remove this entry"
+-    ],
+-    "expected_artifacts": [
+-      "REPLACE:required output artifact"
+-    ],
+-    "definition_of_done": [
+-      "REPLACE:objective completion condition"
+-    ]
+-  },
+-  "budgets": {
+-    "maximum_attempts": "REPLACE:integer from 1 through 3",
+-    "maximum_repair_cycles": "REPLACE:integer 0 or 1",
+-    "maximum_artifact_corrections": "REPLACE:integer 0 or 1",
+-    "wall_clock_class": "REPLACE:wall-clock budget class",
+-    "token_class": "REPLACE:token budget class"
+-  },
+-  "escalation": {
+-    "local_repair_conditions": [
+-      "REPLACE:local repair condition"
+-    ],
+-    "capability_escalation_conditions": [
+-      "REPLACE:capability escalation condition"
+-    ],
+-    "replan_conditions": [
+-      "REPLACE:replanning condition"
+-    ],
+-    "architecture_escalation_conditions": [
+-      "REPLACE:architecture escalation condition"
+-    ],
+-    "human_approval_conditions": [
+-      "REPLACE:human approval condition"
+-    ]
+-  }
+-}
++{"artifact_type":"task-contract","budgets":{"maximum_artifact_corrections":"REPLACE:integer 0 or 1","maximum_attempts":"REPLACE:integer from 1 through 3","maximum_repair_cycles":"REPLACE:integer 0 or 1","token_class":"REPLACE:token budget class","wall_clock_class":"REPLACE:wall-clock budget class"},"dependencies":{"consumes":["REPLACE:interface:name@version or remove this entry"],"integration_order":"REPLACE:integer topological tie-break","invalidation_triggers":["REPLACE:dependency or interface invalidation trigger"],"produces":["REPLACE:produced interface or artifact"],"requires":["REPLACE:prerequisite task identifier or remove this entry"]},"escalation":{"architecture_escalation_conditions":["REPLACE:architecture escalation condition"],"capability_escalation_conditions":["REPLACE:capability escalation condition"],"human_approval_conditions":["REPLACE:human approval condition"],"local_repair_conditions":["REPLACE:local repair condition"],"replan_conditions":["REPLACE:replanning condition"]},"identity":{"base_commit":"REPLACE:40-character commit SHA or unbound while proposed","contract_hash":"REPLACE:64-character canonical SHA-256","contract_version":"REPLACE:integer contract version","created_at":"REPLACE:RFC 3339 timestamp","execution_mode":"REPLACE:control_plane or bootstrap_retrospective","expires_at":"REPLACE:RFC 3339 expiry timestamp","status":"REPLACE:allowed status","task_id":"REPLACE:task identifier","work_package_id":"REPLACE:work package identifier"},"intent":{"acceptance_behavior":["REPLACE:observable accepted behavior"],"non_goals":["REPLACE:explicit non-goal"],"objective":"REPLACE:single task objective","rationale":"REPLACE:why this task exists","relevant_decisions":["REPLACE:accepted ADR or fixed decision identifier"]},"permissions":{"command_allowlist":["REPLACE:allowed command or command class"],"destructive_commands":"REPLACE:false unless human-approved","enforcement_class":"REPLACE:proposal_only, sandboxed_tools, or unsandboxed_tools","external_side_effects":"REPLACE:false unless explicitly authorized","may_modify_tests":"REPLACE:none, task_owned_only, or protected_with_approval","network":"REPLACE:false unless explicitly authorized","secret_access":"REPLACE:false","tool_allowlist":["REPLACE:allowed tool"]},"routing":{"capability_class":"REPLACE:capability class","complexity":"REPLACE:low, medium, or high","minimum_reviewer_class":"REPLACE:minimum reviewer capability class","preferred_worker":"REPLACE:preferred worker","required_provider_diversity":"REPLACE:true or false","required_skills":["REPLACE:required skill"],"risk":"REPLACE:low, medium, high, or critical"},"scope":{"prohibited_paths":["REPLACE:normalized relative prohibited path"],"readable_paths":["REPLACE:normalized relative readable path"],"semantic_locks":["REPLACE:semantic lock or remove this entry"],"writable_paths":["REPLACE:normalized relative writable path"]},"verification":{"behavioral_requirements":["REPLACE:behavioral requirement"],"definition_of_done":["REPLACE:objective completion condition"],"deterministic_checks":["REPLACE:deterministic verification command"],"expected_artifacts":["REPLACE:required output artifact"],"protected_checks":["REPLACE:protected check or remove this entry"]}}
+\ No newline at end of file
+diff --git a/agent-system/templates/work-package.json b/agent-system/templates/work-package.json
+index 30cceba..3bc6d3a 100644
+--- a/agent-system/templates/work-package.json
++++ b/agent-system/templates/work-package.json
+@@ -1,26 +1 @@
+-{
+-  "artifact_type": "work-package",
+-  "work_package_id": "REPLACE:work package identifier",
+-  "schema_version": "REPLACE:integer schema version",
+-  "phase_id": "REPLACE:P0, P1, P2, or P3",
+-  "title": "REPLACE:work package title",
+-  "objective": "REPLACE:single work package objective",
+-  "deliverables": [
+-    "REPLACE:deliverable"
+-  ],
+-  "depends_on": [
+-    "REPLACE:dependency work package identifier or remove this entry"
+-  ],
+-  "initial_capability_class": "REPLACE:capability class",
+-  "owning_planner_role": "REPLACE:planner role",
+-  "semantic_locks": [
+-    "REPLACE:semantic lock or remove this entry"
+-  ],
+-  "acceptance_summary": [
+-    "REPLACE:objective acceptance summary"
+-  ],
+-  "status": "REPLACE:allowed status",
+-  "bootstrap_phase": "REPLACE:true only for bootstrap work",
+-  "created_at": "REPLACE:RFC 3339 timestamp",
+-  "plan_hash": "REPLACE:64-character approved-plan SHA-256"
+-}
++{"acceptance_summary":["REPLACE:objective acceptance summary"],"artifact_type":"work-package","bootstrap_phase":"REPLACE:true only for bootstrap work","created_at":"REPLACE:RFC 3339 timestamp","deliverables":["REPLACE:deliverable"],"depends_on":["REPLACE:dependency work package identifier or remove this entry"],"initial_capability_class":"REPLACE:capability class","objective":"REPLACE:single work package objective","owning_planner_role":"REPLACE:planner role","phase_id":"REPLACE:P0, P1, P2, or P3","plan_hash":"REPLACE:64-character approved-plan SHA-256","reason":"REPLACE:required when status is unassigned or canceled","schema_version":"REPLACE:integer schema version","semantic_locks":["REPLACE:semantic lock or remove this entry"],"status":"REPLACE:allowed status","title":"REPLACE:work package title","work_package_id":"REPLACE:work package identifier"}
+\ No newline at end of file
+diff --git a/tools/agentctl/agentctl/validate.py b/tools/agentctl/agentctl/validate.py
+index 0d9228c..5efc4a6 100644
+--- a/tools/agentctl/agentctl/validate.py
++++ b/tools/agentctl/agentctl/validate.py
+@@ -222,6 +222,8 @@ def _validate_local_semantics(artifact_type: str, document: Mapping[str, Any], r
+     approval_requirements: list[str] = []
+     if permissions["destructive_commands"]:
+         approval_requirements.append("destructive_operation")
++    if permissions.get("required_human_approval_action") == "consequential_adr_acceptance":
++        approval_requirements.append("consequential_adr_acceptance")
+     if permissions["may_modify_tests"] == "protected_with_approval":
+         approval_requirements.append("protected_test_change")
+     if approval_requirements:
