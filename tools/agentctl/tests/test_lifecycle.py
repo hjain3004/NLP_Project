@@ -682,6 +682,10 @@ class SupersedeFromIntegrationReadyTests(LabCase):
         self.assertEqual(self.store.scalar(
             "SELECT COUNT(*) FROM artifacts WHERE task_id = 'T-old' AND artifact_type = 'implementation-manifest'"), 1)
 
+    # The anomaly's premise is the OLD verify/integrate environment mismatch (a worktree with a .git link versus a
+    # .git-less copy). The one check-environment contract removes that mismatch by default, so this test selects
+    # the legacy runner explicitly (merge of lane A and lane B; the assertions are unchanged).
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})
     def test_demo_002_anomaly_a_rejected_task_is_retried_on_every_head_move_until_it_is_superseded(self) -> None:
         """Protects the demo anomaly: BEFORE supersession a rejected candidate re-enters the queue after the head moves; AFTER it, `integrate` never selects it and writes no further rejection."""
         # T-a passes `verify` (its worktree has a .git link) but fails at integration (a .git-less copy).
