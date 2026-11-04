@@ -37,6 +37,8 @@ from .scheduler import transition
 from .store import EventStore
 
 __all__ = [
+    "DEPENDENCY_CANCELED",
+    "QUEUE_INELIGIBLE_STATES",
     "IntegrationBusy",
     "IntegrationQueue",
     "IntegrationRefused",
@@ -62,6 +64,28 @@ __all__ = [
 
 INTEGRATION_LEASE_SECONDS = 1800
 _SENTINEL_ORDER = 1 << 62
+
+#: States whose tasks are never queue entries, however many rejection artifacts they carry. The queue
+#: admits only ``integration_ready``; this set names what that exclusion means for the lifecycle
+#: commands: a canceled (superseded) task must not be retried each time the integration head moves,
+#: and stale/blocked/replan/repair/escalated tasks must first return to ``integration_ready``
+#: through review and verification.
+QUEUE_INELIGIBLE_STATES = frozenset(
+    state.value
+    for state in (
+        TaskState.CANCELED,
+        TaskState.STALE,
+        TaskState.BLOCKED,
+        TaskState.REPLAN_REQUIRED,
+        TaskState.REPAIR_REQUIRED,
+        TaskState.ESCALATED,
+        TaskState.FAILED,
+    )
+)
+
+#: Parked reason for a candidate whose dependency was canceled: it can never become eligible by
+#: waiting, so retrying it on every head move would only write rejection artifacts.
+DEPENDENCY_CANCELED = "dependency_canceled"
 
 
 class IntegrationRefused(AgentctlError):
@@ -189,7 +213,7 @@ def build_queue(query: Query, branch_head: str | None) -> IntegrationQueue:
     }
     entries: list[QueueEntry] = []
     for task_id, row in tasks.items():
-        if row["state"] != TaskState.INTEGRATION_READY.value:
+        if row["state"] in QUEUE_INELIGIBLE_STATES or row["state"] != TaskState.INTEGRATION_READY.value:
             continue
         waiting = tuple(
             sorted(
@@ -205,7 +229,14 @@ def build_queue(query: Query, branch_head: str | None) -> IntegrationQueue:
                 integration_order=_integration_order(json.loads(row["payload_json"])),
                 topological_index=topological.get(task_id, len(topological)),
                 waiting_on=waiting,
-                parked_reason=_parked_reason(query, task_id, branch_head),
+                parked_reason=(
+                    DEPENDENCY_CANCELED
+                    if any(
+                        dependency in tasks and tasks[dependency]["state"] == TaskState.CANCELED.value
+                        for dependency in edges.get(task_id, ())
+                    )
+                    else _parked_reason(query, task_id, branch_head)
+                ),
             )
         )
     return IntegrationQueue(tuple(sorted(entries, key=lambda entry: entry.sort_key)))
