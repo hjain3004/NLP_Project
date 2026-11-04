@@ -1,0 +1,3 @@
+returned: /tmp/tmpizs4gb8h/alias-repo/sub/out.json
+helper accepts alias path (requirement 1): True
+caller-style destination.relative_to(repo_root) raises ValueError: '/tmp/tmpizs4gb8h/alias-repo/sub/out.json' is not in the subpath of '/tmp/tmpizs4gb8h/real-repo'

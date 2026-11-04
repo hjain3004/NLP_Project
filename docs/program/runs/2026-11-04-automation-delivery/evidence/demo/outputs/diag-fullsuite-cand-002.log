@@ -1,0 +1,31 @@
+..............strong-approval.json
+ordinary-approval.json
+...................agent-system/work/P0/approvals/LEGACY-phase-approval.json
+agent-system/work/P0/approvals/LEGACY-phase-approval.json
+nested/relative.json
+................................s......................................................................................................F.....F...........................................................................................................................................................................................................................
+======================================================================
+FAIL: test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline (tests.test_gate_runner.GateDescendantFallbackTests.test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline)
+Deadline: the shell hangs and its marker-less, setsid descendant must die with it.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-cand-002/tools/agentctl/tests/test_gate_runner.py", line 96, in test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline
+    self.assertTrue(gate["timed_out"], gate)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'gate': 'setsid env -u AGENTCTL_GATE_ID sleep 41.103 & sleep 30', 'result': 'fail', 'reason': 'gate_left_processes', 'exit_code': -9, 'timed_out': False, 'left_processes': 1, 'descendants_cleared': True, 'gate_isolation': 'none', 'stdout_hash': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'stderr_hash': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'stdout_bytes': 0, 'stderr_bytes': 0, 'duration_ms': 685}
+
+======================================================================
+FAIL: test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline (tests.test_gate_runner.GateDescendantTests.test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline)
+Deadline: the shell hangs and its marker-less, setsid descendant must die with it.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-cand-002/tools/agentctl/tests/test_gate_runner.py", line 96, in test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline
+    self.assertTrue(gate["timed_out"], gate)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'gate': 'setsid env -u AGENTCTL_GATE_ID sleep 41.103 & sleep 30', 'result': 'fail', 'reason': 'exit_nonzero', 'exit_code': -9, 'timed_out': False, 'left_processes': 0, 'descendants_cleared': True, 'gate_isolation': 'user_pid_namespace', 'stdout_hash': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'stderr_hash': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'stdout_bytes': 0, 'stderr_bytes': 0, 'duration_ms': 1002}
+
+----------------------------------------------------------------------
+Ran 394 tests in 181.514s
+
+FAILED (failures=2, skipped=1)
+rc=1 seconds=182

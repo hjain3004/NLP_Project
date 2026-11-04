@@ -1,0 +1,45 @@
+..............strong-approval.json
+ordinary-approval.json
+...................agent-system/work/P0/approvals/LEGACY-phase-approval.json
+agent-system/work/P0/approvals/LEGACY-phase-approval.json
+nested/relative.json
+....................................s...................................................................................................F.....F...........................................................................................................................................................................................................................
+======================================================================
+FAIL: test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline (tests.test_gate_runner.GateDescendantFallbackTests.test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline)
+Deadline: the shell hangs and its marker-less, setsid descendant must die with it.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-cand-001/tools/agentctl/tests/test_gate_runner.py", line 95, in test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline
+    self.assertEqual(survivors, [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [32574, 32575] != []
+
+First list contains 2 additional elements.
+First extra element 0:
+32574
+
+- [32574, 32575]
++ []
+
+======================================================================
+FAIL: test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline (tests.test_gate_runner.GateDescendantTests.test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline)
+Deadline: the shell hangs and its marker-less, setsid descendant must die with it.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-cand-001/tools/agentctl/tests/test_gate_runner.py", line 95, in test_descendants_of_a_timed_out_gate_are_killed_at_the_deadline
+    self.assertEqual(survivors, [])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [32607, 32608, 32609, 32610] != []
+
+First list contains 4 additional elements.
+First extra element 0:
+32607
+
+- [32607, 32608, 32609, 32610]
++ []
+
+----------------------------------------------------------------------
+Ran 395 tests in 181.830s
+
+FAILED (failures=2, skipped=1)
+rc=1 seconds=182
