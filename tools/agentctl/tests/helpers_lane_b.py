@@ -79,8 +79,12 @@ class Lab:
             ["git", "clone", "--quiet", "--shared", str(SOURCE_REPO), str(self.root)],
             check=True,
         )
+        # Always work on a named branch of the clone: the source checkout may itself be a
+        # detached worktree (then `symbolic-ref` fails), and the "checked-out branch" refusal
+        # needs a real branch name to test against.
+        self.checkout_branch = "lab-checkout"
+        self.git("checkout", "--quiet", "-B", self.checkout_branch)
         self.base = self.git("rev-parse", "HEAD")
-        self.checkout_branch = self.git("symbolic-ref", "--short", "HEAD")
         database = self.root / "agent-system" / "runtime" / "agentctl.sqlite3"
         self.store = EventStore(database, repository_root=self.root)
         self.scheduler = Scheduler(self.store)
@@ -88,6 +92,17 @@ class Lab:
 
     def close(self) -> None:
         self._tmp.cleanup()
+
+    def advance_base(self, files: dict[str, str], message: str = "lab: advance base") -> str:
+        """Commit ``files`` on the clone's checkout branch and make it the base of later candidates."""
+        for path, content in files.items():
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+        self.git("add", "--", *files)
+        self.git("commit", "--quiet", "-m", message)
+        self.base = self.git("rev-parse", "HEAD")
+        return self.base
 
     # -- git ----------------------------------------------------------------
 

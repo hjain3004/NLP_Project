@@ -18,6 +18,7 @@ Serialization is enforced inside the claim transaction (at most one task in
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import secrets
@@ -36,7 +37,7 @@ from typing import Any
 from .dag import DependencyGraph
 from .errors import AgentctlError, IllegalTransition
 from .events import make_event
-from .hashing import sha256_hex, sha256_of_json
+from .hashing import sha256_of_json
 from .models import TaskState
 from .scheduler import transition
 from .store import EventStore
@@ -50,6 +51,8 @@ __all__ = [
     "build_queue",
     "claim_integration",
     "complete_integration",
+    "current_lease",
+    "renew_lease",
     "connection_query",
     "lease_is_live",
     "latest_intent",
@@ -402,6 +405,78 @@ def claim_integration(
     return dict(store.execute(f"integration-claim:{integration_id}", event, mutation))
 
 
+
+def current_lease(query: Query, task_id: str) -> dict[str, Any] | None:
+    rows = query(
+        "SELECT payload_json FROM artifacts WHERE artifact_type = 'integration-lease' "
+        "AND task_id = ? AND integrable = 1 ORDER BY rowid DESC LIMIT 1",
+        (task_id,),
+    )
+    return json.loads(rows[0]["payload_json"]) if rows else None
+
+
+def renew_lease(
+    store: EventStore, *, intent: Mapping[str, Any], lease: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Replace an expired integration lease with a new epoch and fencing token.
+
+    The old lease artifact is retired (``integrable = 0``) in the same transaction
+    that records the renewal, so a stale token can never complete the integration.
+    """
+    task_id = str(intent["task_id"])
+    artifact_id = f"integration-lease:{task_id}:{lease['lease_id']}"
+    event = make_event(
+        event_type="integration_lease_renewed",
+        reason_code="integration_lease_expired",
+        actor_role="integrator",
+        task_id=task_id,
+        attempt_id=str(intent["attempt_id"]),
+        prior_state=TaskState.INTEGRATING.value,
+        next_state=TaskState.INTEGRATING.value,
+        artifact_refs=[artifact_id, f"intent:{intent['integration_id']}"],
+    )
+
+    def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+        intent_row = connection.execute(
+            "SELECT integrable FROM artifacts WHERE artifact_id = ?",
+            (f"integration-intent:{intent['integration_id']}",),
+        ).fetchone()
+        state = connection.execute(
+            "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        if (
+            intent_row is None
+            or intent_row["integrable"] != 1
+            or state is None
+            or state["state"] != TaskState.INTEGRATING.value
+        ):
+            raise IntegrationRefused(
+                "lease can be renewed only for an integrating task with a live intent",
+                reason_code="reconciliation_required",
+                task_id=task_id,
+            )
+        connection.execute(
+            "UPDATE artifacts SET integrable = 0 WHERE task_id = ? "
+            "AND artifact_type = 'integration-lease'",
+            (task_id,),
+        )
+        connection.execute(
+            "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+            "content_hash, path, integrable, payload_json) VALUES "
+            "(?, 'integration-lease', ?, ?, ?, '', 1, ?)",
+            (
+                artifact_id,
+                task_id,
+                intent["attempt_id"],
+                lease["fencing_token"],
+                json.dumps(dict(lease), sort_keys=True, separators=(",", ":")),
+            ),
+        )
+        return {"task_id": task_id, "lease_epoch": lease["lease_epoch"]}
+
+    return dict(store.execute(f"integration-lease-renew:{lease['lease_id']}", event, mutation))
+
+
 def complete_integration(
     store: EventStore, *, intent: Mapping[str, Any], manifest: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -436,6 +511,20 @@ def complete_integration(
         if current is None:
             raise IllegalTransition("task disappeared before integration", task_id=task_id)
         transition(current["state"], "integration_passed", TaskState.COMPLETED)
+        for artifact_id, label in (
+            (f"integration-intent:{integration_id}", "intent"),
+            (f"integration-lease:{task_id}:{manifest['lease_id']}", "lease"),
+        ):
+            live = connection.execute(
+                "SELECT integrable FROM artifacts WHERE artifact_id = ?", (artifact_id,)
+            ).fetchone()
+            if live is None or live["integrable"] != 1:
+                raise IntegrationRefused(
+                    f"integration {label} is not integrable",
+                    reason_code=f"{label}_not_integrable",
+                    task_id=task_id,
+                    artifact=artifact_id,
+                )
         connection.execute(
             "UPDATE tasks SET state = 'completed', updated_at = CURRENT_TIMESTAMP "
             "WHERE task_id = ?",
@@ -604,6 +693,8 @@ def _jsonable(value: Any) -> Any:
 # ------------------------------------------------------------ gate runner ---
 
 _PATH_FALLBACK = "/usr/local/bin:/usr/bin:/bin"
+_GATE_ID_VARIABLE = "AGENTCTL_GATE_ID"
+_KILL_GRACE_SECONDS = 2.0
 
 
 def scrubbed_environment(home: str) -> dict[str, str]:
@@ -617,38 +708,116 @@ def scrubbed_environment(home: str) -> dict[str, str]:
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_TERMINAL_PROMPT": "0",
+        # The gate tree is outside any repository; never let git search upwards.
+        "GIT_CEILING_DIRECTORIES": "/",
     }
+
+
+def _marked_pids(gate_id: str) -> list[int]:
+    """Live processes carrying this gate's marker, including ones that left the process group.
+
+    ``setsid`` moves a descendant to another session and process group, so group
+    signals cannot reach it, but it inherits the environment. Linux only; elsewhere
+    this returns nothing and the process-group kill is the only reach.
+    """
+    needle = f"{_GATE_ID_VARIABLE}={gate_id}".encode()
+    found: list[int] = []
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return found
+    for name in names:
+        if not name.isdigit() or int(name) == os.getpid():
+            continue
+        try:
+            with open(f"/proc/{name}/environ", "rb") as handle:
+                if needle in handle.read().split(b"\0"):
+                    found.append(int(name))
+        except OSError:
+            continue
+    return found
+
+
+def _kill_gate(process: subprocess.Popen[bytes], gate_id: str) -> None:
+    """Kill the gate's process group and session, then every marked straggler."""
+    deadline = time.monotonic() + _KILL_GRACE_SECONDS
+    while True:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        survivors = _marked_pids(gate_id)
+        for pid in survivors:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        if not survivors or time.monotonic() >= deadline:
+            return
+        time.sleep(0.02)
+
+
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def run_gate_commands(
     commands: Sequence[str], *, cwd: str | os.PathLike[str], timeout: float
 ) -> list[dict[str, Any]]:
-    """Run each contract check in ``cwd``; a timeout is a failure, recorded as such."""
+    """Run each contract check in ``cwd`` under one hard deadline per command.
+
+    Output goes to files, never pipes, so no descendant can keep the parent
+    blocked by holding a pipe open. The deadline covers the shell *and* any
+    descendant that outlives it (found by an inherited marker even if it left the
+    process group); on expiry the whole group and every marked straggler are
+    killed and the gate is recorded as a timed-out failure. After the deadline
+    this function never waits on the child.
+    """
     results: list[dict[str, Any]] = []
-    with tempfile.TemporaryDirectory(prefix="agentctl-gate-home-") as home:
-        environment = scrubbed_environment(home)
-        for command in commands:
+    with tempfile.TemporaryDirectory(prefix="agentctl-gate-scratch-") as scratch_name:
+        scratch = Path(scratch_name)
+        home = scratch / "agentctl-gate-home"
+        home.mkdir()
+        for index, command in enumerate(commands):
+            gate_id = uuid.uuid4().hex
+            environment = scrubbed_environment(str(home))
+            environment[_GATE_ID_VARIABLE] = gate_id
+            stdout_path, stderr_path = scratch / f"{index}.stdout", scratch / f"{index}.stderr"
             started = time.monotonic()
-            process = subprocess.Popen(
-                command,
-                cwd=cwd,
-                shell=True,
-                executable="/bin/sh",
-                env=environment,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-            )
+            deadline = started + timeout
+            with open(stdout_path, "wb") as stdout_file, open(stderr_path, "wb") as stderr_file:
+                process = subprocess.Popen(
+                    command,
+                    cwd=cwd,
+                    shell=True,
+                    executable="/bin/sh",
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                    start_new_session=True,
+                )
             timed_out = False
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
+                process.wait(timeout=max(0.0, deadline - time.monotonic()))
             except subprocess.TimeoutExpired:
                 timed_out = True
+            if not timed_out:
+                while _marked_pids(gate_id):  # the shell exited but a descendant did not
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+                    time.sleep(0.02)
+            if timed_out:
+                _kill_gate(process, gate_id)
                 try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                stdout, stderr = process.communicate()
+                    process.wait(timeout=_KILL_GRACE_SECONDS)
+                except subprocess.TimeoutExpired:
+                    pass  # never block on the child after the deadline
             exit_code = None if timed_out else process.returncode
             results.append(
                 {
@@ -656,8 +825,8 @@ def run_gate_commands(
                     "result": "pass" if exit_code == 0 else "fail",
                     "exit_code": exit_code,
                     "timed_out": timed_out,
-                    "stdout_hash": sha256_hex(stdout),
-                    "stderr_hash": sha256_hex(stderr),
+                    "stdout_hash": _hash_file(stdout_path),
+                    "stderr_hash": _hash_file(stderr_path),
                     "duration_ms": int((time.monotonic() - started) * 1000),
                 }
             )

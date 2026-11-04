@@ -384,7 +384,7 @@ class ConflictAndGateTests(IntegrationTestCase):
     def test_hanging_check_is_a_recorded_failure_not_a_hang(self) -> None:
         """Protects liveness: a gate that hangs on the integration tree times out and fails."""
         # Quick in the candidate's own worktree, hangs only inside the integration worktree.
-        hang = 'case "$PWD" in */integration/*) sleep 60;; esac'
+        hang = 'case "$PWD" in *agentctl-integration-gate-*) sleep 60;; esac'
         self.lab.candidate("T1", {"src/alpha.txt": "alpha\n"}, checks=(hang,))
 
         result = integrate("T1", store=self.lab.store, settings=IntegrationSettings(check_timeout=1.0))
@@ -400,7 +400,7 @@ class ConflictAndGateTests(IntegrationTestCase):
         # Strict only inside the integration worktree: scheduler.verify_candidate (Lane A's) still
         # runs the candidate's own checks with the inherited environment.
         check = (
-            'case "$PWD" in */integration/*) test -z "$ANTHROPIC_API_KEY" '
+            'case "$PWD" in *agentctl-integration-gate-*) test -z "$ANTHROPIC_API_KEY" '
             '&& test -z "$CLAUDE_CODE_OAUTH_TOKEN" && test -z "$AWS_SECRET_ACCESS_KEY";; esac'
         )
         self.lab.candidate("T1", {"src/alpha.txt": "alpha\n"}, checks=(check,))

@@ -31,8 +31,11 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
+import threading
 import time
 import uuid
+import weakref
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,12 +51,14 @@ from .integration_queue import (
     build_queue,
     claim_integration,
     complete_integration,
+    current_lease,
     latest_intent,
     lease_is_live,
     new_lease,
     next_lease_epoch,
     record_reconciliation,
     record_rejection,
+    renew_lease,
     run_gate_commands,
     store_query,
 )
@@ -105,19 +110,48 @@ def exit_code_for(result: Mapping[str, Any]) -> int:
 
 
 class _Git:
-    """Real ``git`` subprocesses with an environment that cannot redirect them."""
+    """Real ``git`` subprocesses that cannot be redirected or made to run planted code.
 
-    _NO_HOOKS = ("-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false")
+    Repository configuration is untrusted input: the candidate's own verification
+    (not this module) runs commands in a worktree that shares ``.git`` with this
+    repository, so ``diff.external``, ``core.fsmonitor`` and friends may have been
+    planted. Every invocation therefore overrides the known code-execution
+    settings on the command line (which outranks repository config), disables
+    pagers and hooks, ignores global and system config, and runs with an
+    allow-listed environment. Diff-style callers also pass ``--no-ext-diff
+    --no-textconv``.
+    """
+
+    _HARDENING = (
+        "--no-pager",
+        "-c", "core.fsmonitor=false",
+        "-c", "core.pager=cat",
+        "-c", "diff.external=",
+        "-c", "core.hooksPath=/dev/null",
+        "-c", "core.attributesFile=/dev/null",
+        "-c", "commit.gpgsign=false",
+    )
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._home = tempfile.mkdtemp(prefix="agentctl-git-home-")
+        weakref.finalize(self, shutil.rmtree, self._home, True)
 
-    @staticmethod
-    def _env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-        env.update({"LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0"})
+    def _env(self, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+        env = {
+            "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+            "HOME": self._home,
+            "LC_ALL": "C",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_OPTIONAL_LOCKS": "0",
+        }
         env.update(extra or {})
         return env
+
+    def command(self, *args: str) -> list[str]:
+        return ["git", *self._HARDENING, *args]
 
     def run(
         self,
@@ -125,14 +159,26 @@ class _Git:
         cwd: str | os.PathLike[str] | None = None,
         env: Mapping[str, str] | None = None,
         text: bool = True,
+        stdin: bytes | None = None,
     ) -> subprocess.CompletedProcess[Any]:
         return subprocess.run(
-            ["git", *self._NO_HOOKS, *args],
+            self.command(*args),
             cwd=cwd or self.root,
             env=self._env(env),
             capture_output=True,
             text=text,
+            input=stdin,
             check=False,
+        )
+
+    def popen(self, *args: str, cwd: str | os.PathLike[str] | None = None) -> subprocess.Popen[bytes]:
+        return subprocess.Popen(
+            self.command(*args),
+            cwd=cwd or self.root,
+            env=self._env(),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
 
     def out(self, *args: str, cwd: str | os.PathLike[str] | None = None) -> str | None:
@@ -149,8 +195,21 @@ class _Git:
         return self.ok("merge-base", "--is-ancestor", ancestor, descendant)
 
     def diff_hash(self, base: str, result: str) -> str | None:
-        done = self.run("diff", "--binary", "--full-index", base, result, text=False)
+        done = self.run(
+            "diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv",
+            base, result, text=False,
+        )
         return sha256_hex(done.stdout) if done.returncode == 0 else None
+
+    def changed_paths(self, older: str, newer: str, *, cwd: str | os.PathLike[str] | None = None) -> set[str]:
+        """Paths whose content or mode differs between two commits (renames not detected)."""
+        done = self.run(
+            "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", "--no-textconv",
+            older, newer, cwd=cwd, text=False,
+        )
+        if done.returncode != 0:
+            raise IntegrationRefused("cannot diff commits", reason_code="plan_unreadable")
+        return {os.fsdecode(name) for name in done.stdout.split(b"\0") if name}
 
     def first_parent_chain(self, head: str) -> set[str]:
         out = self.out("rev-list", "--first-parent", head)
@@ -182,6 +241,75 @@ class _Git:
         if path.exists():
             shutil.rmtree(path, ignore_errors=True)
         self.run("worktree", "prune")
+
+
+def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
+    """Write the exact tree of ``commit`` to ``destination``: no ``.git``, no filters.
+
+    Blobs are copied byte for byte from ``git cat-file``; attributes (``export-ignore``,
+    ``eol``, ``filter``) are never consulted, so the gate sees what was reviewed and
+    merged. Paths are validated so a crafted tree cannot escape ``destination`` or
+    plant a ``.git`` entry. Submodule links are skipped.
+    """
+    listing = git.run("ls-tree", "-r", "-z", "--full-tree", commit, text=False)
+    if listing.returncode != 0:
+        raise IntegrationRefused("cannot list the planned tree", reason_code="plan_unreadable")
+    entries: list[tuple[str, str, str]] = []
+    for raw in listing.stdout.split(b"\0"):
+        if not raw:
+            continue
+        meta, _, path_bytes = raw.partition(b"\t")
+        mode, kind, oid = meta.decode().split()
+        path = os.fsdecode(path_bytes)
+        parts = path.split("/")
+        if any(part in ("", ".", "..") or part.lower() == ".git" for part in parts):
+            raise _reject(
+                "candidate_tree_unsafe", "human_required",
+                "the planned tree contains a path that cannot be materialized safely", path=path,
+            )
+        if kind == "blob":
+            entries.append((mode, oid, path))
+    destination.mkdir(parents=True, exist_ok=True)
+    root = destination.resolve()
+    process = git.popen("cat-file", "--batch")
+    assert process.stdin is not None and process.stdout is not None
+
+    def feed() -> None:
+        try:
+            for _mode, oid, _path in entries:
+                process.stdin.write(f"{oid}\n".encode())  # type: ignore[union-attr]
+        finally:
+            process.stdin.close()  # type: ignore[union-attr]
+
+    writer = threading.Thread(target=feed, daemon=True)
+    writer.start()
+    try:
+        for mode, oid, path in entries:
+            header = process.stdout.readline().split()
+            if len(header) != 3 or header[1] != b"blob":
+                raise IntegrationRefused("cannot read a blob", reason_code="plan_unreadable", oid=oid)
+            content = process.stdout.read(int(header[2]))
+            process.stdout.read(1)  # the newline cat-file appends
+            target = destination / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if root not in target.parent.resolve().parents and target.parent.resolve() != root:
+                raise _reject(
+                    "candidate_tree_unsafe", "human_required",
+                    "a planned path escapes the gate tree", path=path,
+                )
+            if mode == "120000":
+                os.symlink(os.fsdecode(content), target)
+            else:
+                descriptor = os.open(
+                    target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o755 if mode == "100755" else 0o644,
+                )
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(content)
+    finally:
+        process.stdout.close()
+        writer.join(timeout=5)
+        process.wait(timeout=10)
 
 
 # ------------------------------------------------------------- evidence ----
@@ -344,7 +472,7 @@ def _verify(store: EventStore, git: _Git, task_id: str, integrator_id: str) -> _
     worktree = (root / str(binding.get("worktree_path") or "")).resolve()
     if binding.get("worktree_path") and worktree.is_dir():
         head = git.out("rev-parse", "HEAD", cwd=worktree)
-        dirty = git.run("diff", "--quiet", "HEAD", cwd=worktree).returncode != 0
+        dirty = git.run("diff", "--quiet", "--no-ext-diff", "HEAD", cwd=worktree).returncode != 0
         if head != result or dirty:
             raise _reject(
                 "candidate_modified_after_review", "repair_required",
@@ -477,8 +605,18 @@ class _Plan:
     patch_unchanged: bool
 
 
+def _safe_component(value: str) -> str:
+    """An id may become a path component only if it matches the task-id pattern."""
+    if not isinstance(value, str) or not _TASK_ID.match(value) or ".." in value:
+        raise IntegrationRefused(
+            "identifier cannot be used as a path component",
+            reason_code="task_unknown", identifier=str(value)[:80],
+        )
+    return value
+
+
 def _integration_dir(root: Path, task_id: str) -> Path:
-    return root / "agent-system" / "runtime" / "integration" / task_id
+    return root / "agent-system" / "runtime" / "integration" / _safe_component(task_id)
 
 
 def _plan(
@@ -509,6 +647,26 @@ def _plan(
             "candidate base is not in the integration branch history",
             base=evidence.base_commit, head=old_head,
         )
+    touched: set[str] = set()
+    if old_head != evidence.base_commit:
+        # Merge attributes (``merge=union``, custom drivers) can resolve a real conflict
+        # silently. Refuse to rely on the merge machinery for any path both sides changed:
+        # for every path the candidate touched, the head must still match the merge base.
+        merge_base = git.out("merge-base", old_head, candidate)
+        if merge_base is None:
+            raise _reject(
+                "base_incompatible", "replan_required",
+                "candidate and integration branch share no merge base", head=old_head,
+            )
+        touched = git.changed_paths(merge_base, candidate)
+        overlap = sorted(touched & git.changed_paths(merge_base, old_head))
+        if overlap:
+            raise _reject(
+                "conflict_repair_required", "repair_required",
+                "candidate touches paths the integration branch changed since the merge base",
+                retry_requires_new_evidence=True, conflicted_paths=overlap[:50],
+                integration_head=old_head,
+            )
     worktree.parent.mkdir(parents=True, exist_ok=True)
     added = git.run("worktree", "add", "--quiet", "--detach", str(worktree), old_head)
     if added.returncode != 0:
@@ -535,7 +693,7 @@ def _plan(
             candidate, cwd=worktree, env=identity,
         )
     if merged.returncode != 0:
-        conflicts = (git.out("diff", "--name-only", "--diff-filter=U", cwd=worktree) or "").split()
+        conflicts = (git.out("diff", "--name-only", "--no-ext-diff", "--diff-filter=U", cwd=worktree) or "").split()
         git.run("merge", "--abort", cwd=worktree)
         if conflicts:
             raise _reject(
@@ -556,15 +714,24 @@ def _plan(
     preserved = (
         planned == candidate if strategy == "fast_forward" else parents == [old_head, candidate]
     ) and git.diff_hash(evidence.base_commit, candidate) == evidence.diff_hash
+    if preserved and strategy == "merge_no_ff":
+        # Every path the candidate touched must carry exactly the candidate's content.
+        preserved = not (touched & git.changed_paths(candidate, planned))
     if not preserved:
         raise _reject(
             "candidate_altered", "human_required",
             "the planned result does not carry the reviewed candidate unchanged",
         )
-    gates = [
-        {"gate": "integration:candidate-commit-preserved", "result": "pass"},
-        *run_gate_commands(evidence.checks, cwd=worktree, timeout=check_timeout),
-    ]
+    # Gates run on a pristine copy of the planned tree that has no ``.git`` link and sits
+    # outside the repository checkout, so nothing a gate does can reach the repository,
+    # its configuration, its refs or the event store through the working directory.
+    with tempfile.TemporaryDirectory(prefix="agentctl-integration-gate-") as gate_root:
+        gate_tree = Path(gate_root) / "tree"
+        _materialize_tree(git, planned, gate_tree)
+        gates = [
+            {"gate": "integration:candidate-commit-preserved", "result": "pass"},
+            *run_gate_commands(evidence.checks, cwd=gate_tree, timeout=check_timeout),
+        ]
     if any(gate["result"] != "pass" for gate in gates):
         raise _reject(
             "affected_check_failed", "repair_required",
@@ -588,7 +755,7 @@ def _manifest(intent: Mapping[str, Any], lease: Mapping[str, Any]) -> dict[str, 
         "integration_id": intent["integration_id"],
         "task_id": intent["task_id"],
         "integrator_role": "integrator",
-        "integrator_session_id": intent["integrator_run_id"],
+        "integrator_session_id": lease.get("integrator_run_id", intent["integrator_run_id"]),
         "lease_id": lease["lease_id"],
         "lease_epoch": lease["lease_epoch"],
         "fencing_token": lease["fencing_token"],
@@ -630,21 +797,18 @@ class _Engine:
 
     # -- records ------------------------------------------------------------
 
-    def _lease_for(self, task_id: str, lease_id: str) -> dict[str, Any]:
-        rows = self.store.rows(
-            "SELECT payload_json FROM artifacts WHERE artifact_id = ?",
-            (f"integration-lease:{task_id}:{lease_id}",),
-        )
-        if not rows:
+    def _current_lease(self, task_id: str) -> dict[str, Any]:
+        lease = current_lease(self.query, task_id)
+        if lease is None:
             raise IntegrationRefused(
-                "integration lease artifact is missing",
+                "no integrable integration lease is on record",
                 reason_code="reconciliation_required", task_id=task_id,
             )
-        return json.loads(rows[0]["payload_json"])
+        return lease
 
     def _finalize(self, intent: Mapping[str, Any], evidence: _Evidence) -> dict[str, Any]:
         """Write and validate the manifest on disk, then run transaction 2."""
-        lease = self._lease_for(str(intent["task_id"]), str(intent["lease_id"]))
+        lease = self._current_lease(str(intent["task_id"]))
         manifest = _manifest(intent, lease)
         directory = (
             _integration_dir(self.root, str(intent["task_id"]))
@@ -729,7 +893,7 @@ class _Engine:
         """Re-run full verification while recovering; failure leaves the task for a human."""
         try:
             evidence = _verify(
-                self.store, self.git, str(intent["task_id"]), str(intent["integrator_run_id"])
+                self.store, self.git, str(intent["task_id"]), self.integrator_id
             )
         except IntegrationRejected as exc:
             raise IntegrationRefused(
@@ -773,6 +937,15 @@ class _Engine:
                 "replayed plan differs from the recorded intent",
                 reason_code="reconciliation_required", task_id=task_id,
                 recorded=intent["planned_commit"], replayed=plan.commit,
+            )
+        lease = self._current_lease(task_id)
+        if not lease_is_live(lease):
+            renew_lease(
+                self.store, intent=intent,
+                lease=new_lease(
+                    task_id, str(intent["integration_id"]),
+                    next_lease_epoch(self.query, task_id), self.integrator_id,
+                ),
             )
         manifest = self._advance_and_complete(intent, evidence)
         return self._result("reconciled", manifest, intent)

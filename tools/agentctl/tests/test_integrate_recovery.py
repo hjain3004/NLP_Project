@@ -13,11 +13,13 @@ import json
 import threading
 import unittest
 
+from agentctl import integrate as integrate_module
 from agentctl.integrate import integrate
 from agentctl.integration_queue import (
     IntegrationBusy,
     IntegrationRefused,
     claim_integration,
+    complete_integration,
     new_lease,
 )
 
@@ -142,6 +144,105 @@ class CrashReconciliationTests(RecoveryTestCase):
         self.assertEqual(self.lab.branch_head(), moved["head"])  # the other writer's commit survives
         self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
         self.assertEqual(self.lab.state("T2"), "integrating")  # held for reconciliation, not completed
+
+
+    def test_simulated_branch_advance_after_the_crash_is_still_recognised_by_first_parent_chain(self) -> None:
+        """Protects reconciliation: if later commits sit on top of the planned merge, the Git step is
+        still recognised as applied (first-parent reachability), not mistaken for unrelated movement."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        planned = self.intent("T2")["planned_commit"]
+        later = self.lab.git(
+            "commit-tree", f"{planned}^{{tree}}", "-p", planned, "-m", "work landed after the crash"
+        )
+        self.lab.git("update-ref", f"refs/heads/{BRANCH}", later, planned)
+
+        run = self.lab.cli()
+
+        self.assertEqual(run.code, 0, run.stderr)
+        self.assertEqual(run.json["outcome"], "reconciled")
+        self.assertEqual(self.lab.branch_head(), later)  # untouched
+        (record,) = self.lab.artifacts("integration-record", "T2")
+        self.assertEqual(record["payload"]["integration_commit"], planned)
+        self.assertEqual(self.lab.state("T2"), "completed")
+
+    def test_branch_moved_between_planning_and_claim_leaves_the_task_unclaimed(self) -> None:
+        """Protects the claim transaction: a plan computed against a stale head is never claimed."""
+        moved: dict[str, str] = {}
+
+        def another_writer(point: str) -> None:
+            if point == "after_plan":
+                moved["head"] = self.lab.git(
+                    "commit-tree", f"{self.head_after_first}^{{tree}}", "-p",
+                    self.head_after_first, "-m", "writer between plan and claim",
+                )
+                self.lab.git("update-ref", f"refs/heads/{BRANCH}", moved["head"], self.head_after_first)
+
+        result = integrate("T2", store=self.lab.store, fault_hook=another_writer)
+
+        self.assertEqual(result["reason_code"], "branch_moved_after_planning")
+        self.assertEqual(self.lab.state("T2"), "integration_ready")  # nothing claimed, nothing to reconcile
+        self.assertEqual(self.lab.artifacts("integration-intent", "T2"), [])
+        self.assertEqual(self.lab.branch_head(), moved["head"])
+        self.assertEqual(self.lab.leftover_integration_worktrees(), [])
+
+    def test_replay_that_would_not_reproduce_the_recorded_commit_is_refused(self) -> None:
+        """Protects replay: recovery advances the branch only to the exact commit the intent promised."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_intent"), 97)
+        # SIMULATED divergence: the recorded plan time no longer reproduces the recorded commit.
+        self.lab.tamper(
+            "UPDATE artifacts SET payload_json = json_set(payload_json, '$.planned_at', "
+            "json_extract(payload_json, '$.planned_at') + 1) "
+            "WHERE artifact_type = 'integration-intent' AND task_id = 'T2'"
+        )
+
+        run = self.lab.cli("T2")
+
+        self.assertEqual(run.code, 1)
+        self.assertEqual(run.json["reason_code"], "reconciliation_required")
+        self.assertNotEqual(run.json["details"]["recorded"], run.json["details"]["replayed"])
+        self.assertEqual(self.lab.branch_head(), self.head_after_first)
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
+
+    def test_expired_integration_lease_is_replaced_with_a_new_epoch_and_token_on_recovery(self) -> None:
+        """Protects lease fencing: a lease that expired during the outage cannot complete the integration."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_intent"), 97)
+        (old,) = self.lab.artifacts("integration-lease", "T2")
+        # SIMULATED passage of time.
+        self.lab.tamper(
+            "UPDATE artifacts SET payload_json = json_set(payload_json, '$.expires_at', "
+            "'2000-01-01T00:00:00.000000Z') WHERE artifact_id = ?",
+            (old["artifact_id"],),
+        )
+
+        run = self.lab.cli("T2")
+
+        self.assertEqual(run.code, 0, run.stderr)
+        (record,) = self.lab.artifacts("integration-record", "T2")
+        manifest = record["payload"]
+        self.assertEqual(manifest["lease_epoch"], old["payload"]["lease_epoch"] + 1)
+        self.assertNotEqual(manifest["lease_id"], old["payload"]["lease_id"])
+        self.assertNotEqual(manifest["fencing_token"], old["payload"]["fencing_token"])
+        self.assertEqual(len(self.lab.events("integration_lease_renewed", "T2")), 1)
+        retired = {a["payload"]["lease_id"]: a["integrable"] for a in self.lab.artifacts("integration-lease", "T2")}
+        self.assertEqual(retired[old["payload"]["lease_id"]], 0)
+
+    def test_completion_is_refused_if_the_intent_is_no_longer_integrable(self) -> None:
+        """Protects transaction 2: a retired intent or lease cannot be used to complete an integration."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        intent = self.intent("T2")
+        (lease,) = self.lab.artifacts("integration-lease", "T2")
+        manifest = integrate_module._manifest(intent, lease["payload"])
+        self.lab.tamper(
+            "UPDATE artifacts SET integrable = 0 WHERE artifact_type = 'integration-intent' AND task_id = 'T2'"
+        )
+
+        with self.assertRaises(IntegrationRefused) as raised:
+            complete_integration(self.lab.store, intent=intent, manifest=manifest)
+
+        self.assertEqual(raised.exception.reason_code, "intent_not_integrable")
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
 
 
 class SerializationTests(RecoveryTestCase):
