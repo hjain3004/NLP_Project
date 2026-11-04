@@ -191,6 +191,8 @@ class Lab:
         review: bool = True,
         author_session: str | None = None,
         reviewer_session: str | None = None,
+        risk: str = "low",
+        verify: bool = True,
     ) -> Candidate:
         author_session = author_session or f"author-session-{task_id}"
         reviewer_session = reviewer_session or f"reviewer-session-{task_id}"
@@ -202,7 +204,7 @@ class Lab:
             context_hash=hashlib.sha256(digest.encode()).hexdigest(),
             base_commit=self.base,
             capability_class="standard_implementation",
-            risk="low",
+            risk=risk,
             enforcement_class="sandboxed_tools",
             writable_paths=tuple(files),
             prohibited_paths=("AppleBooks/**",),
@@ -266,13 +268,14 @@ class Lab:
             ReviewIdentity(task_id, lease.attempt_id, f"author-run-{task_id}", author_session,
                            spec.capability_class),
         )
-        self.scheduler.verify_candidate(task_id)
+        if verify:
+            self.scheduler.verify_candidate(task_id)
         candidate = Candidate(
             task_id=task_id, attempt_id=lease.attempt_id, result_commit=result,
             base_commit=self.base, worktree=worktree, files=dict(files),
             author_session=author_session, reviewer_session=None, spec=spec,
         )
-        if review:
+        if review and verify:
             self.review(candidate, reviewer_session)
         return candidate
 

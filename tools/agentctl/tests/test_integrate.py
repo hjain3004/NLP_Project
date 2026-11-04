@@ -381,6 +381,7 @@ class ConflictAndGateTests(IntegrationTestCase):
         self.assertEqual(failed[0]["exit_code"], 1)
         self.assertEqual(self.lab.state("T2"), "integration_ready")
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # keys on the legacy gate tree path
     def test_hanging_check_is_a_recorded_failure_not_a_hang(self) -> None:
         """Protects liveness: a gate that hangs on the integration tree times out and fails."""
         # Quick in the candidate's own worktree, hangs only inside the integration worktree.
@@ -395,6 +396,7 @@ class ConflictAndGateTests(IntegrationTestCase):
         self.assertIsNone(gate["exit_code"])
         self.assert_untouched("T1", head_before=None)
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # keys on the legacy gate tree path
     def test_gate_environment_is_scrubbed_of_provider_and_credential_variables(self) -> None:
         """Protects secrets: checks on the integration tree see no CLAUDE_/ANTHROPIC_/credential variables."""
         # Strict only inside the integration worktree: scheduler.verify_candidate (Lane A's) still

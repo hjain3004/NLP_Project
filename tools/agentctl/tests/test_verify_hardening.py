@@ -158,6 +158,16 @@ class BlankChecksTests(_LabCase):
 
 
 class HighRiskRefusalTests(_LabCase):
+    """The risk allow-list guards the UNSANDBOXED runner. Since the runc sandbox is the default, these assertions
+    are exercised by selecting that runner explicitly (see ``test_check_environment.IsolationSelectionTests`` for
+    the default-path behaviour of a high-risk task)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_verify_allow_list_refuses_every_risk_that_is_not_low_or_medium(self) -> None:
         """Review repair: an allow-list, so spelling variants and unknown values cannot slip through."""
         cases = {

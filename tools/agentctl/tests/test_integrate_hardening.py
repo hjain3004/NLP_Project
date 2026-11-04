@@ -28,8 +28,22 @@ from agentctl.integration_queue import IntegrationRefused, IntegrationRejected, 
 from tests.helpers_lane_b import BRANCH, Lab
 
 
+def use_legacy_runner(case: unittest.TestCase) -> None:
+    """Select the explicit ``legacy-unsafe`` check runner for the rest of ``case``.
+
+    These classes assert the legacy runner's own defences (no ``.git`` link in the integration copy,
+    repository tamper hashes, the namespace that hides the integrator's /proc). Since the runc sandbox
+    became the default, that runner is reached only by this explicit selection; the sandbox boundary is
+    tested in ``test_check_environment.py`` and ``test_sandbox.py``.
+    """
+    patcher = mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
+
 class GateContainmentTests(unittest.TestCase):
     def setUp(self) -> None:
+        use_legacy_runner(self)
         self.lab = Lab()
         self.addCleanup(self.lab.close)
         self.scratch = pathlib.Path(self.lab._tmp.name)
@@ -97,6 +111,7 @@ class GateCannotReachIntegratorTests(unittest.TestCase):
     """F1(a), end to end through the real `agentctl integrate` process."""
 
     def setUp(self) -> None:
+        use_legacy_runner(self)
         self.lab = Lab()
         self.addCleanup(self.lab.close)
         self.scratch = pathlib.Path(self.lab._tmp.name)
@@ -133,6 +148,7 @@ class GateRepositoryTamperTests(unittest.TestCase):
     """F1(b)/(c): a gate that changes repository metadata is rejected; planted drivers never run."""
 
     def setUp(self) -> None:
+        use_legacy_runner(self)
         self.lab = Lab()
         self.addCleanup(self.lab.close)
         self.scratch = pathlib.Path(self.lab._tmp.name)
