@@ -860,6 +860,11 @@ class Scheduler:
             self._record_orphan(task_id, manifest)
             raise ContractStale("artifact belongs to an expired or superseded lease", task_id=task_id)
         lease = lease_rows[0]
+        if self._names_superseded_attempt(task_id, lease, manifest):
+            # Design 14.1: a submission from an expired or superseded attempt is orphan evidence and
+            # advances nothing. It must not touch the active lease or the task state.
+            self._record_orphan(task_id, manifest)
+            raise ContractStale("artifact belongs to an expired or superseded lease", task_id=task_id)
         current_state = str(self.store.status(task_id)["state"])
         transition(current_state, "candidate_ingested", TaskState.CANDIDATE)
         mismatch = self._manifest_mismatch(spec, lease, manifest)
@@ -942,6 +947,28 @@ class Scheduler:
             )
             return {"artifact_id": artifact_id, "task_id": task_id, "state": "candidate"}
         return dict(self.store.execute(f"candidate-ingest:{artifact_id}", event, accept))
+
+    def _names_superseded_attempt(
+        self, task_id: str, active: Mapping[str, Any], manifest: Mapping[str, Any]
+    ) -> bool:
+        """True when the manifest names an earlier or non-current attempt of this task and NOT the active one.
+
+        A manifest that claims the active lease or the active attempt (by id) is judged by
+        ``_manifest_mismatch`` instead: a wrong token or hash on the CURRENT lease is a permission violation.
+        """
+        lease_id, attempt_id = manifest.get("lease_id"), manifest.get("attempt_id")
+        if lease_id == active["lease_id"] or attempt_id == active["attempt_id"]:
+            return False
+        epoch = manifest.get("lease_epoch")
+        if isinstance(epoch, int) and not isinstance(epoch, bool) and epoch < active["epoch"]:
+            return True
+        if isinstance(lease_id, str) and self.store.rows(
+            "SELECT 1 FROM leases WHERE task_id = ? AND lease_id = ?", (task_id, lease_id)
+        ):
+            return True
+        return isinstance(attempt_id, str) and bool(self.store.rows(
+            "SELECT 1 FROM attempts WHERE task_id = ? AND attempt_id = ?", (task_id, attempt_id)
+        ))
 
     def _manifest_mismatch(self, spec: TaskSpec, lease: Mapping[str, Any], manifest: Mapping[str, Any]) -> str | None:
         exact = (
