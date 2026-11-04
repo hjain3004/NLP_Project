@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import sqlite3
 import uuid
 from collections.abc import Mapping, Sequence
@@ -332,7 +333,18 @@ class ContextCompiler:
         )
 
     def _find_task_contract(self, task_id: str) -> tuple[str, dict[str, Any]]:
-        for path in sorted((self.root / "agent-system").glob("**/*.json")):
+        agent_system_root = self.root / "agent-system"
+        excluded_runtime_root = (agent_system_root / "runtime").resolve()
+        candidates: list[Path] = []
+        for dirpath, dirnames, filenames in os.walk(agent_system_root):
+            current = Path(dirpath)
+            dirnames[:] = [
+                name for name in dirnames if (current / name) != excluded_runtime_root
+            ]
+            candidates.extend(
+                current / filename for filename in filenames if filename.endswith(".json")
+            )
+        for path in sorted(candidates):
             try:
                 document = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
