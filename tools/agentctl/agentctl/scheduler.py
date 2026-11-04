@@ -7,11 +7,8 @@ import hashlib
 import os
 import pathlib
 import shutil
-import signal
 import sqlite3
 import subprocess
-import sys
-import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -26,6 +23,7 @@ from .errors import (
     PlanningError,
 )
 from .events import make_event
+from .gate_runner import run_checks
 from .interfaces import binding_from_source, current_interface_binding
 from .hashing import sha256_of_json
 from .leases import Lease, LeaseManager
@@ -243,30 +241,10 @@ _CAPABILITY_RANK = {
 CAPABILITY_RANK = _CAPABILITY_RANK
 
 #: Wall-clock limit for each contract-owned deterministic check. A check that reaches it
-#: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier.
+#: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier. Checks run
+#: through the shared ``gate_runner.run_checks`` (allowlisted environment, rlimits, user+PID
+#: namespace where available, no surviving descendants).
 CHECK_TIMEOUT_SECONDS = 600.0
-
-_CHECK_ENV_PASSTHROUGH = ("PYTHONPATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ")
-
-
-def _check_environment(home: str) -> dict[str, str]:
-    """Environment for a deterministic check: no credentials, no provider variables.
-
-    ``HOME`` is a fresh empty directory (so no ``~/.claude``, ``~/.ssh``, git
-    credential helpers), ``PATH`` is minimal, and only a short allowlist of
-    non-secret variables is inherited. Nothing named ``CLAUDE_*``/``ANTHROPIC_*``
-    can reach a check.
-    """
-    path = ["/usr/local/bin", "/usr/bin", "/bin"]
-    interpreter_dir = os.path.dirname(os.path.realpath(sys.executable))
-    if interpreter_dir not in path:
-        path.insert(0, interpreter_dir)
-    env = {"PATH": os.pathsep.join(path), "HOME": home}
-    for name in _CHECK_ENV_PASSTHROUGH:
-        if name in os.environ:
-            env[name] = os.environ[name]
-    return env
-
 
 #: Options for every git command the control plane runs. A worktree's ``.git`` links to the
 #: SHARED git directory, so anything a worker or a gate check plants in the repository config
@@ -317,65 +295,6 @@ def run_hardened_git(
         check=False,
         env=hardened_git_environment(env),
     )
-
-
-def _digest_file(path: pathlib.Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _run_check(command: str, cwd: pathlib.Path, timeout: float) -> tuple[int, str, str, bool]:
-    """Run one check in its own process group under a hard deadline.
-
-    Output goes to temporary files, not pipes: a descendant that escapes the group (its own
-    session) and keeps a pipe open cannot delay the verdict once the check itself has
-    finished or timed out. Returns ``(exit_code, stdout_sha256, stderr_sha256, timed_out)``.
-    """
-    with tempfile.TemporaryDirectory(prefix="agentctl-check-") as scratch_name:
-        scratch = pathlib.Path(scratch_name)
-        (scratch / "home").mkdir()
-        with open(scratch / "stdout", "wb") as out, open(scratch / "stderr", "wb") as err:
-            proc = subprocess.Popen(
-                command,
-                cwd=cwd,
-                shell=True,
-                executable="/bin/sh",
-                stdin=subprocess.DEVNULL,
-                stdout=out,
-                stderr=err,
-                env=_check_environment(str(scratch / "home")),
-                start_new_session=True,
-            )
-            timed_out = False
-            try:
-                try:
-                    proc.wait(timeout=timeout)
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    _kill_process_group(proc.pid)
-                    proc.wait()
-            except BaseException:
-                _kill_process_group(proc.pid)
-                proc.wait()
-                raise
-            finally:
-                _kill_process_group(proc.pid)
-        return (
-            124 if timed_out else proc.returncode,
-            _digest_file(scratch / "stdout"),
-            _digest_file(scratch / "stderr"),
-            timed_out,
-        )
-
-
-def _kill_process_group(pgid: int) -> None:
-    try:
-        os.killpg(pgid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
 
 
 def task_approval_scope(spec: TaskSpec) -> str:
@@ -1156,28 +1075,20 @@ class Scheduler:
 
         self.store.execute(f"verify-start:{task_id}:{attempt['attempt_id']}", started, begin)
         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
-        results: list[dict[str, Any]] = []
-        for command in spec.deterministic_checks:
-            exit_code, stdout_hash, stderr_hash, timed_out = _run_check(
-                command, worktree, CHECK_TIMEOUT_SECONDS
-            )
-            result: dict[str, Any] = {
-                "command": command,
-                "exit_code": exit_code,
-                "stdout_hash": stdout_hash,
-                "stderr_hash": stderr_hash,
-            }
-            if timed_out:
-                result["timed_out"] = True
-            results.append(result)
-        passed = all(item["exit_code"] == 0 for item in results)
+        results, tamper = self._run_gate_checks(worktree, spec.deterministic_checks)
+        passed = not tamper and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
+        if tamper:
+            evidence["repository_tamper"] = tamper
         evidence_hash = sha256_of_json(evidence)
         next_state = "independent_review" if passed else "repair_required"
         event_name = "checks_passed" if passed else "implementation_defect"
         event = make_event(
             event_type=event_name,
-            reason_code="verification_passed" if passed else "verification_failed",
+            reason_code=(
+                "verification_passed" if passed
+                else str(tamper["reason_code"]) if tamper else "verification_failed"
+            ),
             actor_role="verifier",
             task_id=task_id,
             attempt_id=attempt["attempt_id"],
@@ -1224,6 +1135,67 @@ class Scheduler:
                 finish,
             )
         )
+
+    def _run_gate_checks(
+        self, worktree: pathlib.Path, commands: Sequence[str]
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+        """Run the contract's checks through the shared gate runner and audit the shared ``.git``.
+
+        The leased worktree's ``.git`` links to the repository's shared git directory, so a
+        check could plant config (``diff.external``, ``core.fsmonitor``, drivers, hooks, refs)
+        that later runs with the control plane's privileges. The same protected-state
+        snapshot the integrator uses is taken before and after; any difference fails
+        verification with ``gate_tampered_repository``. The candidate's own worktree
+        metadata (index, HEAD) is excluded because a check legitimately refreshes it. Nothing
+        is restored. Evidence per check keeps the legacy keys (``command``, ``exit_code``,
+        ``stdout_hash``, ``stderr_hash``, ``timed_out`` when true) and adds the runner's
+        ``reason``, ``left_processes``, ``gate_isolation`` and ``duration_ms``.
+        """
+        if not commands:
+            return [], None
+        # integrate.py imports this module at import time, so these helpers are imported lazily.
+        from .integrate import DEFAULT_BRANCH, _Git, _changed, _protected_state
+
+        try:
+            git = _Git(self.store.repository_root)
+            own = git.out("rev-parse", "--absolute-git-dir", cwd=worktree)
+            exclude = pathlib.Path(own).resolve() if own else None
+            before = _protected_state(git, DEFAULT_BRANCH, exclude)
+        except Exception as error:  # fail closed: no check runs without a tamper baseline
+            return [], {
+                "reason_code": "gate_tamper_check_unavailable", "changed": [], "error": type(error).__name__,
+            }
+        extra = {"PYTHONPATH": os.environ["PYTHONPATH"]} if "PYTHONPATH" in os.environ else None
+        ran = run_checks(list(commands), worktree, CHECK_TIMEOUT_SECONDS, env_extra=extra)
+        results: list[dict[str, Any]] = []
+        for item in ran:
+            entry: dict[str, Any] = {
+                "command": item["gate"],
+                "exit_code": 124 if item["timed_out"] else item["exit_code"],
+                "stdout_hash": item["stdout_hash"],
+                "stderr_hash": item["stderr_hash"],
+                "reason": item["reason"],
+                "left_processes": item["left_processes"],
+                "gate_isolation": item["gate_isolation"],
+                "duration_ms": item["duration_ms"],
+            }
+            if item["timed_out"]:
+                entry["timed_out"] = True
+            results.append(entry)
+        try:
+            after = _protected_state(git, DEFAULT_BRANCH, exclude)
+        except Exception as error:
+            return results, {
+                "reason_code": "gate_tamper_check_unavailable", "changed": [], "error": type(error).__name__,
+            }
+        changed = _changed(before, after)
+        if not changed:
+            return results, None
+        return results, {
+            "reason_code": "gate_tampered_repository",
+            "changed": changed[:50],
+            "state_after": sha256_of_json(after),
+        }
 
     def _record_orphan(self, task_id: str, manifest: Mapping[str, Any]) -> None:
         artifact_id = str(uuid.uuid4())

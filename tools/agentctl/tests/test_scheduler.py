@@ -156,11 +156,9 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         run_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
         return repo
 
-    def test_a_hanging_check_is_a_failing_check_and_its_process_group_is_killed(self) -> None:
-        from .helpers_lane_a import pid_alive
-
-        pid_file = pathlib.Path(tempfile.mkdtemp()) / "check.pid"
-        repo = self._candidate((f"sleep 300 & echo $! > {pid_file}; wait",))
+    def test_a_hanging_check_is_a_failing_check_and_nothing_it_started_survives(self) -> None:
+        marker = pathlib.Path(tempfile.mkdtemp()) / "SURVIVOR"
+        repo = self._candidate((f"( sleep 5; touch {marker} ) & wait",))
         with mock.patch.object(scheduler_module, "CHECK_TIMEOUT_SECONDS", 1.5):
             result = repo.scheduler.verify_candidate(repo.TASK_ID)
         self.assertEqual(result["state"], "repair_required")
@@ -169,7 +167,10 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         )[0]["payload_json"])
         self.assertFalse(evidence["passed"])
         self.assertEqual((evidence["checks"][0]["exit_code"], evidence["checks"][0]["timed_out"]), (124, True))
-        self.assertFalse(pid_alive(int(pid_file.read_text())), "check descendant survived")
+        import time
+
+        time.sleep(7)
+        self.assertFalse(marker.exists(), "a process started by the check outlived verification")
 
     def test_checks_do_not_see_provider_credentials_or_the_operator_home(self) -> None:
         real_home = os.path.expanduser("~")
@@ -181,14 +182,50 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         result = repo.scheduler.verify_candidate(repo.TASK_ID)
         self.assertEqual(result["state"], "independent_review")
 
-    def test_a_check_leaving_an_escaped_process_holding_output_cannot_stall_verification(self) -> None:
+    def _evidence(self, repo) -> dict:
+        return json.loads(repo.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = 'verification-evidence'"
+        )[0]["payload_json"])
+
+    def test_a_setsid_straggler_fails_verification_and_does_not_survive_it(self) -> None:
         import time
 
-        repo = self._candidate(("setsid sleep 15 & exit 0",))
+        marker = pathlib.Path(tempfile.mkdtemp()) / "STRAGGLER"
+        repo = self._candidate((f"setsid sh -c 'sleep 4; touch {marker}' & exit 0",))
         started = time.monotonic()
         result = repo.scheduler.verify_candidate(repo.TASK_ID)
-        self.assertLess(time.monotonic() - started, 8, "verification waited on an escaped descendant")
+        self.assertLess(time.monotonic() - started, 3.5, "verification waited on an escaped descendant")
+        evidence = self._evidence(repo)
+        self.assertEqual(result["state"], "repair_required")
+        self.assertFalse(evidence["passed"])
+        self.assertEqual(evidence["checks"][0]["exit_code"], 0)
+        self.assertEqual(evidence["checks"][0]["reason"], "gate_left_processes")
+        time.sleep(6)
+        self.assertFalse(marker.exists(), "the escaped straggler outlived verification")
+
+    def test_a_check_planting_git_config_in_the_shared_repository_fails_verification(self) -> None:
+        repo = self._candidate(("git config diff.external /bin/true",))
+        result = repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.assertEqual(result["state"], "repair_required")
+        evidence = self._evidence(repo)
+        self.assertFalse(evidence["passed"])
+        self.assertEqual(evidence["checks"][0]["exit_code"], 0)  # the check itself "passed"
+        self.assertTrue(evidence["repository_tamper"]["changed"])
+        reasons = [row["reason_code"] for row in repo.store.rows(
+            "SELECT reason_code FROM events WHERE task_id = ? AND event_type = 'implementation_defect'",
+            (repo.TASK_ID,))]
+        self.assertEqual(reasons, ["gate_tampered_repository"])
+        self.assertEqual(repo.store.scalar("SELECT integrable FROM artifacts WHERE artifact_type = 'verification-evidence'"), 0)
+
+    def test_the_candidates_own_worktree_bookkeeping_is_not_tampering(self) -> None:
+        """A check that merely reads git state (refreshing the worktree's own index) must still pass."""
+        repo = self._candidate(("git status --porcelain >/dev/null && git diff --stat HEAD~1 HEAD >/dev/null",))
+        result = repo.scheduler.verify_candidate(repo.TASK_ID)
         self.assertEqual(result["state"], "independent_review")
+        evidence = self._evidence(repo)
+        self.assertTrue(evidence["passed"])
+        self.assertNotIn("repository_tamper", evidence)
+        self.assertEqual({"command", "exit_code", "stdout_hash", "stderr_hash"} - set(evidence["checks"][0]), set())
 
 
 class IntegrationOrderTests(unittest.TestCase):

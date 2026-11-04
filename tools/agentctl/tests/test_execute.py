@@ -693,17 +693,24 @@ class GitHardeningTests(RunTestCase):
         review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
         self.assertFalse(marker.exists(), "planted git config executed with the control plane's privileges")
 
-    def test_a_gate_check_cannot_plant_config_that_later_control_plane_git_calls_execute(self) -> None:
-        """Protects: a deterministic check runs in the worktree, whose git config is the shared one; what it plants must stay inert afterwards."""
+    def test_config_planted_by_a_gate_check_is_caught_and_stays_inert_afterwards(self) -> None:
+        """Protects: a check runs in the worktree, whose git config is the shared one. Verification now FAILS on the plant
+        (gate_tampered_repository), and since nothing is restored, later control-plane git calls must still not execute it."""
+        from agentctl.scheduler import run_hardened_git
+
         script, marker = self.poison_script()
         planting = (f"git config diff.external {script} && git config core.fsmonitor {script} "
                     f"&& git config core.pager {script}")
         repo = self.repo(deterministic_checks=(planting,))
         self.run_it(repo)
-        repo.scheduler.verify_candidate(repo.TASK_ID)
+        result = repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.assertEqual(result["state"], "repair_required")
         self.assertEqual(git(repo.root, "config", "--get", "diff.external"), str(script), "PoC did not plant config")
-        self.fake.set(structured_output={"verdict": "no_blocking_findings", "findings": []})
-        review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
+        worktree = repo.root / "agent-system/runtime/worktrees/LANEA-001/attempt-1"
+        for cwd in (repo.root, worktree):
+            run_hardened_git(["status", "--porcelain"], cwd)
+            run_hardened_git(["diff", "--no-ext-diff", "--no-textconv", "--name-status", repo.base_commit, "HEAD"], cwd)
+            self.assertEqual(run_hardened_git(["diff", "--no-ext-diff", repo.base_commit, "HEAD"], cwd).returncode, 0)
         self.assertFalse(marker.exists(), "planted git config executed with the control plane's privileges")
 
 
