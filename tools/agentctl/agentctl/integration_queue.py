@@ -519,6 +519,32 @@ def complete_integration(
                     task_id=task_id,
                     artifact=artifact_id,
                 )
+        # Fencing: the manifest must carry exactly the current lease, and it must be live.
+        current_row = connection.execute(
+            "SELECT artifact_id, payload_json FROM artifacts WHERE artifact_type = "
+            "'integration-lease' AND task_id = ? AND integrable = 1 ORDER BY rowid DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        current = json.loads(current_row["payload_json"]) if current_row else {}
+        if (
+            current_row is None
+            or current_row["artifact_id"] != f"integration-lease:{task_id}:{manifest['lease_id']}"
+            or current.get("lease_epoch") != manifest["lease_epoch"]
+            or current.get("fencing_token") != manifest["fencing_token"]
+            or current.get("integration_id") != integration_id
+        ):
+            raise IntegrationRefused(
+                "manifest lease, epoch or fencing token is not the current integration lease",
+                reason_code="lease_fencing_mismatch",
+                task_id=task_id,
+            )
+        if not lease_is_live(current):
+            raise IntegrationRefused(
+                "integration lease has expired; renew it before completing",
+                reason_code="lease_expired",
+                task_id=task_id,
+                expires_at=current.get("expires_at"),
+            )
         connection.execute(
             "UPDATE tasks SET state = 'completed', updated_at = CURRENT_TIMESTAMP "
             "WHERE task_id = ?",

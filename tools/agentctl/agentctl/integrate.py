@@ -384,18 +384,34 @@ def _changed(before: Mapping[str, str], after: Mapping[str, str]) -> list[str]:
     return sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
 
 
+def _unsafe(path: str, why: str) -> IntegrationRejected:
+    return _reject(
+        "candidate_tree_unsafe", "human_required",
+        "the planned tree contains a path that cannot be materialized safely",
+        path=path, why=why,
+    )
+
+
 def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
     """Write the exact tree of ``commit`` to ``destination``: no ``.git``, no filters.
 
     Blobs are copied byte for byte from ``git cat-file``; attributes (``export-ignore``,
     ``eol``, ``filter``) are never consulted, so the gate sees what was reviewed and
-    merged. Paths are validated so a crafted tree cannot escape ``destination`` or
-    plant a ``.git`` entry. Submodule links are skipped.
+    merged. Submodule links are skipped. Safety:
+
+    * every path is validated first (no ``""``/``.``/``..``/``.git`` component), and the
+      whole listing is checked for duplicate entries and for a path that is both a
+      file (or symlink) and a directory, before anything is written;
+    * directories are created one component at a time relative to an open directory
+      descriptor, and every component is opened with ``O_NOFOLLOW``, so no ancestor
+      can be a symlink and nothing is ever created outside ``destination``;
+    * any ``OSError`` is a recorded ``candidate_tree_unsafe`` rejection.
     """
     listing = git.run("ls-tree", "-r", "-z", "--full-tree", commit, text=False)
     if listing.returncode != 0:
         raise IntegrationRefused("cannot list the planned tree", reason_code="plan_unreadable")
     entries: list[tuple[str, str, str]] = []
+    kinds: dict[str, str] = {}
     for raw in listing.stdout.split(b"\0"):
         if not raw:
             continue
@@ -404,14 +420,22 @@ def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
         path = os.fsdecode(path_bytes)
         parts = path.split("/")
         if any(part in ("", ".", "..") or part.lower() == ".git" for part in parts):
-            raise _reject(
-                "candidate_tree_unsafe", "human_required",
-                "the planned tree contains a path that cannot be materialized safely", path=path,
-            )
-        if kind == "blob":
-            entries.append((mode, oid, path))
-    destination.mkdir(parents=True, exist_ok=True)
-    root = destination.resolve()
+            raise _unsafe(path, "forbidden path component")
+        if kind != "blob":
+            continue
+        for depth in range(1, len(parts)):
+            prefix = "/".join(parts[:depth])
+            if kinds.setdefault(prefix, "dir") != "dir":
+                raise _unsafe(path, "an ancestor is also a file or symlink entry")
+        if path in kinds:
+            raise _unsafe(path, "duplicate or clashing entry")
+        kinds[path] = "file"
+        entries.append((mode, oid, path))
+    try:
+        destination.mkdir(parents=True, exist_ok=False)
+        root_fd = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise _unsafe(str(destination), f"cannot create the gate tree: {exc.strerror}") from exc
     process = git.popen("cat-file", "--batch")
     assert process.stdin is not None and process.stdout is not None
 
@@ -419,8 +443,25 @@ def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
         try:
             for _mode, oid, _path in entries:
                 process.stdin.write(f"{oid}\n".encode())  # type: ignore[union-attr]
+        except OSError:
+            pass  # the reader stopped early (rejection); cat-file exits on EPIPE
         finally:
-            process.stdin.close()  # type: ignore[union-attr]
+            with contextlib.suppress(OSError):
+                process.stdin.close()  # type: ignore[union-attr]
+
+    def parent_fd(parts: list[str]) -> int:
+        fd = os.dup(root_fd)
+        try:
+            for part in parts:
+                with contextlib.suppress(FileExistsError):
+                    os.mkdir(part, 0o755, dir_fd=fd)
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
 
     writer = threading.Thread(target=feed, daemon=True)
     writer.start()
@@ -431,26 +472,32 @@ def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
                 raise IntegrationRefused("cannot read a blob", reason_code="plan_unreadable", oid=oid)
             content = process.stdout.read(int(header[2]))
             process.stdout.read(1)  # the newline cat-file appends
-            target = destination / path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if root not in target.parent.resolve().parents and target.parent.resolve() != root:
-                raise _reject(
-                    "candidate_tree_unsafe", "human_required",
-                    "a planned path escapes the gate tree", path=path,
-                )
-            if mode == "120000":
-                os.symlink(os.fsdecode(content), target)
-            else:
-                descriptor = os.open(
-                    target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                    0o755 if mode == "100755" else 0o644,
-                )
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(content)
+            *ancestors, name = path.split("/")
+            try:
+                directory = parent_fd(ancestors)
+                try:
+                    if mode == "120000":
+                        os.symlink(os.fsdecode(content), name, dir_fd=directory)
+                    else:
+                        descriptor = os.open(
+                            name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                            0o755 if mode == "100755" else 0o644, dir_fd=directory,
+                        )
+                        with os.fdopen(descriptor, "wb") as handle:
+                            handle.write(content)
+                finally:
+                    os.close(directory)
+            except OSError as exc:
+                raise _unsafe(path, f"cannot materialize: {exc.strerror}") from exc
     finally:
+        os.close(root_fd)
         process.stdout.close()
         writer.join(timeout=5)
-        process.wait(timeout=10)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
 
 
 # ------------------------------------------------------------- evidence ----
@@ -964,8 +1011,19 @@ class _Engine:
         return lease
 
     def _finalize(self, intent: Mapping[str, Any], evidence: _Evidence) -> dict[str, Any]:
-        """Write and validate the manifest on disk, then run transaction 2."""
-        lease = self._current_lease(str(intent["task_id"]))
+        """Write and validate the manifest on disk, then run transaction 2.
+
+        An expired lease is first replaced (new epoch and fencing token, recorded as
+        ``integration_lease_renewed``); transaction 2 re-checks liveness and fencing.
+        """
+        task_id = str(intent["task_id"])
+        lease = self._current_lease(task_id)
+        if not lease_is_live(lease):
+            lease = new_lease(
+                task_id, str(intent["integration_id"]),
+                next_lease_epoch(self.query, task_id), self.integrator_id,
+            )
+            renew_lease(self.store, intent=intent, lease=lease)
         manifest = _manifest(intent, lease)
         directory = (
             _integration_dir(self.root, str(intent["task_id"]))
@@ -1104,7 +1162,7 @@ class _Engine:
                     next_lease_epoch(self.query, task_id), self.integrator_id,
                 ),
             )
-        manifest = self._advance_and_complete(intent, evidence)
+        manifest = self._advance_and_complete(intent, evidence)  # _finalize re-checks the lease
         return self._result("reconciled", manifest, intent)
 
     def _advance_and_complete(self, intent: Mapping[str, Any], evidence: _Evidence) -> dict[str, Any]:

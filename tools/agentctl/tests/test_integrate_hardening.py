@@ -293,6 +293,53 @@ class GateTreeTests(unittest.TestCase):
             self.assertEqual(raised.exception.reason_code, "candidate_tree_unsafe")
             self.assertFalse((destination / ".git").exists())
 
+    def _crafted_commit(self, tree_lines: list[str]) -> str:
+        tree = subprocess.run(
+            ["git", "mktree"], cwd=self.lab.root, input="".join(tree_lines),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return self.lab.git("commit-tree", tree, "-m", "crafted")
+
+    def _blob(self, content: str) -> str:
+        return subprocess.run(
+            ["git", "hash-object", "-w", "--stdin"], cwd=self.lab.root, input=content,
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    def test_symlinked_directory_entry_cannot_create_directories_outside_the_gate_tree(self) -> None:
+        """F4: a tree with `d -> OUT` and `d/deep/x` created OUT/deep before the containment check."""
+        with tempfile.TemporaryDirectory() as directory:
+            outside = pathlib.Path(directory) / "OUT"
+            outside.mkdir()
+            inner = self._crafted_commit([f"100644 blob {self._blob('x')}\tx\n"])
+            inner_tree = self.lab.git("rev-parse", f"{inner}^{{tree}}")
+            deep = self._crafted_commit([f"040000 tree {inner_tree}\tdeep\n"])
+            deep_tree = self.lab.git("rev-parse", f"{deep}^{{tree}}")
+            commit = self._crafted_commit([
+                f"120000 blob {self._blob(str(outside))}\td\n",
+                f"040000 tree {deep_tree}\td\n",
+            ])
+            destination = pathlib.Path(directory) / "tree"
+
+            with self.assertRaises(IntegrationRejected) as raised:
+                _materialize_tree(_Git(self.lab.root), commit, destination)
+
+            self.assertEqual(raised.exception.reason_code, "candidate_tree_unsafe")
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_duplicate_or_clashing_entries_are_a_rejection_not_a_raw_os_error(self) -> None:
+        """F4: duplicate or clashing entries raised FileExistsError out of the integrator."""
+        blob = self._blob("x")
+        for lines in (
+            [f"100644 blob {blob}\tf\n", f"100644 blob {blob}\tf\n"],
+            [f"120000 blob {self._blob('target')}\tf\n", f"100644 blob {blob}\tf\n"],
+        ):
+            commit = self._crafted_commit(lines)
+            with self.subTest(lines=lines), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(IntegrationRejected) as raised:
+                    _materialize_tree(_Git(self.lab.root), commit, pathlib.Path(directory) / "tree")
+                self.assertEqual(raised.exception.reason_code, "candidate_tree_unsafe")
+
 
 class TaskIdPathTests(unittest.TestCase):
     def test_identifiers_that_would_escape_the_integration_directory_are_refused(self) -> None:

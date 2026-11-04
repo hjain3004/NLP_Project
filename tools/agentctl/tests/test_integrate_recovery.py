@@ -227,6 +227,63 @@ class CrashReconciliationTests(RecoveryTestCase):
         retired = {a["payload"]["lease_id"]: a["integrable"] for a in self.lab.artifacts("integration-lease", "T2")}
         self.assertEqual(retired[old["payload"]["lease_id"]], 0)
 
+    def _expire(self, lease_artifact_id: str) -> None:
+        # SIMULATED passage of time.
+        self.lab.tamper(
+            "UPDATE artifacts SET payload_json = json_set(payload_json, '$.expires_at', "
+            "'2000-01-01T00:00:00.000000Z') WHERE artifact_id = ?",
+            (lease_artifact_id,),
+        )
+
+    def test_lease_that_expired_after_the_ref_update_is_renewed_before_completion(self) -> None:
+        """F3 (the reviewer's poc_lease): killed at after_ref_update, lease expired, the rerun completed
+        with the same lease id, token and epoch 1 and no renewal."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        (old,) = self.lab.artifacts("integration-lease", "T2")
+        self._expire(old["artifact_id"])
+
+        run = self.lab.cli("T2")
+
+        self.assertEqual(run.code, 0, run.stdout + run.stderr)
+        self.assertEqual(run.json["reconciled"], ["T2"])
+        (record,) = self.lab.artifacts("integration-record", "T2")
+        manifest = record["payload"]
+        self.assertNotEqual(manifest["lease_id"], old["payload"]["lease_id"])
+        self.assertNotEqual(manifest["fencing_token"], old["payload"]["fencing_token"])
+        self.assertEqual(manifest["lease_epoch"], old["payload"]["lease_epoch"] + 1)
+        self.assertEqual(len(self.lab.events("integration_lease_renewed", "T2")), 1)
+        self.assertEqual(self.lab.commit_count(), self.count_after_first + 2)  # no second merge
+
+    def test_completion_is_refused_for_an_expired_lease(self) -> None:
+        """F3: transaction 2 itself must refuse a lease that is no longer live."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        intent = self.intent("T2")
+        (lease,) = self.lab.artifacts("integration-lease", "T2")
+        self._expire(lease["artifact_id"])
+        (expired,) = self.lab.artifacts("integration-lease", "T2")
+        manifest = integrate_module._manifest(intent, expired["payload"])
+
+        with self.assertRaises(IntegrationRefused) as raised:
+            complete_integration(self.lab.store, intent=intent, manifest=manifest)
+
+        self.assertEqual(raised.exception.reason_code, "lease_expired")
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
+
+    def test_completion_is_refused_for_a_stale_fencing_token_or_epoch(self) -> None:
+        """F3: a manifest whose token or epoch differs from the current lease artifact cannot complete."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        intent = self.intent("T2")
+        (lease,) = self.lab.artifacts("integration-lease", "T2")
+        for field, value in (("fencing_token", "0" * 64), ("lease_epoch", 7)):
+            manifest = integrate_module._manifest(intent, {**lease["payload"], field: value})
+            with self.subTest(field=field):
+                with self.assertRaises(IntegrationRefused) as raised:
+                    complete_integration(self.lab.store, intent=intent, manifest=manifest)
+                self.assertEqual(raised.exception.reason_code, "lease_fencing_mismatch")
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
+
     def test_completion_is_refused_if_the_intent_is_no_longer_integrable(self) -> None:
         """Protects transaction 2: a retired intent or lease cannot be used to complete an integration."""
         self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
