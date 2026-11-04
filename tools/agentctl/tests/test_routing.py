@@ -14,6 +14,8 @@ from agentctl.errors import HumanGate, PlanningError
 from agentctl.routing import (
     ALLOW_CANDIDATE_ENV,
     ROUTE_STATUSES,
+    load_candidates,
+    load_registry,
     reviewer_class_for,
     route_capability,
     route_reviewer,
@@ -213,7 +215,7 @@ class CandidateBindingTests(RoutingTestCase):
     def test_with_opt_in_the_candidate_is_selected_and_says_why_the_champion_was_not(self) -> None:
         """Protects: the decision itself carries binding_type candidate and the champion's unavailability reason."""
         with self.with_claude():
-            decision = route_reviewer("standard_implementation", root=SOURCE_ROOT, allow_candidate_bindings=True)
+            decision = route_reviewer("standard_implementation", risk="low", root=SOURCE_ROOT, allow_candidate_bindings=True)
         self.assertTrue(decision.available)
         self.assertEqual(
             (decision.capability_class, decision.provider, decision.model_id, decision.binding_type),
@@ -230,7 +232,7 @@ class CandidateBindingTests(RoutingTestCase):
             for value, expected in (("1", "candidate"), ("0", "initial_prior"), ("true", "initial_prior"), ("", "initial_prior")):
                 with self.subTest(value=value), mock.patch.dict(os.environ, {ALLOW_CANDIDATE_ENV: value}):
                     self.assertEqual(
-                        route_reviewer("standard_implementation", root=SOURCE_ROOT).binding_type, expected)
+                        route_reviewer("standard_implementation", risk="low", root=SOURCE_ROOT).binding_type, expected)
 
     def test_champion_always_wins_when_it_is_runnable(self) -> None:
         """Protects: champion first. Opt-in never swaps in a candidate while the champion has an adapter."""
@@ -260,7 +262,7 @@ class CandidateBindingTests(RoutingTestCase):
     def test_a_candidate_whose_cli_is_missing_is_reported_not_papered_over(self) -> None:
         """Protects: with opt-in but no executable the result is a candidate-labelled executable_missing carrying the champion's reason."""
         with self.without_claude():
-            decision = route_reviewer("standard_implementation", root=SOURCE_ROOT, allow_candidate_bindings=True)
+            decision = route_reviewer("standard_implementation", risk="low", root=SOURCE_ROOT, allow_candidate_bindings=True)
         self.assertEqual((decision.status, decision.binding_type), ("executable_missing", "candidate"))
         self.assertFalse(decision.available)
         self.assertIn("openai/gpt-5.6-terra", decision.champion_unavailable_reason)
@@ -292,6 +294,162 @@ class CandidateBindingTests(RoutingTestCase):
         self.assertEqual(allowed.candidate_roles, ("reviewer",))
         self.assertEqual(refused.candidate_roles, ())
         self.assertEqual(allowed.to_payload()["candidate_roles"], ["reviewer"])
+
+
+def registry_fixture(test: unittest.TestCase, *, candidate: dict | None = None, policy: dict | None = None,
+                     entries=None) -> pathlib.Path:
+    """A temporary repository root holding copies of the routing files, optionally edited."""
+    directory = tempfile.TemporaryDirectory()
+    test.addCleanup(directory.cleanup)
+    routing = pathlib.Path(directory.name) / "agent-system/routing"
+    shutil.copytree(SOURCE_ROOT / "agent-system/routing", routing)
+    registry = json.loads((routing / "capability-registry.json").read_text())
+    if candidate is not None:
+        for index, entry in enumerate(registry["entries"]):
+            if entry["binding_type"] == "candidate":
+                registry["entries"][index] = candidate
+    if entries is not None:
+        registry["entries"] = entries(registry["entries"])
+    (routing / "capability-registry.json").write_text(json.dumps(registry))
+    if policy is not None:
+        (routing / "champion-challenger.json").write_text(json.dumps(policy))
+    return pathlib.Path(directory.name)
+
+
+class CandidateSampleScopeTests(RoutingTestCase):
+    """champion-challenger-v1 evaluates a challenger on `sample_scope` risks only; routing never goes beyond it."""
+
+    SCOPE = json.loads((SOURCE_ROOT / "agent-system/routing/champion-challenger.json").read_text())["sample_scope"]
+
+    def test_the_policy_scope_is_low_and_medium(self) -> None:
+        """Protects the premise of the tests below: the real policy file names exactly these risks."""
+        self.assertEqual(self.SCOPE, ["low", "medium"])
+
+    def test_a_critical_task_is_refused_the_candidate_even_with_opt_in(self) -> None:
+        """Protects champion-challenger-v1: a critical-risk task never gets an unevaluated candidate reviewer, flag or not."""
+        with self.with_claude():
+            decision = route_reviewer("standard_implementation", risk="critical", root=SOURCE_ROOT,
+                                      allow_candidate_bindings=True)
+        self.assertFalse(decision.available)
+        self.assertEqual((decision.status, decision.binding_type, decision.provider),
+                         ("unsupported_provider", "initial_prior", "openai"))
+        for needle in ("critical", "sample_scope", "low", "medium", "champion-challenger-v1", "claude-opus-5-5"):
+            self.assertIn(needle, decision.message)
+        self.assertIn("promot", decision.message)  # actionable: what would make the candidate usable
+
+    def test_high_risk_is_outside_the_scope_for_workers_too(self) -> None:
+        """Protects: the same rule applies to an author binding, not only to a reviewer."""
+        with self.with_claude():
+            decision = route_capability("complex_implementation", risk="high", root=SOURCE_ROOT,
+                                        allow_candidate_bindings=True)
+        self.assertEqual((decision.available, decision.binding_type), (False, "initial_prior"))
+        self.assertIn("sample_scope", decision.message)
+
+    def test_in_scope_risks_still_route_the_candidate(self) -> None:
+        """Protects: the refusal is specific to risks outside the scope; low and medium keep working."""
+        with self.with_claude():
+            for risk in self.SCOPE:
+                with self.subTest(risk=risk):
+                    decision = route_reviewer("standard_implementation", risk=risk, root=SOURCE_ROOT,
+                                              allow_candidate_bindings=True)
+                    self.assertEqual((decision.available, decision.binding_type), (True, "candidate"))
+
+    def test_an_unknown_task_risk_fails_closed(self) -> None:
+        """Protects: a caller that cannot say the task's risk cannot use a candidate (absence is not 'in scope')."""
+        with self.with_claude():
+            decision = route_reviewer("standard_implementation", root=SOURCE_ROOT, allow_candidate_bindings=True)
+        self.assertEqual((decision.available, decision.binding_type), (False, "initial_prior"))
+        self.assertIn("risk", decision.message)
+
+    def test_the_scope_comes_from_the_policy_file_not_from_code(self) -> None:
+        """Protects: editing champion-challenger.json (the policy owner's file) changes what routing allows, with no code change."""
+        policy = json.loads((SOURCE_ROOT / "agent-system/routing/champion-challenger.json").read_text())
+        narrowed = registry_fixture(self, policy={**policy, "sample_scope": ["low"]})
+        widened = registry_fixture(self, policy={**policy, "sample_scope": ["low", "medium", "high"]})
+        with self.with_claude():
+            def reviewer(root, risk):
+                return route_reviewer("standard_implementation", risk=risk, root=root, allow_candidate_bindings=True)
+            self.assertFalse(reviewer(narrowed, "medium").available)
+            self.assertTrue(reviewer(narrowed, "low").available)
+            self.assertTrue(reviewer(widened, "high").available)
+            self.assertFalse(reviewer(widened, "critical").available)
+
+    def test_an_unreadable_or_malformed_scope_is_a_planning_error_not_a_default(self) -> None:
+        """Protects: a policy file without a usable sample_scope is not silently treated as 'everything' or 'nothing'."""
+        policy = json.loads((SOURCE_ROOT / "agent-system/routing/champion-challenger.json").read_text())
+        for label, edit in (("missing", lambda p: p.pop("sample_scope")), ("not a list", lambda p: p.update(sample_scope="low")),
+                            ("empty", lambda p: p.update(sample_scope=[])), ("not strings", lambda p: p.update(sample_scope=[1]))):
+            broken = dict(policy)
+            edit(broken)
+            root = registry_fixture(self, policy=broken)
+            with self.subTest(case=label), self.with_claude(), self.assertRaises(PlanningError):
+                route_reviewer("standard_implementation", risk="low", root=root, allow_candidate_bindings=True)
+
+    def test_without_opt_in_the_scope_is_not_consulted(self) -> None:
+        """Protects: the default refusal is unchanged (it names the flag); the scope only narrows what the flag can do."""
+        with self.with_claude():
+            decision = route_reviewer("standard_implementation", risk="critical", root=SOURCE_ROOT)
+        self.assertIn("--allow-candidate-bindings", decision.message)
+
+
+class MalformedRegistryEntryTests(RoutingTestCase):
+    """A corrupt registry entry is a typed PlanningError that names the entry, never a KeyError, opt-in or not."""
+
+    CANDIDATE = next(e for e in REGISTRY["entries"] if e["binding_type"] == "candidate")
+
+    def broken(self, **changes):
+        entry = dict(self.CANDIDATE)
+        for key, value in changes.items():
+            if value is None:
+                entry.pop(key)
+            else:
+                entry[key] = value
+        return registry_fixture(self, candidate=entry)
+
+    def test_each_missing_or_empty_required_field_is_named(self) -> None:
+        """Protects: missing model_id/provider/model_version (or blank/non-string values) fail in the loader with the entry identified."""
+        cases = (
+            ("model_id", None), ("provider", None), ("model_version", None), ("capability_class", None),
+            ("model_id", ""), ("provider", "   "), ("model_version", 7),
+        )
+        for field, value in cases:
+            root = self.broken(**{field: value})
+            for allow in (None, True):
+                with self.subTest(field=field, value=value, allow=allow), self.with_claude():
+                    with self.assertRaises(PlanningError) as raised:
+                        route_capability("complex_implementation", risk="low", root=root, allow_candidate_bindings=allow)
+                    message = raised.exception.message
+                    self.assertIn(field, message)
+                    self.assertIn("capability registry entry #", message)
+                    self.assertIn("candidate", message)
+
+    def test_the_loader_itself_refuses_so_no_caller_can_hit_a_keyerror(self) -> None:
+        """Protects: load_candidates / load_registry validate; the error identifies the entry by position and what it does bind."""
+        root = self.broken(model_id=None)
+        with self.assertRaises(PlanningError) as raised:
+            load_candidates(root)
+        self.assertEqual(raised.exception.context["missing"], ["model_id"])
+        self.assertEqual(raised.exception.context["capability_class"], "complex_implementation")
+        index = [e["binding_type"] for e in REGISTRY["entries"]].index("candidate")
+        self.assertEqual(raised.exception.context["entry_index"], index)
+        with self.assertRaises(PlanningError):
+            load_registry(root)
+
+    def test_a_malformed_champion_entry_is_refused_the_same_way(self) -> None:
+        """Protects: the validation is for every entry, not only candidates."""
+        def drop_provider(entries):
+            return [{k: v for k, v in e.items() if k != "provider"} if e["capability_class"] == "standard_implementation" else e
+                    for e in entries]
+        root = registry_fixture(self, entries=drop_provider)
+        with self.assertRaises(PlanningError) as raised:
+            route_capability("standard_implementation", root=root)
+        self.assertIn("provider", raised.exception.message)
+        self.assertIn("standard_implementation", raised.exception.message)
+
+    def test_the_real_registry_is_valid(self) -> None:
+        """Protects: the validation does not reject the shipped file."""
+        self.assertEqual(len(load_candidates(SOURCE_ROOT)), 1)
+        self.assertEqual(len(load_registry(SOURCE_ROOT)), 5)
 
 
 if __name__ == "__main__":

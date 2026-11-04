@@ -33,6 +33,18 @@ resulting :class:`RouteDecision` says so (``binding_type == "candidate"``,
 ``champion_unavailable_reason``). Without the opt-in the refusal names the candidate, the
 exact flag, and that promotion is an owner decision. Nothing is ever substituted silently.
 
+The opt-in is further bounded by ``champion-challenger-v1``: its ``sample_scope`` (read from
+``agent-system/routing/champion-challenger.json``, never hard-coded) lists the task risks a challenger
+may be evaluated on. A task whose risk is outside that list, or whose risk the caller cannot state, is
+refused the candidate however the operator opted in.
+
+Registry integrity
+------------------
+Every registry entry is validated when the registry is loaded (a champion or a candidate with a missing
+or blank ``capability_class`` / ``provider`` / ``model_id`` / ``model_version`` / ``binding_type`` is a
+:class:`~agentctl.errors.PlanningError` that names the entry), so a corrupt entry is reported the same way
+whether or not the operator opted in, and never surfaces as a ``KeyError``.
+
 Reviewer selection rule (deterministic, documented)
 ---------------------------------------------------
 ``reviewer_matrix[task_class]`` is either a class name or prose. A class name is used
@@ -70,6 +82,7 @@ __all__ = [
     "RouteDecision",
     "TaskRoute",
     "candidate_bindings_allowed",
+    "candidate_sample_scope",
     "load_candidates",
     "load_registry",
     "reviewer_class_for",
@@ -100,6 +113,9 @@ ALLOW_CANDIDATE_FLAG = "--allow-candidate-bindings"
 #: Champion statuses that mean "no runnable adapter": only these make a candidate eligible.
 _NO_RUNNABLE_ADAPTER = frozenset({UNSUPPORTED_PROVIDER, EXECUTABLE_MISSING})
 _HIGH_RISK = frozenset({"high", "critical"})
+CHAMPION_CHALLENGER_POLICY = "agent-system/routing/champion-challenger.json"
+#: Fields every registry entry needs before routing may read it.
+_REQUIRED_ENTRY_FIELDS = ("capability_class", "provider", "model_id", "model_version", "binding_type")
 _AUTH_PROBE_SECONDS = 20.0
 
 
@@ -177,8 +193,35 @@ def _load_json(path: Path, description: str) -> dict[str, Any]:
 
 
 def _registry_entries(root: str | Path | None) -> list[dict[str, Any]]:
+    """All registry entries, each validated; a malformed entry is a typed error naming it."""
     document = _load_json(_root(root) / "agent-system/routing/capability-registry.json", "capability registry")
-    return [dict(entry) for entry in document.get("entries", ())]
+    entries: list[dict[str, Any]] = []
+    for index, raw in enumerate(document.get("entries", ())):
+        if not isinstance(raw, dict):
+            raise PlanningError(
+                f"capability registry entry #{index} is not an object", entry_index=index
+            )
+        entry = dict(raw)
+        missing = [
+            name for name in _REQUIRED_ENTRY_FIELDS
+            if not isinstance(entry.get(name), str) or not entry[name].strip()
+        ]
+        if missing:
+            described = " / ".join(
+                str(entry[name]) for name in ("capability_class", "model_id", "binding_type")
+                if isinstance(entry.get(name), str) and entry[name].strip()
+            ) or "unidentifiable"
+            raise PlanningError(
+                f"capability registry entry #{index} ({described}) is malformed: "
+                f"{', '.join(missing)} must be a non-empty string. Fix the entry in "
+                "agent-system/routing/capability-registry.json; routing will not guess a binding.",
+                entry_index=index,
+                missing=missing,
+                capability_class=entry.get("capability_class"),
+                binding_type=entry.get("binding_type"),
+            )
+        entries.append(entry)
+    return entries
 
 
 def load_registry(root: str | Path | None = None) -> dict[str, dict[str, Any]]:
@@ -217,6 +260,22 @@ def load_candidates(root: str | Path | None = None) -> dict[str, dict[str, Any]]
 def candidate_bindings_allowed(explicit: bool | None = None) -> bool:
     """Operator opt-in: the explicit flag, or ``AGENTCTL_ALLOW_CANDIDATE_BINDINGS`` exactly ``1``."""
     return bool(explicit) or os.environ.get(ALLOW_CANDIDATE_ENV) == "1"
+
+
+def candidate_sample_scope(root: str | Path | None = None) -> tuple[str, ...]:
+    """``champion-challenger-v1`` ``sample_scope``: the task risks a challenger may be evaluated on."""
+    path = _root(root) / CHAMPION_CHALLENGER_POLICY
+    scope = _load_json(path, "champion-challenger policy").get("sample_scope")
+    if (
+        not isinstance(scope, list)
+        or not scope
+        or not all(isinstance(item, str) and item for item in scope)
+    ):
+        raise PlanningError(
+            "champion-challenger policy sample_scope must be a non-empty list of risk names",
+            path=str(path),
+        )
+    return tuple(scope)
 
 
 def _policy(root: Path) -> dict[str, Any]:
@@ -301,13 +360,16 @@ def route_capability(
     root: str | Path | None = None,
     check_auth: bool = False,
     allow_candidate_bindings: bool | None = None,
+    risk: str | None = None,
 ) -> RouteDecision:
     """Route one capability class through the registry. Never substitutes a provider.
 
     The champion is tried first. If it has no runnable adapter and the registry lists a
     candidate for the class, the candidate is routed **only** when the operator opted in
-    (see :func:`candidate_bindings_allowed`); otherwise the champion's refusal is returned
-    with the candidate, the flag, and the governance status spelled out.
+    (see :func:`candidate_bindings_allowed`) **and** ``risk`` is inside the policy's
+    ``sample_scope``; otherwise the champion's refusal is returned with the candidate, the
+    flag, and the governance status spelled out. ``risk`` is the risk of the task being
+    routed; ``None`` (unknown) is never in scope.
     """
     champion_entry = load_registry(root).get(capability_class)
     if champion_entry is None:
@@ -337,6 +399,19 @@ def route_capability(
                 f"automatically. To use it for this run only, pass {ALLOW_CANDIDATE_FLAG} "
                 f"(or set {ALLOW_CANDIDATE_ENV}=1); the run record and verdict will state that the binding "
                 "is an unevaluated candidate. Promoting it to a champion is an owner decision."
+            ),
+        )
+    scope = candidate_sample_scope(root)
+    if risk not in scope:
+        stated = "was not stated" if risk is None else f"is {risk!r}"
+        return replace(
+            champion,
+            message=(
+                f"{champion.message} A candidate binding (status {status_text}) exists for {capability_class}: "
+                f"{candidate_name}, but it is NOT usable for this task even with the opt-in: the task risk "
+                f"{stated}, and {policy} sample_scope ({CHAMPION_CHALLENGER_POLICY}) limits a challenger to "
+                f"risks {list(scope)}. Re-class the task into that scope, or have the owner promote the "
+                "binding to a champion under the policy; nothing is substituted."
             ),
         )
     routed = _route_entry(capability_class, candidate_entry, check_auth=check_auth)
@@ -395,6 +470,7 @@ def route_reviewer(
         root=root,
         check_auth=check_auth,
         allow_candidate_bindings=allow_candidate_bindings,
+        risk=risk,
     )
 
 
@@ -434,7 +510,7 @@ def route_task(
     spec = Scheduler(store).task_spec(task_id)
     worker = route_capability(
         spec.capability_class, root=base, check_auth=check_auth,
-        allow_candidate_bindings=allow_candidate_bindings,
+        allow_candidate_bindings=allow_candidate_bindings, risk=spec.risk,
     )
     violation = _floor_violation(spec.capability_class, spec.risk, len(spec.deterministic_checks), base)
     try:
