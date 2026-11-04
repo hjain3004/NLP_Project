@@ -79,14 +79,24 @@ G0 closeout leads run in parallel only where they touch none of the lane-owned f
 |---|---|---|---|
 | PRE | done | 3a1457c | preflight + plan; pushed |
 | PLAN-REVIEW | done | | APPROVE_WITH_CHANGES, all 6 blockers accepted |
-| A1/A2 | built, repair 1 running | `claude/lane-a-routing` 0274810..f2e8025 | independent Opus review: NO_BLOCKING; coordinator made env-allowlist (host env/PII reaches child), export-record, 2 test gaps and shared-.git git hardening mandatory |
-| B1 | built, repair 1 running | `claude/lane-b-integration` e33b5f9..9d51a9e | independent Opus review: **2 BLOCKING** (gate escapes env scrub via shared .git → poisons later integrator git; gate timeout unenforced under `setsid`) + 4 non-blocking; repair dispatched with PoC-first regressions |
-| TRIAL-MERGE | done | scratch | A+B merge textually clean; combined suite 338 OK on a named branch (33 B tests fail on a detached HEAD: helper fragility, in B repair) |
+| A1/A2/A3 | merged | session branch tip `9825b3c` | Lane A: routing, Claude CLI proposal_only adapter, `run`, `review run`, env allowlist, hardened git, `verify_candidate` on shared gate_runner. Independent review (Opus): no blocking after repair 1. |
+| B1-B4 | merged | same | Lane B: serialized `integrate`. Review 1: 2 blocking → repair 1 (Sonnet) → re-review: still blocking (same class) → **escalated to Opus** repair 3 (namespace isolation, tamper detection, lease fencing, safe materialisation) → review 3: NO_BLOCKING_FINDINGS. |
+| FULL SUITE | verified by coordinator from main checkout | `9825b3c` | 391 tests OK, 1 skipped (opt-in live test); `docs verify` ok. |
+| DEMO | running | | operator worker, delivery clone `/home/user/delivery`, evidence branch `claude/demo-evidence` |
 | FIXTURE-PIN | done, merged | edc6fdc | fixes G0-04 and the baseline error; suite 232 OK; G0-01..11 pass dry |
 | A2 | blocked on A1 | | |
 | REVIEW-A1, REVIEW-B1 | blocked | | |
 | DEMO | blocked | | |
 | G0-CLASSIFY | pending | | |
+
+## Open non-blocking findings (from independent reviews; not fixed)
+
+- Tamper defences: several surfaces (`info/attributes`, `objects/info/alternates`, included config, replace refs) lack a test that fails when the defence is removed (review B3 #1).
+- Tamper check hashes `.git` metadata only; a gate that edits the control plane's own working-copy files or the event store is NOT detected (review B3 #2; residual of the `unsandboxed_tools` class). No OS sandbox is claimed.
+- `_finalize` fencing compares the store with itself; reconcile adopts a crashed run's live lease (review B3 #3).
+- `RLIMIT_NPROC` only soft-set on the fallback path; whole blobs read when building the gate tree (B3 #4/#5).
+- Gate isolation depends on `unshare --user --pid`; without it F1(a) is open for a root integrator (`gate_isolation: "none"` is recorded).
+- Open design items for the owner: reviewer-floor registry bindings; two new state-machine rows requested by Lane B (rejected candidates are parked by artifact); `repair_required` has no authorize path; infrastructure failures consume attempts; `handle_schema_error` with correction budget > 0 leaves the task running.
 
 ## Budget
 
@@ -102,4 +112,4 @@ recorded in its run record. Preflight probes cost about $0.05 in total.
 
 ## Next executable step
 
-Wait for lane reports; review each as it lands; merge to the session branch; then demo.
+Demo operator reports; then integrate demo outcome, final architecture audit (fresh session), README/status update, draft PR.
