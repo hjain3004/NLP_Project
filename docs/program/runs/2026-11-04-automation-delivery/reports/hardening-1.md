@@ -70,3 +70,34 @@ Named branch `claude/verify-hardening`, `PYTHONPATH=tools/agentctl python3 -m un
 
 - First full run (after commit `3d60647`): 410 tests, 10 errors, all in `test_review_independence` (edit 3 above).
 - After `a42f5a9`: **410 tests (404 + 6 new), OK, 1 skipped (live-provider test), 0 failures, 0 errors** (241 s).
+
+## Review repair (independent review: one blocking, one non-blocking finding)
+
+**Blocking: blank checks still verified.** The schema allows `deterministic_checks: [""]` and `/bin/sh -c ""`
+exits 0, so `("",)` and `("   ",)` verified and integrated as a pass. Fix: `scheduler.effective_checks` keeps only
+non-blank `str` entries; `verify_candidate` and `integrate._verify` test `not effective_checks(...)` instead of
+`not checks`.
+
+- **Policy (decided):** blank or non-string entries are *ignorable next to a real check* and are neither run nor
+  recorded (verification evidence and the integration gate list carry only the real checks); a contract whose
+  entries are *all* blank is vacuous, identical to an empty list (`no_deterministic_checks`).
+- **Schema not changed.** Proposal for a human decision (schema commitment): add `"minLength": 1` and
+  `"pattern": "\\S"` to the `deterministic_checks` items in `task-contract.schema.json` so a blank check is
+  rejected at registration rather than at verification.
+
+**Non-blocking, done: allow-list for risk.** `scheduler.unsandboxed_gate_refusal` normalises with
+`str(risk).strip().lower()` and lets only `low` and `medium` proceed. `high`/`critical` (any case or padding) keep
+reason `unsandboxed_gate_high_risk`; anything else, including a missing risk in integrate's stored payload, is
+refused with `unsandboxed_gate_unknown_risk`. Both verify (`PermissionViolation`, before any transition) and
+integrate (non-advancing `human_required` rejection) use the same function. `" Low"` and `"MEDIUM "` still verify.
+
+**Tests added (7 test methods, `test_verify_hardening.py` now 13 tests), failing on the previous code:**
+all-blank verification (`("",)`, `("   ",)`, `("\n\t", "")`), mixed blank+real verification, integrate blank-only
+(SIMULATED stored state), integrate mixed blank+real, verify allow-list (`" High"`, `"CRITICAL"`, `"bogus"`, `""`),
+integrate allow-list (`" High"`, `"bogus"`, risk missing; SIMULATED), plus the passing boundary test for `" Low"`/`"MEDIUM "`.
+Against the previous code 13 subtest/test failures were observed (the boundary test passes before and after).
+
+**Mutation confirmation (restored from backup after each):** verify uses raw checks (4 failures); integrate guard
+uses raw list (1); integrate gates unfiltered (1); deny-list instead of allow-list (4); no normalisation (5).
+
+No existing test was edited in this repair.

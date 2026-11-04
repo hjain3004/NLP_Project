@@ -98,7 +98,115 @@ class NoDeterministicChecksTests(_LabCase):
         self.assertEqual(self.lab.artifacts("integration-record", "T-NC2"), [])
 
 
+class BlankChecksTests(_LabCase):
+    """Review repair: the schema allows `[""]` and `sh -c ""` exits 0, so a blank check verified nothing.
+
+    Policy: blank (or non-string) entries are ignorable next to a real check and are not run or
+    recorded; a contract whose entries are ALL blank is vacuous, exactly like an empty list.
+    """
+
+    def test_verification_of_all_blank_checks_fails_as_vacuous(self) -> None:
+        for index, blanks in enumerate((("",), ("   ",), ("\n\t", ""))):
+            with self.subTest(checks=blanks):
+                task_id = f"T-BL{index}"
+                self.unverified_candidate(task_id, checks=blanks)
+
+                result = self.lab.scheduler.verify_candidate(task_id)
+
+                self.assertEqual(result["state"], "repair_required")
+                evidence = self.evidence(task_id)
+                self.assertIs(evidence["passed"], False)
+                self.assertEqual(evidence["failure_reason"], "no_deterministic_checks")
+                (event,) = self.lab.events("implementation_defect", task_id)
+                self.assertEqual(event["reason_code"], "no_deterministic_checks")
+
+    def test_a_blank_entry_next_to_a_real_check_is_ignored_and_not_run(self) -> None:
+        self.unverified_candidate("T-BLM", checks=("", "true", "  "))
+
+        result = self.lab.scheduler.verify_candidate("T-BLM")
+
+        self.assertEqual(result["state"], "independent_review")
+        evidence = self.evidence("T-BLM")
+        self.assertIs(evidence["passed"], True)
+        self.assertEqual([item["command"] for item in evidence["checks"]], ["true"])
+
+    def test_integration_rejects_blank_only_checks_and_runs_only_the_real_ones_otherwise(self) -> None:
+        """SIMULATED legacy state for the blank-only case (a build that verified `[""]` as a pass)."""
+        self.lab.candidate("T-BLI", FILES, checks=("true",))
+        self.lab.tamper(
+            "UPDATE tasks SET payload_json = json_set(payload_json, '$.deterministic_checks', json('[\" \"]')) "
+            "WHERE task_id = ?", ("T-BLI",),
+        )
+
+        result = integrate("T-BLI", store=self.lab.store)
+
+        self.assertEqual(result["outcome"], "rejected", result)
+        self.assertEqual(result["reason_code"], "no_deterministic_checks", result)
+        self.assertIsNone(self.lab.branch_head(BRANCH))
+        self.assertEqual(self.lab.state("T-BLI"), "integration_ready")
+
+    def test_integration_of_a_mixed_blank_and_real_check_contract_gates_only_the_real_check(self) -> None:
+        self.lab.candidate("T-BLX", FILES, checks=("", "true"))
+
+        result = integrate("T-BLX", store=self.lab.store)
+
+        self.assertEqual(result["outcome"], "integrated", result)
+        (record,) = self.lab.artifacts("integration-record", "T-BLX")
+        gates = [gate["gate"] for gate in record["payload"]["affected_gates_rerun"]]
+        self.assertIn("true", gates)
+        self.assertEqual([gate for gate in gates if not gate.strip()], [])
+
+
 class HighRiskRefusalTests(_LabCase):
+    def test_verify_allow_list_refuses_every_risk_that_is_not_low_or_medium(self) -> None:
+        """Review repair: an allow-list, so spelling variants and unknown values cannot slip through."""
+        cases = {
+            " High": "unsandboxed_gate_high_risk",
+            "CRITICAL": "unsandboxed_gate_high_risk",
+            "bogus": "unsandboxed_gate_unknown_risk",
+            "": "unsandboxed_gate_unknown_risk",
+        }
+        for index, (risk, reason) in enumerate(cases.items()):
+            with self.subTest(risk=risk):
+                task_id = f"T-AL{index}"
+                marker = self.scratch / f"allow-gate-ran-{index}"
+                self.unverified_candidate(task_id, checks=(f"touch {marker}",), risk=risk)
+
+                with self.assertRaises(PermissionViolation) as raised:
+                    self.lab.scheduler.verify_candidate(task_id)
+
+                self.assertEqual(raised.exception.context["reason_code"], reason)
+                self.assertEqual(self.lab.state(task_id), "candidate")
+                self.assertFalse(marker.exists())
+
+    def test_verify_accepts_low_and_medium_in_any_case_or_padding(self) -> None:
+        for index, risk in enumerate((" Low", "MEDIUM ")):
+            with self.subTest(risk=risk):
+                task_id = f"T-OK{index}"
+                self.unverified_candidate(task_id, checks=("true",), risk=risk)
+                self.assertEqual(self.lab.scheduler.verify_candidate(task_id)["state"], "independent_review")
+
+    def test_integration_allow_list_rejects_variant_unknown_and_missing_risk(self) -> None:
+        """SIMULATED: stored contract risk rewritten after verification."""
+        cases = (
+            ("T-IA0", "json_set(payload_json, '$.risk', ' High')", "unsandboxed_gate_high_risk"),
+            ("T-IA1", "json_set(payload_json, '$.risk', 'bogus')", "unsandboxed_gate_unknown_risk"),
+            ("T-IA2", "json_remove(payload_json, '$.risk')", "unsandboxed_gate_unknown_risk"),
+        )
+        for task_id, expression, reason in cases:
+            with self.subTest(task=task_id):
+                self.lab.candidate(task_id, {f"docs/{task_id}.txt": "x\n"}, checks=("true",))
+                self.lab.tamper(
+                    f"UPDATE tasks SET payload_json = {expression} WHERE task_id = ?", (task_id,)
+                )
+
+                result = integrate(task_id, store=self.lab.store)
+
+                self.assertEqual(result["outcome"], "rejected", result)
+                self.assertEqual(result["reason_code"], reason, result)
+                self.assertIsNone(self.lab.branch_head(BRANCH))
+                self.assertEqual(self.lab.state(task_id), "integration_ready")
+
     def test_verify_refuses_high_and_critical_tasks_before_any_transition_or_check(self) -> None:
         """F1b: unsandboxed gates are prohibited for high-risk tasks; refuse before anything runs."""
         for index, risk in enumerate(("high", "critical")):
