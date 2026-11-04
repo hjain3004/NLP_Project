@@ -10,6 +10,7 @@ The concurrency tests use real parallel processes and real threads.
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import unittest
 
@@ -21,6 +22,9 @@ from agentctl.integration_queue import (
     claim_integration,
     complete_integration,
     new_lease,
+    next_lease_epoch,
+    renew_lease,
+    store_query,
 )
 
 from tests.helpers_lane_b import BRANCH, Lab
@@ -300,6 +304,120 @@ class CrashReconciliationTests(RecoveryTestCase):
         self.assertEqual(raised.exception.reason_code, "intent_not_integrable")
         self.assertEqual(self.lab.state("T2"), "integrating")
         self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
+
+
+class LeaseHolderFencingTests(RecoveryTestCase):
+    """Review B3 #3: `_finalize` compared the store's current lease with a manifest built from that very
+    lease (a self-comparison), so a takeover by another holder, or a live lease of another live process,
+    was silently adopted. The finalizer must act under the lease THIS process claimed."""
+
+    def _expire(self, lease_artifact_id: str) -> None:
+        # SIMULATED passage of time.
+        self.lab.tamper(
+            "UPDATE artifacts SET payload_json = json_set(payload_json, '$.expires_at', "
+            "'2000-01-01T00:00:00.000000Z') WHERE artifact_id = ?",
+            (lease_artifact_id,),
+        )
+
+    def _usurp(self, task_id: str) -> dict:
+        """A different holder installs a newer lease for the task (a real, ordinary renewal call)."""
+        intent = self.intent(task_id)
+        usurper = new_lease(task_id, intent["integration_id"], next_lease_epoch(store_query(self.lab.store), task_id),
+                            "usurping-integrator")
+        renew_lease(self.lab.store, intent=intent, lease=usurper)
+        return usurper
+
+    def test_the_claiming_process_is_fenced_out_when_another_holder_took_the_lease(self) -> None:
+        """The claiming process was killed-and-replaced: after the Git step another holder installs a newer
+        lease. Completing with the store's current lease (the old behaviour) adopted the usurper's; the
+        claimant must be refused instead, and nothing completes."""
+        taken: dict = {}
+
+        def takeover(point: str) -> None:
+            if point == "after_ref_update":  # injected: the real renewal by a second holder
+                taken["lease"] = self._usurp("T2")
+
+        result = integrate("T2", store=self.lab.store, fault_hook=takeover)
+
+        self.assertEqual(result["outcome"], "refused", result)
+        # The usurper's renewal retired our lease, so transaction 2 refuses it as not integrable; a lease
+        # that is still integrable but not current is refused as a fencing mismatch. Either way: fenced out.
+        self.assertIn(result["reason_code"], {"lease_not_integrable", "lease_fencing_mismatch"}, result)
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
+        live = [a["payload"]["lease_id"] for a in self.lab.artifacts("integration-lease", "T2") if a["integrable"]]
+        self.assertEqual(live, [taken["lease"]["lease_id"]])  # the usurper still holds it, untouched
+
+    def test_reconcile_refuses_a_live_lease_whose_holder_is_another_live_process(self) -> None:
+        """SIMULATED holder: the crashed run's lease is rewritten to name a real, running process."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        (lease,) = self.lab.artifacts("integration-lease", "T2")
+        holder = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(lambda: (holder.kill(), holder.wait()))
+        ticks = integrate_module._proc_start_ticks(holder.pid)
+        self.lab.tamper(
+            "UPDATE artifacts SET payload_json = json_set(payload_json, '$.holder', json(?)) WHERE artifact_id = ?",
+            (json.dumps({"pid": holder.pid, "start_ticks": ticks, "boot_id": integrate_module._boot_id()}),
+             lease["artifact_id"]),
+        )
+
+        refused = self.lab.cli()
+
+        self.assertEqual(refused.code, 1, refused.stdout + refused.stderr)
+        self.assertEqual(refused.json["reason_code"], "lease_held_by_live_holder")
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self.assertEqual(self.lab.artifacts("integration-record", "T2"), [])
+        self.assertEqual(self.lab.events("integration_lease_renewed", "T2"), [])
+        self.assertEqual(self.findings("T2"), [])  # refused before anything was recorded
+
+        holder.kill()
+        holder.wait()  # the holder is gone: now the lease may be taken over
+        recovered = self.lab.cli()
+
+        self.assertEqual(recovered.code, 0, recovered.stdout + recovered.stderr)
+        self.assertEqual(recovered.json["outcome"], "reconciled")
+        (record,) = self.lab.artifacts("integration-record", "T2")
+        self.assertEqual(record["payload"]["lease_id"], lease["payload"]["lease_id"])
+
+    def test_reconcile_waits_for_expiry_when_a_live_lease_has_no_identifiable_holder(self) -> None:
+        """SIMULATED legacy lease (no holder identity): not adopted while live; renewed once expired."""
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        (lease,) = self.lab.artifacts("integration-lease", "T2")
+        self.lab.tamper(
+            "UPDATE artifacts SET payload_json = json_remove(payload_json, '$.holder') WHERE artifact_id = ?",
+            (lease["artifact_id"],),
+        )
+
+        refused = self.lab.cli()
+
+        self.assertEqual(refused.json["reason_code"], "lease_holder_unknown")
+        self.assertEqual(self.lab.state("T2"), "integrating")
+        self._expire(lease["artifact_id"])
+        recovered = self.lab.cli()
+        self.assertEqual(recovered.code, 0, recovered.stdout + recovered.stderr)
+        (record,) = self.lab.artifacts("integration-record", "T2")
+        self.assertEqual(record["payload"]["lease_epoch"], lease["payload"]["lease_epoch"] + 1)
+
+    def test_renewal_verifies_inside_its_transaction_that_the_old_lease_is_expired_and_still_current(self) -> None:
+        self.assertEqual(self.lab.run_until_killed("T2", "after_ref_update"), 97)
+        intent = self.intent("T2")
+        (old,) = self.lab.artifacts("integration-lease", "T2")
+        replacement = lambda: new_lease("T2", intent["integration_id"], 2, "renewing-integrator")  # noqa: E731
+
+        with self.assertRaises(IntegrationRefused) as live:
+            integrate_module._renew_expired_lease(
+                self.lab.store, intent=intent, expired=old["payload"], lease=replacement()
+            )
+        self.assertEqual(live.exception.reason_code, "lease_not_expired")
+
+        self._expire(old["artifact_id"])
+        self._usurp("T2")  # someone else replaced it first
+        with self.assertRaises(IntegrationRefused) as stolen:
+            integrate_module._renew_expired_lease(
+                self.lab.store, intent=intent, expired=old["payload"], lease=replacement()
+            )
+        self.assertEqual(stolen.exception.reason_code, "lease_fencing_mismatch")
+        self.assertEqual(len(self.lab.events("integration_lease_renewed", "T2")), 1)  # only the usurper's
 
 
 class SerializationTests(RecoveryTestCase):
