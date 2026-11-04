@@ -70,3 +70,25 @@ Agent-session spend is not reported to this session.
 ## Next executable step
 
 Owner: see 'Blockers needing the owner'. Engineering: next work is owner-gated design (reviewer-floor bindings, state-machine rows, gate sandbox uid/network namespace).
+
+
+---
+
+# Operational-readiness repair (continuation of PR #1)
+
+**Preflight (verified 2026-11-04):** branch clean; local tip == PR head `81063b1`; no force-push.
+Host isolation inventory: no bubblewrap/nsjail/firejail; `docker` CLI present but **no daemon**; `unshare`
+works; **`runc` 1.5.2 runs daemon-free OCI bundles as root** — prototype saw only `bin dev etc lib lib64 proc tmp usr`,
+uid 65534, no `/root`/`/home`, outbound connect failed. This is the enforcement mechanism for Task 1.
+
+| Lane | Branch / worktree | Exclusive files | Tasks |
+|---|---|---|---|
+| A isolation + consistent checks | `claude/ops-isolation` `/home/user/wt/iso` | `sandbox.py`, `check_environment.py`, `gate_runner.py`, `scheduler.py` (verify section), `integrate.py`, `commands/{verify,integrate}.py`, integrate/verify/gate tests, `helpers_lane_b.py`, `docs/architecture/CHECK_ENVIRONMENT.md` | 1, 2 (+ fencing self-comparison fix) |
+| B registry + lifecycle | `claude/ops-lifecycle` `/home/user/wt/life` | `routing.py`, `execute.py`, `lifecycle.py`, `commands/{task,run,review}.py`, `integration_queue.py`, `capability-registry.json`, routing/execute/lifecycle tests, `helpers_lane_a.py` | 3, 4 |
+| Coordinator | session branch | this file, PR text, G0 package | 5 + G0 |
+
+No shared interface between lanes (B uses public store/transition APIs only; the 24-row transition table is frozen).
+Governance stance for Task 3: champion entries unchanged; a disclosed `candidate` binding (unevaluated, no inherited
+trust, §29) selectable only with an explicit recorded opt-in; promotion is an owner decision.
+Budget: this continuation has no new allowance; prior-session spend is not observable from here; Sonnet implementers,
+one Opus reviewer, one final full suite per change.
