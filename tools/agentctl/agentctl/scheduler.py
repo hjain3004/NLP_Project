@@ -6,6 +6,7 @@ import json
 import hashlib
 import os
 import pathlib
+import shutil
 import signal
 import sqlite3
 import subprocess
@@ -36,6 +37,7 @@ __all__ = [
     "ADMISSION_CONDITIONS",
     "CAPABILITY_RANK",
     "CHECK_TIMEOUT_SECONDS",
+    "GIT_HARDENING_ARGS",
     "SCHEDULER_CYCLE",
     "TRANSITION_RULES",
     "AdmissionDecision",
@@ -43,6 +45,8 @@ __all__ = [
     "Scheduler",
     "TaskSpec",
     "admission_decision",
+    "hardened_git_environment",
+    "run_hardened_git",
     "task_approval_scope",
     "transition",
 ]
@@ -264,40 +268,107 @@ def _check_environment(home: str) -> dict[str, str]:
     return env
 
 
-def _run_check(command: str, cwd: pathlib.Path, timeout: float) -> tuple[int, bytes, bytes, bool]:
-    """Run one check in its own process group; kill the whole group on timeout."""
-    with tempfile.TemporaryDirectory(prefix="agentctl-check-home-") as home:
-        proc = subprocess.Popen(
-            command,
-            cwd=cwd,
-            shell=True,
-            executable="/bin/sh",
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=_check_environment(home),
-            start_new_session=True,
-        )
-        timed_out = False
-        try:
+#: Options for every git command the control plane runs. A worktree's ``.git`` links to the
+#: SHARED git directory, so anything a worker or a gate check plants in the repository config
+#: (``diff.external``, ``core.fsmonitor``, a pager) would otherwise execute later under the
+#: control plane's privileges. Diff-like commands additionally pass ``--no-ext-diff
+#: --no-textconv`` (an empty ``diff.external`` alone makes a plain ``git diff`` fail).
+GIT_HARDENING_ARGS: tuple[str, ...] = (
+    "--no-pager",
+    "-c", "core.fsmonitor=false",
+    "-c", "diff.external=",
+    "-c", "core.hooksPath=/dev/null",
+)
+
+
+def hardened_git_environment(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Scrubbed environment for control-plane git: no inherited config, credentials, or ``GIT_*``."""
+    git_path = shutil.which("git")
+    path = ["/usr/local/bin", "/usr/bin", "/bin"]
+    if git_path:
+        path.insert(0, os.path.dirname(os.path.realpath(git_path)))
+    env = {
+        "PATH": os.pathsep.join(dict.fromkeys(path)),
+        "HOME": "/nonexistent",
+        "XDG_CONFIG_HOME": "/nonexistent",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_TERMINAL_PROMPT": "0",
+        "LANG": "C",
+    }
+    env.update(extra or {})
+    return env
+
+
+def run_hardened_git(
+    args: Sequence[str],
+    cwd: str | os.PathLike[str],
+    *,
+    text: bool = True,
+    env: Mapping[str, str] | None = None,
+) -> "subprocess.CompletedProcess[Any]":
+    """Run ``git <hardening> <args>`` with a scrubbed environment."""
+    executable = shutil.which("git") or "git"
+    return subprocess.run(
+        [executable, *GIT_HARDENING_ARGS, *args],
+        cwd=cwd,
+        capture_output=True,
+        text=text,
+        check=False,
+        env=hardened_git_environment(env),
+    )
+
+
+def _digest_file(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _run_check(command: str, cwd: pathlib.Path, timeout: float) -> tuple[int, str, str, bool]:
+    """Run one check in its own process group under a hard deadline.
+
+    Output goes to temporary files, not pipes: a descendant that escapes the group (its own
+    session) and keeps a pipe open cannot delay the verdict once the check itself has
+    finished or timed out. Returns ``(exit_code, stdout_sha256, stderr_sha256, timed_out)``.
+    """
+    with tempfile.TemporaryDirectory(prefix="agentctl-check-") as scratch_name:
+        scratch = pathlib.Path(scratch_name)
+        (scratch / "home").mkdir()
+        with open(scratch / "stdout", "wb") as out, open(scratch / "stderr", "wb") as err:
+            proc = subprocess.Popen(
+                command,
+                cwd=cwd,
+                shell=True,
+                executable="/bin/sh",
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=err,
+                env=_check_environment(str(scratch / "home")),
+                start_new_session=True,
+            )
+            timed_out = False
             try:
-                stdout, stderr = proc.communicate(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                _kill_process_group(proc.pid)
                 try:
-                    stdout, stderr = proc.communicate(timeout=5)
+                    proc.wait(timeout=timeout)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
-                    stdout, stderr = b"", b""
+                    timed_out = True
+                    _kill_process_group(proc.pid)
                     proc.wait()
-        except BaseException:
-            _kill_process_group(proc.pid)
-            proc.wait()
-            raise
-        finally:
-            _kill_process_group(proc.pid)
-    return (124 if timed_out else proc.returncode), stdout or b"", stderr or b"", timed_out
+            except BaseException:
+                _kill_process_group(proc.pid)
+                proc.wait()
+                raise
+            finally:
+                _kill_process_group(proc.pid)
+        return (
+            124 if timed_out else proc.returncode,
+            _digest_file(scratch / "stdout"),
+            _digest_file(scratch / "stderr"),
+            timed_out,
+        )
 
 
 def _kill_process_group(pgid: int) -> None:
@@ -948,13 +1019,7 @@ class Scheduler:
         return None
 
     def _git(self, *args: str, cwd: str | None = None, text: bool = True) -> subprocess.CompletedProcess[Any]:
-        return subprocess.run(
-            ["git", *args],
-            cwd=cwd or self.store.repository_root,
-            capture_output=True,
-            text=text,
-            check=False,
-        )
+        return run_hardened_git(args, cwd or self.store.repository_root, text=text)
 
     def _base_commit_compatible(self, base_commit: str) -> bool:
         if len(base_commit) != 40 or base_commit == "unbound":
@@ -997,7 +1062,8 @@ class Scheduler:
                 "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
             )
         changed = self._git(
-            "diff", "--name-status", "--find-renames", spec.base_commit, result_commit
+            "diff", "--no-ext-diff", "--no-textconv", "--name-status", "--find-renames",
+            spec.base_commit, result_commit
         )
         if changed.returncode != 0:
             raise PermissionViolation(
@@ -1028,7 +1094,8 @@ class Scheduler:
             )
         tree = self._git("rev-parse", f"{result_commit}^{{tree}}")
         diff = self._git(
-            "diff", "--binary", "--full-index", spec.base_commit, result_commit, text=False
+            "diff", "--no-ext-diff", "--no-textconv", "--binary", "--full-index",
+            spec.base_commit, result_commit, text=False
         )
         if tree.returncode != 0 or diff.returncode != 0:
             raise PermissionViolation(
@@ -1091,14 +1158,14 @@ class Scheduler:
         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
         results: list[dict[str, Any]] = []
         for command in spec.deterministic_checks:
-            exit_code, stdout, stderr, timed_out = _run_check(
+            exit_code, stdout_hash, stderr_hash, timed_out = _run_check(
                 command, worktree, CHECK_TIMEOUT_SECONDS
             )
             result: dict[str, Any] = {
                 "command": command,
                 "exit_code": exit_code,
-                "stdout_hash": hashlib.sha256(stdout).hexdigest(),
-                "stderr_hash": hashlib.sha256(stderr).hexdigest(),
+                "stdout_hash": stdout_hash,
+                "stderr_hash": stderr_hash,
             }
             if timed_out:
                 result["timed_out"] = True

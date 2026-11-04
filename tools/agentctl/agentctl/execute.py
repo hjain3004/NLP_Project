@@ -41,7 +41,6 @@ import json
 import os
 import posixpath
 import re
-import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
@@ -71,7 +70,7 @@ from .jsonschema_subset import validate as validate_schema
 from .locks import path_patterns_overlap
 from .review import ReviewIdentity, ReviewManager
 from .routing import route_reviewer, route_task
-from .scheduler import Scheduler, TaskSpec
+from .scheduler import Scheduler, TaskSpec, run_hardened_git
 from .store import EventStore
 from .validate import validate_artifact
 
@@ -214,14 +213,8 @@ def _parse_stamp(value: str) -> dt.datetime:
 
 
 def _git(cwd: Path, *args: str, check: bool = True, env: Mapping[str, str] | None = None) -> str:
-    completed = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=None if env is None else {**os.environ, **env},
-    )
+    """Hardened git (see ``scheduler.GIT_HARDENING_ARGS``): planted repo config cannot run code."""
+    completed = run_hardened_git(args, cwd, env=env)
     if check and completed.returncode != 0:
         raise InfrastructureFailure(
             "git command failed",
@@ -525,7 +518,9 @@ def _files_changed_from_git(worktree: Path, base: str, result: str) -> list[dict
     """Mirror of the derivation in ``Scheduler._git_candidate_binding``; ingest re-checks it."""
     kinds = {"A": "added", "M": "modified", "D": "deleted"}
     files: list[dict[str, str]] = []
-    for line in _git(worktree, "diff", "--name-status", "--find-renames", base, result).splitlines():
+    for line in _git(
+        worktree, "diff", "--no-ext-diff", "--no-textconv", "--name-status", "--find-renames", base, result
+    ).splitlines():
         parts = line.split("\t")
         status = parts[0]
         if status.startswith("R") and len(parts) == 3:
@@ -551,7 +546,7 @@ def _apply_and_commit(
             _git(worktree, "add", "--", change.path)
         else:
             _git(worktree, "rm", "--quiet", "--", change.path)
-    if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=worktree).returncode == 0:
+    if run_hardened_git(["diff", "--no-ext-diff", "--cached", "--quiet"], worktree).returncode == 0:
         return _git(worktree, "rev-parse", "HEAD").strip(), False
     name, email = COMMIT_IDENTITY
     identity = {
@@ -650,14 +645,46 @@ def _record_model_run(
 
 def _finish_record(
     root: Path, record: dict[str, Any], path: Path, export: str | None, started: dt.datetime
-) -> str:
+) -> dict[str, str]:
+    """Persist the run record and the optional export. Never raises.
+
+    Evidence output must not change what a run *was*: an I/O error is reported in the
+    returned mapping (``record_error`` / ``export_error``) and nothing else.
+    """
     finished = _now()
     record["finished_at"] = _stamp(finished)
     record["elapsed_ms"] = int((finished - started).total_seconds() * 1000)
-    _write_json(path, record)
+    notes: dict[str, str] = {}
+    try:
+        _write_json(path, record)
+        notes["run_record"] = str(path.relative_to(root))
+    except OSError as exc:
+        notes["record_error"] = f"{type(exc).__name__}: {exc.strerror or exc}"
     if export:
-        _write_json(Path(export).expanduser(), record)
-    return str(path.relative_to(root))
+        try:
+            _write_json(Path(export).expanduser(), record)
+        except OSError as exc:
+            notes["export_error"] = f"{type(exc).__name__}: {exc.strerror or exc}"
+    return notes
+
+
+def _check_export_path(export: str | None) -> None:
+    """Refuse an unusable ``--export`` before any lease or model call is spent on it."""
+    if not export:
+        return
+    target = Path(export).expanduser()
+    try:
+        if target.is_dir():
+            raise OSError("path is a directory")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not os.access(target.parent, os.W_OK):
+            raise OSError("directory is not writable")
+    except OSError as exc:
+        raise RunRefused(
+            f"--export path is not writable ({exc.strerror or exc}); fix it and rerun",
+            status="export_unwritable",
+            payload={"export": str(target)},
+        ) from exc
 
 
 # --------------------------------------------------------------------------- #
@@ -674,6 +701,7 @@ def run_task(
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Execute one ready task through one provider invocation. See the module docstring."""
+    _check_export_path(export_path)
     store = store or EventStore()
     root = store.repository_root
     scheduler = Scheduler(store)
@@ -722,12 +750,12 @@ def run_task(
             timeout_seconds=timeout_seconds, max_budget_usd=max_budget_usd,
         )
         record["outcome"] = {"status": "candidate", **{k: outcome[k] for k in ("result_commit",)}}
-        outcome["run_record"] = _finish_record(root, record, record_path, export_path, started)
+        outcome.update(_finish_record(root, record, record_path, export_path, started))
         return outcome
     except RunFailed as failure:
         record["outcome"] = {"status": "failed", "failure_class": failure.failure_class,
                              "message": failure.message}
-        failure.payload["run_record"] = _finish_record(root, record, record_path, export_path, started)
+        failure.payload.update(_finish_record(root, record, record_path, export_path, started))
         failure.payload["state"] = store.status(task_id)["state"]
         raise
     except BaseException as exc:  # includes KeyboardInterrupt / SIGTERM-as-KeyboardInterrupt
@@ -735,10 +763,7 @@ def run_task(
             scheduler.expire_lease(task_id, force=True)
         record["outcome"] = {"status": "failed", "failure_class": type(exc).__name__,
                              "message": redact(str(exc), 500)}
-        try:
-            _finish_record(root, record, record_path, export_path, started)
-        except OSError:
-            pass
+        _finish_record(root, record, record_path, export_path, started)
         raise
 
 
@@ -991,6 +1016,7 @@ def review_task(
     export_path: str | None = None,
 ) -> dict[str, Any]:
     """Run an independent reviewer for a task in ``independent_review`` and ingest its verdict."""
+    _check_export_path(export_path)
     store = store or EventStore()
     root = store.repository_root
     scheduler = Scheduler(store)
@@ -1021,7 +1047,10 @@ def review_task(
     author = manager.author_identity(task_id)
     compiled_context, contract = _compile_registered_context(root, store, spec)
     del compiled_context
-    diff = _git(root, "diff", "--full-index", "-U20", binding["base_commit"], binding["result_commit"])
+    diff = _git(
+        root, "diff", "--no-ext-diff", "--no-textconv", "--full-index", "-U20",
+        binding["base_commit"], binding["result_commit"],
+    )
     if len(diff.encode("utf-8")) > DIFF_LIMIT:
         raise RunRefused(
             "candidate diff exceeds the reviewable size limit; split the task", status="diff_too_large",
@@ -1162,28 +1191,23 @@ def review_task(
             "author_session_id": author.model_session_id,
             "usage": dict(result.usage),
         }
-        outcome["run_record"] = _finish_record(root, record, record_path, export_path, started)
+        outcome.update(_finish_record(root, record, record_path, export_path, started))
         return outcome
     except RunFailed as failure:
         record["outcome"] = {"status": "failed", "failure_class": failure.failure_class,
                              "message": failure.message}
         failure.payload["state"] = store.status(task_id)["state"]
-        failure.payload["run_record"] = _finish_record(root, record, record_path, export_path, started)
+        failure.payload.update(_finish_record(root, record, record_path, export_path, started))
         raise
     except BaseException as exc:
         record["outcome"] = {"status": "failed", "failure_class": type(exc).__name__,
                              "message": redact(str(exc), 500)}
-        try:
-            _finish_record(root, record, record_path, export_path, started)
-        except OSError:
-            pass
+        _finish_record(root, record, record_path, export_path, started)
         raise
 
 
 def _git_show_text(root: Path, commit: str, path: str) -> str | None:
-    completed = subprocess.run(
-        ["git", "show", f"{commit}:{path}"], cwd=root, capture_output=True, check=False
-    )
+    completed = run_hardened_git(["show", f"{commit}:{path}"], root, text=False)
     if completed.returncode != 0 or len(completed.stdout) > PROMPT_FILE_LIMIT:
         return None
     try:

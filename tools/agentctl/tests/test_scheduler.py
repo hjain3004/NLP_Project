@@ -181,6 +181,15 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         result = repo.scheduler.verify_candidate(repo.TASK_ID)
         self.assertEqual(result["state"], "independent_review")
 
+    def test_a_check_leaving_an_escaped_process_holding_output_cannot_stall_verification(self) -> None:
+        import time
+
+        repo = self._candidate(("setsid sleep 15 & exit 0",))
+        started = time.monotonic()
+        result = repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.assertLess(time.monotonic() - started, 8, "verification waited on an escaped descendant")
+        self.assertEqual(result["state"], "independent_review")
+
 
 class IntegrationOrderTests(unittest.TestCase):
     def test_registered_task_payload_carries_the_contracts_integration_order(self) -> None:

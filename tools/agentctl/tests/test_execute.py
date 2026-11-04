@@ -203,6 +203,33 @@ class SuccessPathTests(RunTestCase):
         self.assertEqual(repo.state(), "ready")
 
 
+class ExportPathTests(RunTestCase):
+    """SIMULATED provider; `--export` is evidence output and must never change the outcome of a run."""
+
+    def test_unwritable_export_path_is_refused_before_any_lease(self) -> None:
+        """Protects: a bad --export is found before the lease, not after a model has been paid for."""
+        repo = self.repo()
+        blocker = pathlib.Path(self.bin.name) / "afile"
+        blocker.write_text("x")
+        with self.assertRaises(RunRefused) as raised:
+            self.run_it(repo, export_path=str(blocker / "exported.json"))
+        self.assertEqual(raised.exception.status, "export_unwritable")
+        self.assertEqual(repo.state(), "ready")
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM leases"), 0)
+        self.assertEqual(self.fake.calls(), [])
+
+    def test_export_failing_after_a_successful_ingest_does_not_rewrite_the_run_as_failed(self) -> None:
+        """Protects: once the candidate is ingested, an export I/O error is reported but cannot turn the record or the result into a failure."""
+        repo = self.repo()
+        target = pathlib.Path(self.bin.name) / "exports" / "out.json"
+        self.fake.set(structured_output=proposal(), make_dir_at=str(target))  # target becomes a directory mid-run
+        result = self.run_it(repo, export_path=str(target))
+        self.assertEqual(repo.state(), "candidate")
+        self.assertIn("export_error", result)
+        record = json.loads((repo.root / result["run_record"]).read_text())
+        self.assertEqual(record["outcome"]["status"], "candidate")
+
+
 class RefusalTests(RunTestCase):
     """The run is refused before any lease: nothing about the task changes."""
 
@@ -411,6 +438,14 @@ class ScopeAuditTests(RunTestCase):
         self.assert_rejected_cleanly(repo, outside / "pwned.md")
         self.assertEqual(list(outside.iterdir()), [])
 
+    def test_a_committed_relative_symlink_to_a_prohibited_area_cannot_redirect_a_write(self) -> None:
+        """Protects: docs/lane-a/link -> ../../agent-system looks writable lexically but resolves into prohibited agent-system/policies."""
+        repo = self.repo(symlink_target=pathlib.Path("../../agent-system"), symlink_name="link")
+        self.fake.set(structured_output=proposal(path="docs/lane-a/link/policies/injected.json", content="{}\n"))
+        self.assert_rejected_cleanly(repo)
+        worktree = repo.root / "agent-system/runtime/worktrees/LANEA-001/attempt-1"
+        self.assertFalse((worktree / "agent-system/policies/injected.json").exists())
+
     def test_a_proposal_that_changes_nothing_is_not_a_candidate(self) -> None:
         """Protects: an identical rewrite produces no commit and no candidate."""
         repo = self.repo()
@@ -552,6 +587,26 @@ class ReviewRunTests(RunTestCase):
         self.assertEqual(repo.state(), "independent_review")
         self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
 
+    def test_duplicate_finding_ids_are_rejected(self) -> None:
+        """Protects: a verdict whose findings share an id is internally inconsistent and ingests nothing."""
+        repo = self.repo()
+        self.authored(repo)
+        with self.assertRaises(RunFailed) as raised:
+            self.review(repo, structured_output={"verdict": "blocking_findings", "findings": [FINDING, dict(FINDING)]})
+        self.assertEqual(raised.exception.failure_class, "malformed_output")
+        self.assertEqual(repo.state(), "independent_review")
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
+
+    def test_no_blocking_verdict_with_a_blocking_finding_is_rejected(self) -> None:
+        """Protects: a reviewer cannot say 'no blocking findings' while reporting one."""
+        repo = self.repo()
+        self.authored(repo)
+        with self.assertRaises(RunFailed) as raised:
+            self.review(repo, structured_output={"verdict": "no_blocking_findings", "findings": [FINDING]})
+        self.assertEqual(raised.exception.failure_class, "malformed_output")
+        self.assertEqual(repo.state(), "independent_review")
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
+
     def test_reviewer_provider_failure_ingests_nothing_and_is_recorded(self) -> None:
         """Protects: a failed reviewer run leaves the task in independent_review and the failed run in model_runs."""
         repo = self.repo()
@@ -613,6 +668,43 @@ class ReviewRunTests(RunTestCase):
         usage = repo.cli("review", "bogus")
         self.assertEqual(usage.returncode, 2)
         self.assertIn("review run <task-id>", usage.stderr)
+
+
+class GitHardeningTests(RunTestCase):
+    """Config planted in the SHARED .git (a worktree's .git links to it) must not execute under the control plane."""
+
+    def poison_script(self, name: str = "boom.sh"):
+        marker = pathlib.Path(self.bin.name) / "PWNED"
+        script = pathlib.Path(self.bin.name) / name
+        script.write_text(f"#!/bin/sh\ntouch {marker}\nexit 0\n")
+        script.chmod(0o755)
+        return script, marker
+
+    def test_preexisting_poisoned_git_config_never_runs_during_run_verify_or_review(self) -> None:
+        """Protects: diff.external / core.fsmonitor in the shared config are neutralised for every control-plane git call."""
+        repo = self.repo()
+        script, marker = self.poison_script()
+        git(repo.root, "config", "diff.external", str(script))
+        git(repo.root, "config", "core.fsmonitor", str(script))
+        git(repo.root, "config", "core.pager", f"{script}")
+        self.run_it(repo)
+        repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.fake.set(structured_output={"verdict": "no_blocking_findings", "findings": []})
+        review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
+        self.assertFalse(marker.exists(), "planted git config executed with the control plane's privileges")
+
+    def test_a_gate_check_cannot_plant_config_that_later_control_plane_git_calls_execute(self) -> None:
+        """Protects: a deterministic check runs in the worktree, whose git config is the shared one; what it plants must stay inert afterwards."""
+        script, marker = self.poison_script()
+        planting = (f"git config diff.external {script} && git config core.fsmonitor {script} "
+                    f"&& git config core.pager {script}")
+        repo = self.repo(deterministic_checks=(planting,))
+        self.run_it(repo)
+        repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.assertEqual(git(repo.root, "config", "--get", "diff.external"), str(script), "PoC did not plant config")
+        self.fake.set(structured_output={"verdict": "no_blocking_findings", "findings": []})
+        review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
+        self.assertFalse(marker.exists(), "planted git config executed with the control plane's privileges")
 
 
 class DatabaseIntegrityTests(RunTestCase):
