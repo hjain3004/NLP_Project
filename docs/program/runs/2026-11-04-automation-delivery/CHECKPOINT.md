@@ -26,7 +26,7 @@ reports under `reports/`; they never edit this file.
    `sandboxed_tools` is not implemented: no verified sandbox exists here.
 2. **One provider path:** Anthropic via `claude -p`. Others return an explicit
    `unsupported_provider` / `unavailable` result. No substitution.
-3. **Identities are provider-reported:** `session_id` and result `uuid` from the CLI JSON.
+3. **Identities:** session id and control-plane run id are minted before invocation (`--session-id`), the CLI-echoed session id is verified, the result `uuid` is kept as evidence (amended after plan review: `ReviewManager.assign` needs ids before the run).
 4. **Usage:** record provider-reported values; absent means `null`/unavailable, never 0.
    The current manifest requires four numeric usage fields; the Claude CLI reports all four, so no
    schema change is needed for this path. A provider that cannot report them needs a schema proposal.
@@ -36,6 +36,21 @@ reports under `reports/`; they never edit this file.
    between Git and SQLite is reconciled from actual Git state before retry.
 6. Bootstrap implementation lanes run **outside** the control plane (no lease/attempt asserted).
    Only the delivery-demonstration tasks run through the control plane.
+
+## Plan review (independent Opus session, read-only): APPROVE_WITH_CHANGES
+
+Accepted and forwarded to the lanes: (1) reviewer floor — with the real registry every runnable
+task is `reviewer_unavailable` (complex_implementation→openai, planning→`claude-opus` rejected);
+routing reports this honestly; the demo needs an explicitly labeled **delivery-repo registry
+profile** binding the reviewer class to `claude-opus-5-5` (a real registry change in main would be
+a separate owner decision); (2) integration has no legal failure exit and no lease path — Lane B
+runs all checks on a detached worktree while the task stays `integration_ready`, records rejections
+as non-advancing events/artifacts, mints an `integration-lease` artifact, and may call
+`store.execute` + `transition()`; (3) ids minted pre-run; (4) artifacts written to per-attempt dirs
+for on-disk cross-link validation; (5) Lane A also owns the scheduler/lease/review tests;
+(6) `verify_candidate` gets timeout + scrubbed env. Non-blocking notes (lease expiry bound,
+no `--fallback-model`, child cwd outside repo, `repair_required` dead end) are in the lane briefs.
+Baseline error is the unowned stale fixture pin → handled by a separate mechanical worktree.
 
 ## Lanes, ownership, dependencies
 
@@ -62,9 +77,11 @@ G0 closeout leads run in parallel only where they touch none of the lane-owned f
 
 | ID | State | Commit | Notes |
 |---|---|---|---|
-| PRE | done | (this commit) | preflight + plan |
-| A1 | pending dispatch | | |
-| B1 | pending dispatch | | |
+| PRE | done | 3a1457c | preflight + plan; pushed |
+| PLAN-REVIEW | done | | APPROVE_WITH_CHANGES, all 6 blockers accepted |
+| A1 | running | | `claude/lane-a-routing` |
+| B1 | running | | `claude/lane-b-integration` |
+| FIXTURE-PIN | running | | `claude/fix-fixture-pin`; fixes G0-04 and the baseline error |
 | A2 | blocked on A1 | | |
 | REVIEW-A1, REVIEW-B1 | blocked | | |
 | DEMO | blocked | | |
@@ -82,4 +99,4 @@ None yet.
 
 ## Next executable step
 
-Dispatch Lane A and Lane B workers from base `HEAD` of this branch.
+Wait for lane reports; review each as it lands; merge to the session branch; then demo.
