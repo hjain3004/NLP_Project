@@ -81,6 +81,9 @@ _PROTECTED_BRANCHES = frozenset({"main", "master"})
 _TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _ZERO = "0" * 40
 _OK_OUTCOMES = frozenset({"integrated", "already_integrated", "reconciled"})
+_DRIVER_KEY = re.compile(
+    r"^(filter\..+\.(clean|smudge|process)|merge\..+\.driver|diff\..+\.(command|textconv))$"
+)
 
 FaultHook = Callable[[str], None]
 
@@ -130,15 +133,85 @@ class _Git:
         "-c", "core.hooksPath=/dev/null",
         "-c", "core.attributesFile=/dev/null",
         "-c", "commit.gpgsign=false",
+        "-c", "gc.auto=0",
+        "-c", "maintenance.auto=false",
     )
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self._home = tempfile.mkdtemp(prefix="agentctl-git-home-")
         weakref.finalize(self, shutil.rmtree, self._home, True)
+        #: Driver keys configured when this integrator started (``guard_drivers``).
+        self.startup_drivers = self.drivers()
 
-    def _env(self, extra: Mapping[str, str] | None = None) -> dict[str, str]:
-        env = {
+    def drivers(self, cwd: str | os.PathLike[str] | None = None) -> dict[str, str]:
+        """Code-running driver keys in repository (local/worktree) configuration.
+
+        ``filter.<n>.clean|smudge|process``, ``merge.<n>.driver`` and
+        ``diff.<n>.command|textconv``. Command-line scope (our own overrides) is ignored.
+        """
+        done = subprocess.run(
+            ["git", *self._HARDENING, "config", "-z", "--show-scope", "--get-regexp",
+             r"^(filter|merge|diff)\."],
+            cwd=cwd or self.root, env=self._base_env(), capture_output=True, check=False,
+        )
+        found: dict[str, str] = {}
+        fields = done.stdout.split(b"\0")
+        for scope, entry in zip(fields[0::2], fields[1::2]):
+            if scope == b"command":
+                continue
+            key, _, value = os.fsdecode(entry).partition("\n")
+            if _DRIVER_KEY.match(key):
+                found[key] = value
+        return found
+
+    def guard_drivers(self, cwd: str | os.PathLike[str] | None = None) -> None:
+        """Refuse when a driver key appeared or changed since this integrator started."""
+        current = self.drivers(cwd)
+        new = sorted(k for k, v in current.items() if self.startup_drivers.get(k) != v)
+        if new:
+            raise IntegrationRefused(
+                "a filter/merge/diff driver was configured after the integrator started",
+                reason_code="gate_tampered_repository", driver_keys=new[:20],
+            )
+
+    def _neutralised_drivers(self, cwd: str | os.PathLike[str] | None) -> dict[str, str]:
+        """Environment overrides that disable every configured driver for one git call.
+
+        Command-line scope outranks repository configuration, and an empty filter
+        command means "no filter" (verified against git 2.43). A merge driver is
+        replaced by ``false`` so that, if one were ever reached, the merge fails
+        (conflict) instead of being resolved by planted code.
+        """
+        overrides: dict[str, str] = {}
+        for key in {**self.startup_drivers, **self.drivers(cwd)}:
+            section, _, rest = key.partition(".")
+            name = rest.rsplit(".", 1)[0]
+            if section == "filter":
+                for variable in ("clean", "smudge", "process"):
+                    overrides[f"filter.{name}.{variable}"] = ""
+                overrides[f"filter.{name}.required"] = "false"
+            elif section == "merge":
+                overrides[f"merge.{name}.driver"] = "false"
+            else:
+                overrides[f"diff.{name}.command"] = ""
+                overrides[f"diff.{name}.textconv"] = ""
+        env = {"GIT_CONFIG_COUNT": str(len(overrides))}
+        for index, (key, value) in enumerate(sorted(overrides.items())):
+            env[f"GIT_CONFIG_KEY_{index}"] = key
+            env[f"GIT_CONFIG_VALUE_{index}"] = value
+        return env
+
+    def _env(
+        self, extra: Mapping[str, str] | None = None, cwd: str | os.PathLike[str] | None = None
+    ) -> dict[str, str]:
+        env = self._base_env()
+        env.update(self._neutralised_drivers(cwd))
+        env.update(extra or {})
+        return env
+
+    def _base_env(self) -> dict[str, str]:
+        return {
             "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
             "HOME": self._home,
             "LC_ALL": "C",
@@ -146,9 +219,9 @@ class _Git:
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_OPTIONAL_LOCKS": "0",
+            # refs/replace/* and grafts would let planted refs substitute objects.
+            "GIT_NO_REPLACE_OBJECTS": "1",
         }
-        env.update(extra or {})
-        return env
 
     def command(self, *args: str) -> list[str]:
         return ["git", *self._HARDENING, *args]
@@ -164,7 +237,7 @@ class _Git:
         return subprocess.run(
             self.command(*args),
             cwd=cwd or self.root,
-            env=self._env(env),
+            env=self._env(env, cwd),
             capture_output=True,
             text=text,
             input=stdin,
@@ -175,7 +248,7 @@ class _Git:
         return subprocess.Popen(
             self.command(*args),
             cwd=cwd or self.root,
-            env=self._env(),
+            env=self._env(None, cwd),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -241,6 +314,74 @@ class _Git:
         if path.exists():
             shutil.rmtree(path, ignore_errors=True)
         self.run("worktree", "prune")
+
+
+_PROTECTED_FILES = ("config", "config.worktree", "HEAD", "commondir", "shallow")
+_PROTECTED_DIRECTORIES = ("info", "hooks", "worktrees", "objects/info")
+
+
+def _common_dir(git: _Git) -> Path:
+    common = git.out("rev-parse", "--git-common-dir")
+    if common is None:
+        raise IntegrationRefused("cannot locate the repository", reason_code="plan_unreadable")
+    path = Path(common)
+    return (path if path.is_absolute() else git.root / path).resolve()
+
+
+def _protected_state(git: _Git, branch: str, exclude: Path | None = None) -> dict[str, str]:
+    """Hashes of repository metadata a gate must never change.
+
+    Configuration, ``info/*`` (attributes, grafts, excludes), hooks, ``HEAD``, every
+    worktree's metadata, ``objects/info`` (alternates), refs under the integration
+    branch, ``refs/replace/*``, and the effective configuration as git reads it
+    (which covers included files). ``exclude`` is the integrator's own detached
+    worktree metadata, which is removed after planning.
+    """
+    common = _common_dir(git)
+    state: dict[str, str] = {}
+
+    def record(path: Path) -> None:
+        name = path.relative_to(common).as_posix()
+        if path.is_symlink():
+            state[name] = "link:" + os.readlink(path)
+        elif path.is_dir():
+            state[name] = "dir"
+        elif path.is_file():
+            state[name] = sha256_hex(path.read_bytes())
+        else:
+            state[name] = "other"
+
+    for name in _PROTECTED_FILES:
+        if os.path.lexists(common / name):
+            record(common / name)
+    for name in _PROTECTED_DIRECTORIES:
+        top = common / name
+        if not os.path.lexists(top):
+            continue
+        record(top)
+        for directory, subdirectories, files in os.walk(top):
+            here = Path(directory)
+            if exclude is not None and (here == exclude or exclude in here.parents):
+                subdirectories[:] = []
+                continue
+            for entry in [*subdirectories, *files]:
+                if exclude is not None and here / entry == exclude:
+                    continue
+                record(here / entry)
+    refs = git.run(
+        "for-each-ref", "--format=%(refname) %(objectname)",
+        "refs/replace/", f"refs/heads/{branch}", f"refs/heads/{branch}/",
+    )
+    for line in refs.stdout.splitlines():
+        name, _, oid = line.partition(" ")
+        state[f"refs:{name}"] = oid
+    effective = git.run("config", "--list", "-z", "--show-origin", "--show-scope", text=False)
+    state["config:effective"] = sha256_hex(effective.stdout)
+    return state
+
+
+def _changed(before: Mapping[str, str], after: Mapping[str, str]) -> list[str]:
+    return sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
 
 
 def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
@@ -668,6 +809,7 @@ def _plan(
                 integration_head=old_head,
             )
     worktree.parent.mkdir(parents=True, exist_ok=True)
+    git.guard_drivers()
     added = git.run("worktree", "add", "--quiet", "--detach", str(worktree), old_head)
     if added.returncode != 0:
         raise IntegrationRefused(
@@ -682,6 +824,7 @@ def _plan(
         "GIT_AUTHOR_DATE": f"{planned_at} +0000",
         "GIT_COMMITTER_DATE": f"{planned_at} +0000",
     }
+    git.guard_drivers(worktree)
     if old_head == evidence.base_commit:
         strategy = "fast_forward"
         merged = git.run("merge", "--ff-only", "--quiet", candidate, cwd=worktree, env=identity)
@@ -725,13 +868,27 @@ def _plan(
     # Gates run on a pristine copy of the planned tree that has no ``.git`` link and sits
     # outside the repository checkout, so nothing a gate does can reach the repository,
     # its configuration, its refs or the event store through the working directory.
+    own_metadata = git.out("rev-parse", "--absolute-git-dir", cwd=worktree)
+    exclude = Path(own_metadata).resolve() if own_metadata else None
     with tempfile.TemporaryDirectory(prefix="agentctl-integration-gate-") as gate_root:
         gate_tree = Path(gate_root) / "tree"
         _materialize_tree(git, planned, gate_tree)
+        before = _protected_state(git, branch, exclude)
         gates = [
             {"gate": "integration:candidate-commit-preserved", "result": "pass"},
             *run_gate_commands(evidence.checks, cwd=gate_tree, timeout=check_timeout),
         ]
+        after = _protected_state(git, branch, exclude)
+    changed = _changed(before, after)
+    if changed:
+        # Nothing is restored: the changed metadata stays for a human to inspect, and
+        # integration is refused while the repository is still in this state.
+        raise _reject(
+            "gate_tampered_repository", "human_required",
+            "a gate changed repository metadata the integrator relies on",
+            retry_requires_new_evidence=True, integration_head=old_head,
+            changed=changed[:50], tampered_state=sha256_of_json(after), gates=gates,
+        )
     if any(gate["result"] != "pass" for gate in gates):
         raise _reject(
             "affected_check_failed", "repair_required",
@@ -975,8 +1132,26 @@ class _Engine:
         )
         return json.loads(rows[0]["payload_json"]) if rows else None
 
+    def refuse_if_still_tampered(self) -> None:
+        """Refuse while the repository is still in a state a gate was caught producing."""
+        rows = self.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = 'integration-rejection' "
+            "AND json_extract(payload_json, '$.reason_code') = 'gate_tampered_repository' "
+            "ORDER BY rowid DESC LIMIT 1"
+        )
+        if not rows:
+            return
+        details = json.loads(rows[0]["payload_json"]).get("details") or {}
+        current = sha256_of_json(_protected_state(self.git, self.settings.branch))
+        if details.get("tampered_state") == current:
+            raise IntegrationRefused(
+                "repository metadata is still as a gate left it; a human must inspect it",
+                reason_code="gate_tampered_repository", changed=details.get("changed"),
+            )
+
     def run(self, task_id: str | None) -> dict[str, Any]:
         self.git.validate_branch(self.settings.branch)
+        self.refuse_if_still_tampered()
         settled = self.reconcile()
         head = self.git.branch_head(self.settings.branch)
         queue = build_queue(self.query, head)

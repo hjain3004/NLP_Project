@@ -1,10 +1,11 @@
-"""Regression tests for the independent review's two blocking findings.
+"""Regression tests for the independent reviews' findings on gate containment.
 
 1. A gate must not be able to reach, or poison, the repository the integrator keeps using.
 2. A gate timeout must be a hard deadline that no descendant process can extend.
 
-Each test failed against the implementation at commit 9d51a9e (before-fix evidence is in
-reports/lane-b-2.md) and passes after the repair.
+Classes up to MergeAttributeTests failed against 9d51a9e (reports/lane-b-2.md). The
+second review's F1 (GateCannotReachIntegratorTests, GateRepositoryTamperTests) and F4
+(GateTreeTests symlink/duplicate cases) failed against dbba2c2 (reports/lane-b-3.md).
 """
 
 from __future__ import annotations
@@ -58,27 +59,32 @@ class GateContainmentTests(unittest.TestCase):
         self.assertEqual(self.lab.git("config", "--local", "--get", "diff.external", check=False), "")
 
     def test_planted_git_configuration_cannot_run_code_in_later_integrator_runs(self) -> None:
-        """Blocker 1 (defence in depth): even a gate that knows the repository path cannot make the
-        integrator's own git run planted commands (diff.external, core.fsmonitor)."""
+        """Blocker 1 (defence in depth): configuration planted by another process that shares `.git`
+        (for example the candidate's own verification run) cannot make the integrator's git run
+        planted commands (diff.external, core.fsmonitor). A *gate* that plants configuration is
+        rejected outright: see GateRepositoryTamperTests."""
         log = self.scratch / "plant.log"
-        root = self.lab.root
-        plant = (
-            f'case "$HOME" in *agentctl-gate-home*) '
-            f'git -C {root} config diff.external "{self._planter(log)}"; '
-            f'git -C {root} config core.fsmonitor "{self._planter(log)}";; esac; true'
-        )
-        self.lab.candidate("T-A", {"docs/a.txt": "a\n"}, checks=(plant,))
         self.lab.candidate("T-B", {"docs/b.txt": "b\n"})
-        env_secret = {"SECRET_TOKEN": "s3cr3t"}
+        self.lab.git("config", "diff.external", self._planter(log))
+        self.lab.git("config", "core.fsmonitor", self._planter(log))
 
-        with mock.patch.dict(os.environ, env_secret):
-            first = integrate("T-A", store=self.lab.store)
+        with mock.patch.dict(os.environ, {"SECRET_TOKEN": "s3cr3t"}):
             second = integrate("T-B", store=self.lab.store)
 
-        self.assertEqual(first["outcome"], "integrated", first)
         self.assertEqual(second["outcome"], "integrated", second)  # not candidate_binding_mismatch
         self.assertFalse(log.exists(), log.read_text() if log.exists() else "")
         self.assertEqual(self.lab.tree_file("docs/b.txt"), "b\n")
+
+
+def _plant_filter_driver(git_dir: str, log: pathlib.Path) -> str:
+    """Shell that plants a smudge filter for every path, as the reviewer's PoC did."""
+    return (
+        f'git config --file "{git_dir}/config" filter.x.smudge '
+        f'"sh -c \'echo RAN >> {log}; cat\'"; '
+        f'git config --file "{git_dir}/config" filter.x.clean "sh -c \'echo RAN >> {log}; cat\'"; '
+        f'git config --file "{git_dir}/config" filter.x.required false; '
+        f'mkdir -p "{git_dir}/info"; echo "* filter=x" >> "{git_dir}/info/attributes"'
+    )
 
 
 class GateCannotReachIntegratorTests(unittest.TestCase):
@@ -113,6 +119,119 @@ class GateCannotReachIntegratorTests(unittest.TestCase):
         self.assertNotIn("SENTINEL=1", seen)
         self.assertIn("ANY=0", seen)
         self.assertNotIn(str(self.lab.root), seen)
+
+
+class GateRepositoryTamperTests(unittest.TestCase):
+    """F1(b)/(c): a gate that changes repository metadata is rejected; planted drivers never run."""
+
+    def setUp(self) -> None:
+        self.lab = Lab()
+        self.addCleanup(self.lab.close)
+        self.scratch = pathlib.Path(self.lab._tmp.name)
+        self.git_dir = str(self.lab.root / ".git")
+        self.log = self.scratch / "smudge.log"
+
+    def gate(self, body: str) -> str:
+        return f'case "$HOME" in *agentctl-gate-home*) {body};; esac; true'
+
+    def assert_not_integrated(self, task_id: str) -> None:
+        self.assertIsNone(self.lab.branch_head())
+        self.assertEqual(self.lab.state(task_id), "integration_ready")
+        self.assertEqual(self.lab.artifacts("integration-record", task_id), [])
+
+    def test_gate_that_plants_a_filter_driver_is_rejected_and_the_driver_never_runs(self) -> None:
+        """The reviewer's PoC: the next integration's checkout ran the planted smudge 253 times and
+        T-B still reported integrated."""
+        self.lab.candidate(
+            "T-A", {"docs/a.txt": "a\n"}, checks=(self.gate(_plant_filter_driver(self.git_dir, self.log)),)
+        )
+        self.lab.candidate("T-B", {"docs/b.txt": "b\n"})
+
+        first = self.lab.cli("T-A")
+
+        self.assertEqual((first.code, first.json["outcome"]), (1, "rejected"), first.stdout)
+        self.assertEqual(first.json["reason_code"], "gate_tampered_repository")
+        self.assertIn("config", first.json["details"]["changed"])
+        self.assert_not_integrated("T-A")
+        # Nothing is restored silently: the planted configuration is still there for a human.
+        self.assertIn("RAN", self.lab.git("config", "--get", "filter.x.smudge"))
+
+        second = self.lab.cli("T-B")
+
+        self.assertEqual((second.code, second.json["outcome"]), (1, "refused"), second.stdout)
+        self.assertEqual(second.json["reason_code"], "gate_tampered_repository")
+        self.assert_not_integrated("T-B")
+        self.assertFalse(self.log.exists(), self.log.read_text() if self.log.exists() else "")
+
+        # A human inspects and removes what the gate planted; integration resumes.
+        self.lab.git("config", "--remove-section", "filter.x")
+        (self.lab.root / ".git" / "info" / "attributes").unlink()
+        third = self.lab.cli("T-B")
+
+        self.assertEqual(third.json["outcome"], "integrated", third.stdout)
+        self.assertEqual(self.lab.tree_file("docs/b.txt"), "b\n")
+        self.assertFalse(self.log.exists())
+
+    def test_gate_that_plants_a_hook_is_rejected(self) -> None:
+        hook = f"{self.git_dir}/hooks/post-checkout"
+        self.lab.candidate(
+            "T-A", {"docs/a.txt": "a\n"},
+            checks=(self.gate(f'printf "#!/bin/sh\\necho RAN >> {self.log}\\n" > {hook}; chmod +x {hook}'),),
+        )
+
+        result = integrate("T-A", store=self.lab.store)
+
+        self.assertEqual(result.get("reason_code"), "gate_tampered_repository", result)
+        self.assertIn("hooks/post-checkout", result["details"]["changed"])
+        self.assert_not_integrated("T-A")
+
+    def test_gate_that_creates_a_replace_ref_is_rejected(self) -> None:
+        """refs/replace/* would make git substitute objects; a gate creating one is tampering."""
+        root = self.lab.root
+        self.lab.candidate(
+            "T-A", {"docs/a.txt": "a\n"},
+            checks=(self.gate(
+                f'git -C {root} replace -f $(git -C {root} rev-parse HEAD) $(git -C {root} rev-parse HEAD~1)'
+            ),),
+        )
+
+        result = integrate("T-A", store=self.lab.store)
+
+        self.assertEqual(result.get("reason_code"), "gate_tampered_repository", result)
+        self.assertTrue(any(name.startswith("refs:") for name in result["details"]["changed"]), result)
+        self.assert_not_integrated("T-A")
+
+    def test_filter_driver_present_before_the_run_is_neutralised_and_never_executed(self) -> None:
+        """Planted by a process the integrator does not control (e.g. the candidate's own verification
+        in its worktree); every integrator git call overrides each configured driver."""
+        self.lab.candidate("T-B", {"docs/b.txt": "b\n"})
+        subprocess.run(["/bin/sh", "-c", _plant_filter_driver(self.git_dir, self.log)], check=True)
+        self.assertIn("RAN", self.lab.git("config", "--get", "filter.x.smudge"))
+
+        run = self.lab.cli("T-B")
+
+        self.assertEqual(run.json["outcome"], "integrated", run.stdout + run.stderr)
+        self.assertFalse(self.log.exists(), self.log.read_text() if self.log.exists() else "")
+        self.assertEqual(self.lab.tree_file("docs/b.txt"), "b\n")
+
+    def test_driver_configured_after_integrator_startup_refuses_the_integration(self) -> None:
+        """A driver key that was not present when the integrator started is refused, not ignored."""
+        self.lab.candidate("T-B", {"docs/b.txt": "b\n"})
+        git = _Git(self.lab.root)  # startup: no driver configured
+        evidence = integrate_module._verify(self.lab.store, git, "T-B", "an-independent-integrator")
+        subprocess.run(["/bin/sh", "-c", _plant_filter_driver(self.git_dir, self.log)], check=True)
+        worktree = _integration_dir(self.lab.root, "T-B") / "wt-late-driver"
+        try:
+            with self.assertRaises(IntegrationRefused) as raised:
+                integrate_module._plan(
+                    git, evidence, old_head=self.lab.base, planned_at=1_700_000_000,
+                    integration_id="T-B-I9", branch=BRANCH, worktree=worktree, check_timeout=5.0,
+                )
+        finally:
+            git.remove_worktree(worktree)
+
+        self.assertEqual(raised.exception.reason_code, "gate_tampered_repository")
+        self.assertFalse(self.log.exists(), self.log.read_text() if self.log.exists() else "")
 
 
 class GateDeadlineTests(unittest.TestCase):
