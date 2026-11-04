@@ -351,6 +351,36 @@ class LeaseTests(unittest.TestCase):
                     ),
                     0,
                 )
+    def test_running_attempt_with_budget_left_goes_to_repair_required_and_releases_everything(self) -> None:
+        spec = self._spec().with_semantic_locks(semantic_lock_claims(["repo:path-layout"], self.root))
+        self.scheduler.register_task(spec)
+        lease = self.scheduler.dispatch("TASK-1", worker_identity="worker")
+        self.scheduler.acknowledge("TASK-1", spec.context_hash)
+        outcome = self.scheduler.fail_attempt("TASK-1", "permission_violation")
+        self.assertEqual(outcome, "repair_required")
+        self.assertEqual(self.store.status("TASK-1")["state"], "repair_required")
+        self.assertEqual(self.store.status("TASK-1")["locks"], [])
+        self.assertEqual(self.store.scalar("SELECT active FROM leases WHERE lease_id = ?", (lease.lease_id,)), 0)
+        self.assertEqual(self.store.scalar("SELECT state FROM attempts WHERE attempt_id = ?", (lease.attempt_id,)), "failed")
+        self.assertEqual(self.store.scalar("SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'candidate-binding'"), 0)
+
+    def test_failure_of_the_last_attempt_escalates_instead_of_offering_repair(self) -> None:
+        from dataclasses import replace
+
+        spec = replace(self._spec(), maximum_attempts=1)
+        self.scheduler.register_task(spec)
+        self.scheduler.dispatch("TASK-1", worker_identity="worker")
+        self.scheduler.acknowledge("TASK-1", spec.context_hash)
+        self.assertEqual(self.scheduler.fail_attempt("TASK-1", "usage_unavailable"), "escalated")
+
+    def test_unacknowledged_attempt_cannot_be_failed_as_evaluated(self) -> None:
+        from agentctl.errors import IllegalTransition
+
+        self._register()
+        self.scheduler.dispatch("TASK-1", worker_identity="worker")
+        with self.assertRaises(IllegalTransition):
+            self.scheduler.fail_attempt("TASK-1", "permission_violation")
+        self.assertEqual(self.store.status("TASK-1")["state"], "leased")
 
 
 if __name__ == "__main__":

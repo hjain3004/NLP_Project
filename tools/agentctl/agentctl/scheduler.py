@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import pathlib
+import shutil
+import signal
 import sqlite3
 import subprocess
+import sys
+import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -30,6 +35,9 @@ from .store import EventStore
 
 __all__ = [
     "ADMISSION_CONDITIONS",
+    "CAPABILITY_RANK",
+    "CHECK_TIMEOUT_SECONDS",
+    "GIT_HARDENING_ARGS",
     "SCHEDULER_CYCLE",
     "TRANSITION_RULES",
     "AdmissionDecision",
@@ -37,6 +45,8 @@ __all__ = [
     "Scheduler",
     "TaskSpec",
     "admission_decision",
+    "hardened_git_environment",
+    "run_hardened_git",
     "task_approval_scope",
     "transition",
 ]
@@ -194,6 +204,8 @@ class TaskSpec:
     deterministic_checks: tuple[str, ...] = ()
     human_approval_ref: str | None = None
     human_approval_action: str | None = None
+    #: ``dependencies.integration_order`` of the contract; None for payloads registered before it was carried.
+    integration_order: int | None = None
 
     def with_semantic_locks(self, claims: Mapping[str, str]) -> "TaskSpec":
         return replace(self, semantic_locks=dict(claims))
@@ -225,6 +237,145 @@ _CAPABILITY_RANK = {
     "integrator": 2,
     "architectural_authority": 3,
 }
+
+
+#: Public name for routing's reviewer-floor comparisons.
+CAPABILITY_RANK = _CAPABILITY_RANK
+
+#: Wall-clock limit for each contract-owned deterministic check. A check that reaches it
+#: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier.
+CHECK_TIMEOUT_SECONDS = 600.0
+
+_CHECK_ENV_PASSTHROUGH = ("PYTHONPATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ")
+
+
+def _check_environment(home: str) -> dict[str, str]:
+    """Environment for a deterministic check: no credentials, no provider variables.
+
+    ``HOME`` is a fresh empty directory (so no ``~/.claude``, ``~/.ssh``, git
+    credential helpers), ``PATH`` is minimal, and only a short allowlist of
+    non-secret variables is inherited. Nothing named ``CLAUDE_*``/``ANTHROPIC_*``
+    can reach a check.
+    """
+    path = ["/usr/local/bin", "/usr/bin", "/bin"]
+    interpreter_dir = os.path.dirname(os.path.realpath(sys.executable))
+    if interpreter_dir not in path:
+        path.insert(0, interpreter_dir)
+    env = {"PATH": os.pathsep.join(path), "HOME": home}
+    for name in _CHECK_ENV_PASSTHROUGH:
+        if name in os.environ:
+            env[name] = os.environ[name]
+    return env
+
+
+#: Options for every git command the control plane runs. A worktree's ``.git`` links to the
+#: SHARED git directory, so anything a worker or a gate check plants in the repository config
+#: (``diff.external``, ``core.fsmonitor``, a pager) would otherwise execute later under the
+#: control plane's privileges. Diff-like commands additionally pass ``--no-ext-diff
+#: --no-textconv`` (an empty ``diff.external`` alone makes a plain ``git diff`` fail).
+GIT_HARDENING_ARGS: tuple[str, ...] = (
+    "--no-pager",
+    "-c", "core.fsmonitor=false",
+    "-c", "diff.external=",
+    "-c", "core.hooksPath=/dev/null",
+)
+
+
+def hardened_git_environment(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Scrubbed environment for control-plane git: no inherited config, credentials, or ``GIT_*``."""
+    git_path = shutil.which("git")
+    path = ["/usr/local/bin", "/usr/bin", "/bin"]
+    if git_path:
+        path.insert(0, os.path.dirname(os.path.realpath(git_path)))
+    env = {
+        "PATH": os.pathsep.join(dict.fromkeys(path)),
+        "HOME": "/nonexistent",
+        "XDG_CONFIG_HOME": "/nonexistent",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_TERMINAL_PROMPT": "0",
+        "LANG": "C",
+    }
+    env.update(extra or {})
+    return env
+
+
+def run_hardened_git(
+    args: Sequence[str],
+    cwd: str | os.PathLike[str],
+    *,
+    text: bool = True,
+    env: Mapping[str, str] | None = None,
+) -> "subprocess.CompletedProcess[Any]":
+    """Run ``git <hardening> <args>`` with a scrubbed environment."""
+    executable = shutil.which("git") or "git"
+    return subprocess.run(
+        [executable, *GIT_HARDENING_ARGS, *args],
+        cwd=cwd,
+        capture_output=True,
+        text=text,
+        check=False,
+        env=hardened_git_environment(env),
+    )
+
+
+def _digest_file(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _run_check(command: str, cwd: pathlib.Path, timeout: float) -> tuple[int, str, str, bool]:
+    """Run one check in its own process group under a hard deadline.
+
+    Output goes to temporary files, not pipes: a descendant that escapes the group (its own
+    session) and keeps a pipe open cannot delay the verdict once the check itself has
+    finished or timed out. Returns ``(exit_code, stdout_sha256, stderr_sha256, timed_out)``.
+    """
+    with tempfile.TemporaryDirectory(prefix="agentctl-check-") as scratch_name:
+        scratch = pathlib.Path(scratch_name)
+        (scratch / "home").mkdir()
+        with open(scratch / "stdout", "wb") as out, open(scratch / "stderr", "wb") as err:
+            proc = subprocess.Popen(
+                command,
+                cwd=cwd,
+                shell=True,
+                executable="/bin/sh",
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=err,
+                env=_check_environment(str(scratch / "home")),
+                start_new_session=True,
+            )
+            timed_out = False
+            try:
+                try:
+                    proc.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    _kill_process_group(proc.pid)
+                    proc.wait()
+            except BaseException:
+                _kill_process_group(proc.pid)
+                proc.wait()
+                raise
+            finally:
+                _kill_process_group(proc.pid)
+        return (
+            124 if timed_out else proc.returncode,
+            _digest_file(scratch / "stdout"),
+            _digest_file(scratch / "stderr"),
+            timed_out,
+        )
+
+
+def _kill_process_group(pgid: int) -> None:
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def task_approval_scope(spec: TaskSpec) -> str:
@@ -356,6 +507,10 @@ class Scheduler:
         if not rows:
             raise PlanningError("unknown task", task_id=task_id)
         return TaskSpec.from_payload(json.loads(rows[0]["payload_json"]))
+
+    def task_spec(self, task_id: str) -> TaskSpec:
+        """The registered, immutable spec of ``task_id`` (read-only)."""
+        return self._spec(task_id)
 
     def _admission_facts(
         self,
@@ -661,6 +816,88 @@ class Scheduler:
             return "attempt_failed"
         return str(self.store.execute(f"schema-failed:{lease['lease_id']}", event, failure))
 
+    def fail_attempt(self, task_id: str, reason_code: str) -> str:
+        """End a running attempt whose worker output was received but is unusable.
+
+        Used for evaluated failures that existing paths do not cover (a scope-audit
+        rejection, an unusable proposal). ``running -> repair_required`` while the
+        task still has attempts left, ``-> escalated`` when none remain (both are the
+        permitted outcomes of ``submission_failed``). The lease and its semantic locks
+        are released and the attempt is marked ``failed``. Never advances toward a
+        candidate. Infrastructure failures that evaluated nothing use
+        :meth:`expire_lease` instead, and malformed artifacts use
+        :meth:`handle_schema_error`.
+        """
+        self.leases.expire_dead()
+        lease_rows = self.store.rows(
+            "SELECT * FROM leases WHERE task_id = ? AND active = 1 ORDER BY epoch DESC LIMIT 1",
+            (task_id,),
+        )
+        if not lease_rows:
+            raise IllegalTransition("attempt failure has no active attempt", task_id=task_id)
+        lease = lease_rows[0]
+        current = str(self.store.status(task_id)["state"])
+        remaining = int(self.store.scalar(
+            "SELECT attempts_remaining FROM budgets WHERE scope_type = 'task' AND scope_id = ?",
+            (task_id,),
+        ) or 0)
+        outcome = TaskState.REPAIR_REQUIRED if remaining > 0 else TaskState.ESCALATED
+        transition(current, "submission_failed", outcome)
+        event = make_event(
+            event_type="submission_failed", reason_code=reason_code,
+            actor_role="scheduler", task_id=task_id, attempt_id=lease["attempt_id"],
+            prior_state=current, next_state=outcome.value,
+        )
+
+        def failure(connection: sqlite3.Connection) -> str:
+            row = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if row is None or row["state"] != current:
+                raise IllegalTransition("task changed before attempt failure", task_id=task_id)
+            self._end_active_attempt(connection, lease, "failed", outcome.value)
+            return outcome.value
+
+        return str(self.store.execute(f"attempt-failed:{lease['lease_id']}", event, failure))
+
+    def record_model_run(
+        self,
+        *,
+        run_id: str,
+        task_id: str,
+        attempt_id: str,
+        provider: str,
+        model_version: str | None,
+        status: str,
+        usage: Mapping[str, Any] | None,
+        summary: Mapping[str, Any],
+    ) -> str:
+        """Persist one provider invocation (success or failure) in ``model_runs``.
+
+        ``run_id`` is the control-plane-minted run identity. ``usage`` is the
+        provider's raw usage object (``{}`` when none was reported, never zeros).
+        ``summary`` must already be redacted and free of prompts and document text.
+        """
+        event = make_event(
+            event_type="model_run_recorded", reason_code=status, actor_role="scheduler",
+            task_id=task_id, attempt_id=attempt_id, provider=provider,
+            model_version=model_version, artifact_refs=[f"model-run:{run_id}"],
+        )
+
+        def insert(connection: sqlite3.Connection) -> str:
+            connection.execute(
+                "INSERT INTO model_runs(run_id, task_id, attempt_id, provider, model_version, "
+                "status, usage_json, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id, task_id, attempt_id, provider, model_version, status,
+                    json.dumps(dict(usage or {}), sort_keys=True, separators=(",", ":")),
+                    json.dumps(dict(summary), sort_keys=True, separators=(",", ":")),
+                ),
+            )
+            return run_id
+
+        return str(self.store.execute(f"model-run:{run_id}", event, insert))
+
     def ingest_manifest(self, task_id: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
         spec = self._spec(task_id)
         self.leases.expire_dead()
@@ -782,13 +1019,7 @@ class Scheduler:
         return None
 
     def _git(self, *args: str, cwd: str | None = None, text: bool = True) -> subprocess.CompletedProcess[Any]:
-        return subprocess.run(
-            ["git", *args],
-            cwd=cwd or self.store.repository_root,
-            capture_output=True,
-            text=text,
-            check=False,
-        )
+        return run_hardened_git(args, cwd or self.store.repository_root, text=text)
 
     def _base_commit_compatible(self, base_commit: str) -> bool:
         if len(base_commit) != 40 or base_commit == "unbound":
@@ -831,7 +1062,8 @@ class Scheduler:
                 "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
             )
         changed = self._git(
-            "diff", "--name-status", "--find-renames", spec.base_commit, result_commit
+            "diff", "--no-ext-diff", "--no-textconv", "--name-status", "--find-renames",
+            spec.base_commit, result_commit
         )
         if changed.returncode != 0:
             raise PermissionViolation(
@@ -862,7 +1094,8 @@ class Scheduler:
             )
         tree = self._git("rev-parse", f"{result_commit}^{{tree}}")
         diff = self._git(
-            "diff", "--binary", "--full-index", spec.base_commit, result_commit, text=False
+            "diff", "--no-ext-diff", "--no-textconv", "--binary", "--full-index",
+            spec.base_commit, result_commit, text=False
         )
         if tree.returncode != 0 or diff.returncode != 0:
             raise PermissionViolation(
@@ -925,21 +1158,18 @@ class Scheduler:
         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
         results: list[dict[str, Any]] = []
         for command in spec.deterministic_checks:
-            completed = subprocess.run(
-                command,
-                cwd=worktree,
-                shell=True,
-                executable="/bin/sh",
-                capture_output=True,
+            exit_code, stdout_hash, stderr_hash, timed_out = _run_check(
+                command, worktree, CHECK_TIMEOUT_SECONDS
             )
-            results.append(
-                {
-                    "command": command,
-                    "exit_code": completed.returncode,
-                    "stdout_hash": hashlib.sha256(completed.stdout).hexdigest(),
-                    "stderr_hash": hashlib.sha256(completed.stderr).hexdigest(),
-                }
-            )
+            result: dict[str, Any] = {
+                "command": command,
+                "exit_code": exit_code,
+                "stdout_hash": stdout_hash,
+                "stderr_hash": stderr_hash,
+            }
+            if timed_out:
+                result["timed_out"] = True
+            results.append(result)
         passed = all(item["exit_code"] == 0 for item in results)
         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
         evidence_hash = sha256_of_json(evidence)
