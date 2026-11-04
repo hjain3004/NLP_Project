@@ -212,7 +212,8 @@ class LaneARepo:
             path = self.root / "agent-system/routing/capability-registry.json"
             document = json.loads(path.read_text(encoding="utf-8"))
             for entry in document["entries"]:
-                if entry["capability_class"] in registry:
+                # Only champions are re-bound; a disclosed candidate entry keeps its own binding.
+                if entry["capability_class"] in registry and entry["binding_type"] != "candidate":
                     entry["provider"], entry["model_id"] = registry[entry["capability_class"]]
             path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 

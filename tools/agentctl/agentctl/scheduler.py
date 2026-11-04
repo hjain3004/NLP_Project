@@ -15,6 +15,16 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from .approval import ApprovalManager, ApprovalRejected
+from .check_environment import (
+    DEFAULT_CHECK_TIMEOUT_SECONDS,
+    ISOLATION_LEGACY,
+    CandidateTreeError,
+    CheckEnvironmentUnavailable,
+    legacy_environment,
+    require_sandbox,
+    run_candidate_checks,
+    selected_isolation,
+)
 from .errors import (
     BudgetExhausted,
     ContractStale,
@@ -241,26 +251,32 @@ _CAPABILITY_RANK = {
 CAPABILITY_RANK = _CAPABILITY_RANK
 
 #: Wall-clock limit for each contract-owned deterministic check. A check that reaches it
-#: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier. Checks run
-#: through the shared ``gate_runner.run_checks`` (allowlisted environment, rlimits, user+PID
-#: namespace where available, no surviving descendants).
-CHECK_TIMEOUT_SECONDS = 600.0
+#: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier. By default checks
+#: run in the runc sandbox of ``check_environment`` (the one contract shared with ``integrate``);
+#: ``AGENTCTL_CHECK_ISOLATION=legacy-unsafe`` selects the old ``gate_runner`` path instead.
+CHECK_TIMEOUT_SECONDS = DEFAULT_CHECK_TIMEOUT_SECONDS
 
-#: Only these contract risks may run unsandboxed gates (AGENTS.md section 7: prohibited for high-risk
-#: tasks). An allow-list: any other value, however spelled, is refused. The named reasons are what
-#: verification and integration record.
-UNSANDBOXED_GATE_ALLOWED_RISKS = frozenset({"low", "medium"})
-UNSANDBOXED_GATE_HIGH_RISK = "unsandboxed_gate_high_risk"
+#: Only these contract risks may have their deterministic checks run, under ANY isolation (AGENTS.md section 7:
+#: unsandboxed tools are prohibited for high-risk tasks; the runc boundary has had one independent review that
+#: found blocking issues, so high and critical stay refused until the boundary has had a further independent
+#: review and an owner decision). An allow-list: any other value, however spelled, is refused. The named
+#: reasons are what verification and integration record.
+GATE_ALLOWED_RISKS = frozenset({"low", "medium"})
+UNSANDBOXED_GATE_ALLOWED_RISKS = GATE_ALLOWED_RISKS  # earlier name, kept for importers
+GATE_RISK_NOT_PERMITTED = "gate_risk_not_permitted_until_sandbox_reviewed"
 UNSANDBOXED_GATE_UNKNOWN_RISK = "unsandboxed_gate_unknown_risk"
 NO_DETERMINISTIC_CHECKS = "no_deterministic_checks"
 
 
-def unsandboxed_gate_refusal(risk: object) -> str | None:
-    """The named reason gates may not run for ``risk``, or ``None`` when low or medium."""
+def gate_risk_refusal(risk: object) -> str | None:
+    """The named reason checks may not run for ``risk``, or ``None`` when low or medium."""
     normalized = str(risk).strip().lower() if risk is not None else ""
-    if normalized in UNSANDBOXED_GATE_ALLOWED_RISKS:
+    if normalized in GATE_ALLOWED_RISKS:
         return None
-    return UNSANDBOXED_GATE_HIGH_RISK if normalized in {"high", "critical"} else UNSANDBOXED_GATE_UNKNOWN_RISK
+    return GATE_RISK_NOT_PERMITTED if normalized in {"high", "critical"} else UNSANDBOXED_GATE_UNKNOWN_RISK
+
+
+unsandboxed_gate_refusal = gate_risk_refusal  # earlier name, kept for importers
 
 
 def effective_checks(checks: Sequence[object] | None) -> tuple[str, ...]:
@@ -850,6 +866,11 @@ class Scheduler:
             self._record_orphan(task_id, manifest)
             raise ContractStale("artifact belongs to an expired or superseded lease", task_id=task_id)
         lease = lease_rows[0]
+        if self._names_superseded_attempt(task_id, lease, manifest):
+            # Design 14.1: a submission from an expired or superseded attempt is orphan evidence and
+            # advances nothing. It must not touch the active lease or the task state.
+            self._record_orphan(task_id, manifest)
+            raise ContractStale("artifact belongs to an expired or superseded lease", task_id=task_id)
         current_state = str(self.store.status(task_id)["state"])
         transition(current_state, "candidate_ingested", TaskState.CANDIDATE)
         mismatch = self._manifest_mismatch(spec, lease, manifest)
@@ -932,6 +953,28 @@ class Scheduler:
             )
             return {"artifact_id": artifact_id, "task_id": task_id, "state": "candidate"}
         return dict(self.store.execute(f"candidate-ingest:{artifact_id}", event, accept))
+
+    def _names_superseded_attempt(
+        self, task_id: str, active: Mapping[str, Any], manifest: Mapping[str, Any]
+    ) -> bool:
+        """True when the manifest names an earlier or non-current attempt of this task and NOT the active one.
+
+        A manifest that claims the active lease or the active attempt (by id) is judged by
+        ``_manifest_mismatch`` instead: a wrong token or hash on the CURRENT lease is a permission violation.
+        """
+        lease_id, attempt_id = manifest.get("lease_id"), manifest.get("attempt_id")
+        if lease_id == active["lease_id"] or attempt_id == active["attempt_id"]:
+            return False
+        epoch = manifest.get("lease_epoch")
+        if isinstance(epoch, int) and not isinstance(epoch, bool) and epoch < active["epoch"]:
+            return True
+        if isinstance(lease_id, str) and self.store.rows(
+            "SELECT 1 FROM leases WHERE task_id = ? AND lease_id = ?", (task_id, lease_id)
+        ):
+            return True
+        return isinstance(attempt_id, str) and bool(self.store.rows(
+            "SELECT 1 FROM attempts WHERE task_id = ? AND attempt_id = ?", (task_id, attempt_id)
+        ))
 
     def _manifest_mismatch(self, spec: TaskSpec, lease: Mapping[str, Any], manifest: Mapping[str, Any]) -> str | None:
         exact = (
@@ -1056,16 +1099,24 @@ class Scheduler:
         }
 
     def verify_candidate(self, task_id: str) -> dict[str, Any]:
-        """Run contract-owned deterministic checks and bind their evidence to a candidate."""
+        """Run contract-owned deterministic checks and bind their evidence to a candidate.
+
+        Checks run in the shared check environment (``check_environment``: the commit's tree in a runc
+        sandbox with a synthetic private Git repository), exactly as the integrator reruns them.
+        """
         spec = self._spec(task_id)
-        refusal = unsandboxed_gate_refusal(spec.risk)
+        isolation = selected_isolation()  # an unrecognised selector is refused, never ignored
+        checks = effective_checks(spec.deterministic_checks)
+        refusal = gate_risk_refusal(spec.risk)
         if refusal is not None:
-            # Gates run unsandboxed at the control-plane uid (AGENTS.md section 7: prohibited for
-            # high-risk tasks). Refuse before any state transition or check, so the task is unchanged.
+            # Refused under every isolation, before any state transition, event or check (see GATE_ALLOWED_RISKS).
             raise PermissionViolation(
-                "deterministic checks run unsandboxed and are prohibited for high-risk tasks",
+                "deterministic checks are not permitted for this task's risk until the sandbox boundary has had a "
+                "further independent review and an owner decision",
                 task_id=task_id, reason_code=refusal, risk=str(spec.risk)[:40],
             )
+        if isolation != ISOLATION_LEGACY and checks:
+            require_sandbox()  # fail closed before any transition: reason_code sandbox_unavailable
         status = str(self.store.status(task_id)["state"])
         transition(status, "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
         attempt = self.store.rows(
@@ -1104,18 +1155,47 @@ class Scheduler:
             return {"task_id": task_id, "state": "deterministic_verification"}
 
         self.store.execute(f"verify-start:{task_id}:{attempt['attempt_id']}", started, begin)
-        worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
-        checks = effective_checks(spec.deterministic_checks)
-        results, tamper = self._run_gate_checks(worktree, checks)
         # No (non-blank) check means nothing was verified; `all([])` must never read as a pass.
         vacuous = not checks
+        tamper: dict[str, Any] | None = None
+        failure_reason: str | None = None
+        if vacuous:
+            results: list[dict[str, Any]] = []
+            environment = legacy_environment("shared-git-link") if isolation == ISOLATION_LEGACY else None
+            failure_reason = NO_DETERMINISTIC_CHECKS
+        elif isolation == ISOLATION_LEGACY:
+            worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
+            results, tamper = self._run_gate_checks(worktree, checks)
+            environment = legacy_environment("shared-git-link", timeout=CHECK_TIMEOUT_SECONDS)
+        else:
+            try:
+                outcome = run_candidate_checks(
+                    self.store.repository_root, binding["result_commit"], checks, label="verify",
+                    timeout=CHECK_TIMEOUT_SECONDS,
+                    spec_fields={"task_id": task_id, "tree_hash": binding["tree_hash"]},
+                )
+                results, environment = outcome["checks"], outcome["environment"]
+                failure_reason = outcome.get("failure_reason")
+            except CandidateTreeError as error:
+                results, environment = [], None
+                failure_reason = "candidate_tree_unsafe"
+                unsafe = {"error": type(error).__name__, "detail": str(error)[:200]}
+            except CheckEnvironmentUnavailable as error:
+                # The sandbox vanished between the pre-check and the run. The task is already in
+                # deterministic_verification, so this is recorded as failing evidence, never a pass.
+                results, environment = [], None
+                failure_reason = error.reason_code
         passed = (
-            not vacuous and not tamper
+            not vacuous and not tamper and failure_reason is None
             and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
         )
         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
-        if vacuous:
-            evidence["failure_reason"] = NO_DETERMINISTIC_CHECKS
+        if environment is not None:
+            evidence["environment"] = environment
+        if failure_reason is not None:
+            evidence["failure_reason"] = failure_reason
+        if failure_reason == "candidate_tree_unsafe":
+            evidence["candidate_tree"] = unsafe
         if tamper:
             evidence["repository_tamper"] = tamper
         evidence_hash = sha256_of_json(evidence)
@@ -1126,7 +1206,7 @@ class Scheduler:
             reason_code=(
                 "verification_passed" if passed
                 else str(tamper["reason_code"]) if tamper
-                else NO_DETERMINISTIC_CHECKS if vacuous else "verification_failed"
+                else failure_reason if failure_reason else "verification_failed"
             ),
             actor_role="verifier",
             task_id=task_id,
@@ -1178,7 +1258,8 @@ class Scheduler:
     def _run_gate_checks(
         self, worktree: pathlib.Path, commands: Sequence[str]
     ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-        """Run the contract's checks through the shared gate runner and audit the shared ``.git``.
+        """LEGACY (``AGENTCTL_CHECK_ISOLATION=legacy-unsafe``) path: run the contract's checks through the
+        shared gate runner in the leased worktree and audit the shared ``.git``.
 
         The leased worktree's ``.git`` links to the repository's shared git directory, so a
         check could plant config (``diff.external``, ``core.fsmonitor``, drivers, hooks, refs)

@@ -381,6 +381,7 @@ class ConflictAndGateTests(IntegrationTestCase):
         self.assertEqual(failed[0]["exit_code"], 1)
         self.assertEqual(self.lab.state("T2"), "integration_ready")
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # keys on the legacy gate tree path
     def test_hanging_check_is_a_recorded_failure_not_a_hang(self) -> None:
         """Protects liveness: a gate that hangs on the integration tree times out and fails."""
         # Quick in the candidate's own worktree, hangs only inside the integration worktree.
@@ -395,6 +396,7 @@ class ConflictAndGateTests(IntegrationTestCase):
         self.assertIsNone(gate["exit_code"])
         self.assert_untouched("T1", head_before=None)
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # keys on the legacy gate tree path
     def test_gate_environment_is_scrubbed_of_provider_and_credential_variables(self) -> None:
         """Protects secrets: checks on the integration tree see no CLAUDE_/ANTHROPIC_/credential variables."""
         # Strict only inside the integration worktree: scheduler.verify_candidate (Lane A's) still
@@ -425,6 +427,29 @@ class CliSurfaceTests(IntegrationTestCase):
         self.assertEqual((empty.code, empty.json["reason_code"]), (3, "queue_empty"))
         usage = self.lab.cli("--bogus")
         self.assertEqual(usage.code, 2)
+
+
+class ParkedMessageTests(IntegrationTestCase):
+    def test_a_task_parked_for_a_canceled_dependency_is_told_so_not_to_wait_for_the_branch(self) -> None:
+        """SIMULATED queue entry: the parked reason is supplied by the lifecycle code, not produced here.
+        The refusal must say what is actually wrong; the generic text blames a branch that has not moved."""
+        from types import SimpleNamespace
+
+        from agentctl.integrate import IntegrationSettings, _Engine
+        from agentctl.integration_queue import IntegrationRefused
+
+        self.lab.candidate("T1", {"src/alpha.txt": "alpha\n"})
+        engine = _Engine(self.lab.store, IntegrationSettings(), "integrator-test", None)
+        for reason, wanted, unwanted in (
+            ("dependency_canceled", "dependency was canceled", "has not moved"),
+            ("conflict_repair_required", "has not moved", "canceled"),
+        ):
+            queue = SimpleNamespace(entry=lambda _task, r=reason: SimpleNamespace(parked_reason=r, waiting_on=()))
+            with self.subTest(reason=reason), self.assertRaises(IntegrationRefused) as raised:
+                engine._preflight_explicit("T1", queue)
+            self.assertEqual(raised.exception.reason_code, "retry_without_new_evidence")
+            self.assertIn(wanted, raised.exception.message)
+            self.assertNotIn(unwanted, raised.exception.message)
 
 
 if __name__ == "__main__":

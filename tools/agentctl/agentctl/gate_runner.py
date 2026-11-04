@@ -1,5 +1,12 @@
 """Run contract checks ("gates") under a hard deadline with no surviving descendants.
 
+STATUS: this is the LEGACY, UNSANDBOXED runner. Candidate checks run through ``check_environment`` and the
+runc sandbox (``sandbox.py``) by default; this module is reached only when ``AGENTCTL_CHECK_ISOLATION=
+legacy-unsafe`` is set explicitly (the evidence then records ``isolation: "legacy-unsafe"``), and only for
+the low and medium risk tasks the existing allow-list permits. Everything below, including its stated
+residual risk, describes that legacy path. :func:`drop_sensitive_environment` is still used by every
+control-plane command regardless of isolation.
+
 Public API:
 
 * :func:`run_checks` -- run shell commands one at a time in ``cwd`` and return one

@@ -187,6 +187,7 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
             "SELECT payload_json FROM artifacts WHERE artifact_type = 'verification-evidence'"
         )[0]["payload_json"])
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # asserts the legacy runner's own defence
     def test_a_setsid_straggler_fails_verification_and_does_not_survive_it(self) -> None:
         import time
 
@@ -203,6 +204,7 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         time.sleep(6)
         self.assertFalse(marker.exists(), "the escaped straggler outlived verification")
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # asserts the legacy runner's own defence
     def test_a_check_planting_git_config_in_the_shared_repository_fails_verification(self) -> None:
         repo = self._candidate(("git config diff.external /bin/true",))
         result = repo.scheduler.verify_candidate(repo.TASK_ID)
@@ -217,6 +219,7 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         self.assertEqual(reasons, ["gate_tampered_repository"])
         self.assertEqual(repo.store.scalar("SELECT integrable FROM artifacts WHERE artifact_type = 'verification-evidence'"), 0)
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # asserts the legacy runner's own defence
     def test_the_candidates_own_worktree_bookkeeping_is_not_tampering(self) -> None:
         """A check that merely reads git state (refreshing the worktree's own index) must still pass."""
         repo = self._candidate(("git status --porcelain >/dev/null && git diff --stat HEAD~1 HEAD >/dev/null",))

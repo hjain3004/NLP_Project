@@ -32,7 +32,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import threading
 import time
 import uuid
 import weakref
@@ -41,7 +40,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .check_environment import (
+    ISOLATION_LEGACY,
+    CandidateTreeUnreadable,
+    CandidateTreeUnsafe,
+    CheckEnvironmentUnavailable,
+    legacy_environment,
+    materialize_tree,
+    require_sandbox,
+    run_candidate_checks,
+    selected_isolation,
+)
 from .errors import PlanningError
+from .events import make_event
 from .hashing import sha256_hex, sha256_of_json
 from .integration_queue import (
     IntegrationBusy,
@@ -58,14 +69,13 @@ from .integration_queue import (
     next_lease_epoch,
     record_reconciliation,
     record_rejection,
-    renew_lease,
     run_gate_commands,
     store_query,
 )
 from .interfaces import current_interface_binding
 from .locks import semantic_lock_claims
 from .models import TaskState
-from .scheduler import NO_DETERMINISTIC_CHECKS, effective_checks, unsandboxed_gate_refusal
+from .scheduler import NO_DETERMINISTIC_CHECKS, effective_checks, gate_risk_refusal
 from .store import EventStore
 from .validate import validate_artifact
 
@@ -394,111 +404,30 @@ def _unsafe(path: str, why: str) -> IntegrationRejected:
 
 
 def _materialize_tree(git: _Git, commit: str, destination: Path) -> None:
-    """Write the exact tree of ``commit`` to ``destination``: no ``.git``, no filters.
+    """Write the exact tree of ``commit`` to ``destination`` (see :func:`materialize_tree`).
 
-    Blobs are copied byte for byte from ``git cat-file``; attributes (``export-ignore``,
-    ``eol``, ``filter``) are never consulted, so the gate sees what was reviewed and
-    merged. Submodule links are skipped. Safety:
-
-    * every path is validated first (no ``""``/``.``/``..``/``.git`` component), and the
-      whole listing is checked for duplicate entries and for a path that is both a
-      file (or symlink) and a directory, before anything is written;
-    * directories are created one component at a time relative to an open directory
-      descriptor, and every component is opened with ``O_NOFOLLOW``, so no ancestor
-      can be a symlink and nothing is ever created outside ``destination``;
-    * any ``OSError`` is a recorded ``candidate_tree_unsafe`` rejection.
+    The materialiser is shared with ``verify`` through the check-environment contract; here its refusals
+    become the integrator's recorded rejection (``candidate_tree_unsafe``) or refusal (``plan_unreadable``).
     """
-    listing = git.run("ls-tree", "-r", "-z", "--full-tree", commit, text=False)
-    if listing.returncode != 0:
-        raise IntegrationRefused("cannot list the planned tree", reason_code="plan_unreadable")
-    entries: list[tuple[str, str, str]] = []
-    kinds: dict[str, str] = {}
-    for raw in listing.stdout.split(b"\0"):
-        if not raw:
-            continue
-        meta, _, path_bytes = raw.partition(b"\t")
-        mode, kind, oid = meta.decode().split()
-        path = os.fsdecode(path_bytes)
-        parts = path.split("/")
-        if any(part in ("", ".", "..") or part.lower() == ".git" for part in parts):
-            raise _unsafe(path, "forbidden path component")
-        if kind != "blob":
-            continue
-        for depth in range(1, len(parts)):
-            prefix = "/".join(parts[:depth])
-            if kinds.setdefault(prefix, "dir") != "dir":
-                raise _unsafe(path, "an ancestor is also a file or symlink entry")
-        if path in kinds:
-            raise _unsafe(path, "duplicate or clashing entry")
-        kinds[path] = "file"
-        entries.append((mode, oid, path))
     try:
-        destination.mkdir(parents=True, exist_ok=False)
-        root_fd = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    except OSError as exc:
-        raise _unsafe(str(destination), f"cannot create the gate tree: {exc.strerror}") from exc
-    process = git.popen("cat-file", "--batch")
-    assert process.stdin is not None and process.stdout is not None
+        materialize_tree(git, commit, destination)
+    except CandidateTreeUnsafe as exc:
+        raise _unsafe(exc.path, exc.why) from exc
+    except CandidateTreeUnreadable as exc:
+        raise IntegrationRefused("cannot read the planned tree", **exc.context) from exc
 
-    def feed() -> None:
-        try:
-            for _mode, oid, _path in entries:
-                process.stdin.write(f"{oid}\n".encode())  # type: ignore[union-attr]
-        except OSError:
-            pass  # the reader stopped early (rejection); cat-file exits on EPIPE
-        finally:
-            with contextlib.suppress(OSError):
-                process.stdin.close()  # type: ignore[union-attr]
 
-    def parent_fd(parts: list[str]) -> int:
-        fd = os.dup(root_fd)
-        try:
-            for part in parts:
-                with contextlib.suppress(FileExistsError):
-                    os.mkdir(part, 0o755, dir_fd=fd)
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-                os.close(fd)
-                fd = child
-            return fd
-        except BaseException:
-            os.close(fd)
-            raise
-
-    writer = threading.Thread(target=feed, daemon=True)
-    writer.start()
+def _isolation() -> str:
+    """The selected check isolation, as an integration refusal when the selector is not recognised."""
     try:
-        for mode, oid, path in entries:
-            header = process.stdout.readline().split()
-            if len(header) != 3 or header[1] != b"blob":
-                raise IntegrationRefused("cannot read a blob", reason_code="plan_unreadable", oid=oid)
-            content = process.stdout.read(int(header[2]))
-            process.stdout.read(1)  # the newline cat-file appends
-            *ancestors, name = path.split("/")
-            try:
-                directory = parent_fd(ancestors)
-                try:
-                    if mode == "120000":
-                        os.symlink(os.fsdecode(content), name, dir_fd=directory)
-                    else:
-                        descriptor = os.open(
-                            name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                            0o755 if mode == "100755" else 0o644, dir_fd=directory,
-                        )
-                        with os.fdopen(descriptor, "wb") as handle:
-                            handle.write(content)
-                finally:
-                    os.close(directory)
-            except OSError as exc:
-                raise _unsafe(path, f"cannot materialize: {exc.strerror}") from exc
-    finally:
-        os.close(root_fd)
-        process.stdout.close()
-        writer.join(timeout=5)
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
+        return selected_isolation()
+    except CheckEnvironmentUnavailable as exc:
+        raise _refusal(exc) from exc
+
+
+def _refusal(exc: CheckEnvironmentUnavailable) -> IntegrationRefused:
+    details = {key: value for key, value in exc.context.items() if key != "reason_code"}
+    return IntegrationRefused(exc.message, reason_code=exc.reason_code, **details)
 
 
 # ------------------------------------------------------------- evidence ----
@@ -535,13 +464,17 @@ def _verify(store: EventStore, git: _Git, task_id: str, integrator_id: str) -> _
     task = store.rows("SELECT * FROM tasks WHERE task_id = ?", (task_id,))[0]
     payload = json.loads(task["payload_json"])
 
-    # (0) Pre-claim refusals read the contract, not a stored pass: gates run unsandboxed (prohibited
-    # for high-risk tasks, AGENTS.md section 7), and a contract with no checks verified nothing.
-    refusal = unsandboxed_gate_refusal(payload.get("risk"))
+    # (0) Pre-claim refusals read the contract, not a stored pass: high/critical (and unknown) risk is refused
+    # under every isolation until the sandbox boundary has had a further independent review and an owner
+    # decision, and a contract with no checks verified nothing. Whether the sandbox is available is checked where
+    # the gates are about to run (`_plan`), so crash recovery that runs no gate does not need it.
+    _isolation()  # an unrecognised selector is refused, never ignored
+    refusal = gate_risk_refusal(payload.get("risk"))
     if refusal is not None:
         raise _reject(
             refusal, "human_required",
-            "gates run unsandboxed and are allowed only for low and medium risk tasks",
+            "gates are allowed only for low and medium risk tasks until the sandbox boundary has had a further "
+            "independent review and an owner decision",
             retry_requires_new_evidence=True, risk=str(payload.get("risk"))[:40],
         )
     if not effective_checks(payload.get("deterministic_checks")):
@@ -808,6 +741,7 @@ class _Plan:
     tree: str
     gates: list[dict[str, Any]]
     patch_unchanged: bool
+    environment: dict[str, Any] | None = None
 
 
 def _safe_component(value: str) -> str:
@@ -841,6 +775,12 @@ def _plan(
     dates are pinned from ``planned_at`` so recovery can re-derive the same hash.
     """
     candidate = evidence.result_commit
+    isolation = _isolation()
+    if isolation != ISOLATION_LEGACY:
+        try:
+            require_sandbox()  # fail closed: no plan, no gate, no state change without the sandbox
+        except CheckEnvironmentUnavailable as exc:
+            raise _refusal(exc) from exc
     if git.is_ancestor(candidate, old_head):
         raise _reject(
             "candidate_already_in_integration_branch", "human_required",
@@ -929,38 +869,62 @@ def _plan(
             "candidate_altered", "human_required",
             "the planned result does not carry the reviewed candidate unchanged",
         )
-    # Gates run on a pristine copy of the planned tree that has no ``.git`` link and sits
-    # outside the repository checkout, so nothing a gate does can reach the repository,
-    # its configuration, its refs or the event store through the working directory.
-    own_metadata = git.out("rev-parse", "--absolute-git-dir", cwd=worktree)
-    exclude = Path(own_metadata).resolve() if own_metadata else None
-    with tempfile.TemporaryDirectory(prefix="agentctl-integration-gate-") as gate_root:
-        gate_tree = Path(gate_root) / "tree"
-        _materialize_tree(git, planned, gate_tree)
-        before = _protected_state(git, branch, exclude)
-        gates = [
-            {"gate": "integration:candidate-commit-preserved", "result": "pass"},
-            *run_gate_commands(evidence.checks, cwd=gate_tree, timeout=check_timeout),
-        ]
-        after = _protected_state(git, branch, exclude)
-    changed = _changed(before, after)
-    if changed:
-        # Nothing is restored: the changed metadata stays for a human to inspect, and
-        # integration is refused while the repository is still in this state.
-        raise _reject(
-            "gate_tampered_repository", "human_required",
-            "a gate changed repository metadata the integrator relies on",
-            retry_requires_new_evidence=True, integration_head=old_head,
-            changed=changed[:50], tampered_state=sha256_of_json(after), gates=gates,
-        )
+    if isolation == ISOLATION_LEGACY:
+        # LEGACY (explicit AGENTCTL_CHECK_ISOLATION=legacy-unsafe): unsandboxed gates on a pristine copy of
+        # the planned tree with no ``.git`` link, outside the checkout, with the before/after tamper check.
+        own_metadata = git.out("rev-parse", "--absolute-git-dir", cwd=worktree)
+        exclude = Path(own_metadata).resolve() if own_metadata else None
+        with tempfile.TemporaryDirectory(prefix="agentctl-integration-gate-") as gate_root:
+            gate_tree = Path(gate_root) / "tree"
+            _materialize_tree(git, planned, gate_tree)
+            before = _protected_state(git, branch, exclude)
+            gates = [
+                {"gate": "integration:candidate-commit-preserved", "result": "pass"},
+                *run_gate_commands(evidence.checks, cwd=gate_tree, timeout=check_timeout),
+            ]
+            after = _protected_state(git, branch, exclude)
+        environment = legacy_environment("none", timeout=check_timeout)
+        changed = _changed(before, after)
+        if changed:
+            # Nothing is restored: the changed metadata stays for a human to inspect, and
+            # integration is refused while the repository is still in this state.
+            raise _reject(
+                "gate_tampered_repository", "human_required",
+                "a gate changed repository metadata the integrator relies on",
+                retry_requires_new_evidence=True, integration_head=old_head,
+                changed=changed[:50], tampered_state=sha256_of_json(after), gates=gates,
+            )
+    else:
+        # The one check-environment contract, identical to verification: the planned commit's tree in the
+        # runc sandbox with a private synthetic repository. The repository is not reachable from a check,
+        # so no before/after tamper comparison is needed.
+        try:
+            outcome = run_candidate_checks(
+                git.root, planned, evidence.checks, label="integrate", timeout=check_timeout,
+                spec_fields={"task_id": evidence.task_id, "tree_hash": tree},
+            )
+        except CandidateTreeUnsafe as exc:
+            raise _unsafe(exc.path, exc.why) from exc
+        except CandidateTreeUnreadable as exc:
+            raise IntegrationRefused("cannot read the planned tree", **exc.context) from exc
+        except CheckEnvironmentUnavailable as exc:
+            raise _refusal(exc) from exc
+        environment = outcome["environment"]
+        if outcome.get("failure_reason"):
+            raise _reject(
+                str(outcome["failure_reason"]), "human_required",
+                "the check environment could not be established for the planned tree",
+                retry_requires_new_evidence=True, integration_head=old_head, environment=environment,
+            )
+        gates = [{"gate": "integration:candidate-commit-preserved", "result": "pass"}, *outcome["checks"]]
     if any(gate["result"] != "pass" for gate in gates):
         raise _reject(
             "affected_check_failed", "repair_required",
             "an affected gate failed on the resulting integration tree",
             retry_requires_new_evidence=True, integration_head=old_head,
-            planned_commit=planned, gates=gates,
+            planned_commit=planned, gates=gates, environment=environment,
         )
-    return _Plan(strategy, planned, tree, gates, True)
+    return _Plan(strategy, planned, tree, gates, True, environment)
 
 
 # ------------------------------------------------------------- manifest ----
@@ -997,6 +961,126 @@ def _manifest(intent: Mapping[str, Any], lease: Mapping[str, Any]) -> dict[str, 
     }
 
 
+# ---------------------------------------------------------------- leases ----
+
+
+def _proc_start_ticks(pid: int) -> int | None:
+    """Kernel start time of ``pid`` in clock ticks (``/proc/<pid>/stat`` field 22), or None."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as handle:
+            rest = handle.read().rsplit(b")", 1)[1].split()
+        return None if rest[0] == b"Z" else int(rest[19])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _boot_id() -> str:
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return ""
+
+
+def _holder_identity() -> dict[str, Any]:
+    """Who holds a lease: this process, identified so a later process can tell whether it still lives."""
+    return {"pid": os.getpid(), "start_ticks": _proc_start_ticks(os.getpid()), "boot_id": _boot_id()}
+
+
+def _holder_status(holder: object) -> str:
+    """``alive`` (another live process), ``dead`` or ``unknown`` for the holder recorded in a lease.
+
+    The process lock makes a concurrent live integrator impossible through ``integrate()``; this is the
+    check that a lease is never adopted from a holder that is demonstrably still running anyway. A holder
+    that is this very process is a previous, finished call (the lock is held now), not a concurrent one.
+    """
+    if not isinstance(holder, Mapping) or not isinstance(holder.get("pid"), int):
+        return "unknown"
+    if holder.get("boot_id") and _boot_id() and holder["boot_id"] != _boot_id():
+        return "dead"  # a different boot: that process cannot exist
+    if holder["pid"] == os.getpid():
+        return "dead"
+    ticks = _proc_start_ticks(holder["pid"])
+    if ticks is None:
+        return "dead"
+    return "alive" if holder.get("start_ticks") in (None, ticks) else "dead"  # pid reuse is "dead"
+
+
+def _renew_expired_lease(
+    store: EventStore, *, intent: Mapping[str, Any], expired: Mapping[str, Any], lease: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Replace ``expired`` (the lease this process holds) with ``lease``: new epoch and fencing token.
+
+    Inside the same transaction that records the renewal this verifies that ``expired`` is still the
+    current integrable lease (nobody took over meanwhile: ``lease_fencing_mismatch``) AND that it is
+    expired as stored (``lease_not_expired``): a live lease can never be replaced. The old lease artifact
+    is retired (``integrable = 0``) so its token can never complete the integration.
+    """
+    task_id = str(intent["task_id"])
+    artifact_id = f"integration-lease:{task_id}:{lease['lease_id']}"
+    event = make_event(
+        event_type="integration_lease_renewed",
+        reason_code="integration_lease_expired",
+        actor_role="integrator",
+        task_id=task_id,
+        attempt_id=str(intent["attempt_id"]),
+        prior_state=TaskState.INTEGRATING.value,
+        next_state=TaskState.INTEGRATING.value,
+        artifact_refs=[artifact_id, f"intent:{intent['integration_id']}"],
+    )
+
+    def mutation(connection: Any) -> dict[str, Any]:
+        intent_row = connection.execute(
+            "SELECT integrable FROM artifacts WHERE artifact_id = ?",
+            (f"integration-intent:{intent['integration_id']}",),
+        ).fetchone()
+        state = connection.execute("SELECT state FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        if (
+            intent_row is None or intent_row["integrable"] != 1
+            or state is None or state["state"] != TaskState.INTEGRATING.value
+        ):
+            raise IntegrationRefused(
+                "lease can be renewed only for an integrating task with a live intent",
+                reason_code="reconciliation_required", task_id=task_id,
+            )
+        row = connection.execute(
+            "SELECT artifact_id, payload_json FROM artifacts WHERE artifact_type = 'integration-lease' "
+            "AND task_id = ? AND integrable = 1 ORDER BY rowid DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        current = json.loads(row["payload_json"]) if row else {}
+        if (
+            row is None
+            or row["artifact_id"] != f"integration-lease:{task_id}:{expired['lease_id']}"
+            or current.get("lease_epoch") != expired["lease_epoch"]
+            or current.get("fencing_token") != expired["fencing_token"]
+        ):
+            raise IntegrationRefused(
+                "the lease being renewed is not the current integration lease; another holder took over",
+                reason_code="lease_fencing_mismatch", task_id=task_id,
+            )
+        if lease_is_live(current):
+            raise IntegrationRefused(
+                "the integration lease has not expired; it cannot be replaced",
+                reason_code="lease_not_expired", task_id=task_id, expires_at=current.get("expires_at"),
+            )
+        connection.execute(
+            "UPDATE artifacts SET integrable = 0 WHERE task_id = ? AND artifact_type = 'integration-lease'",
+            (task_id,),
+        )
+        connection.execute(
+            "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+            "content_hash, path, integrable, payload_json) VALUES "
+            "(?, 'integration-lease', ?, ?, ?, '', 1, ?)",
+            (
+                artifact_id, task_id, intent["attempt_id"], lease["fencing_token"],
+                json.dumps(dict(lease), sort_keys=True, separators=(",", ":")),
+            ),
+        )
+        return {"task_id": task_id, "lease_epoch": lease["lease_epoch"]}
+
+    return dict(store.execute(f"integration-lease-renew:{lease['lease_id']}", event, mutation))
+
+
 # --------------------------------------------------------------- engine ----
 
 
@@ -1027,20 +1111,58 @@ class _Engine:
             )
         return lease
 
-    def _finalize(self, intent: Mapping[str, Any], evidence: _Evidence) -> dict[str, Any]:
-        """Write and validate the manifest on disk, then run transaction 2.
+    def _mint_lease(self, task_id: str, integration_id: str, epoch: int) -> dict[str, Any]:
+        lease = new_lease(task_id, integration_id, epoch, self.integrator_id)
+        lease["holder"] = _holder_identity()
+        return lease
 
-        An expired lease is first replaced (new epoch and fencing token, recorded as
-        ``integration_lease_renewed``); transaction 2 re-checks liveness and fencing.
+    def _held_lease(self, task_id: str) -> dict[str, Any]:
+        """The lease a reconciling process may act under: its own, or one whose holder is demonstrably gone.
+
+        A live (unexpired) lease whose holder is another LIVE process is never adopted
+        (``lease_held_by_live_holder``); a live lease with no identifiable holder is not adopted either
+        (``lease_holder_unknown``: wait for it to expire). An expired lease is returned as is: the caller
+        replaces it through the checked renewal, which re-verifies expiry inside its transaction.
         """
-        task_id = str(intent["task_id"])
         lease = self._current_lease(task_id)
-        if not lease_is_live(lease):
-            lease = new_lease(
-                task_id, str(intent["integration_id"]),
-                next_lease_epoch(self.query, task_id), self.integrator_id,
+        if lease.get("integrator_run_id") == self.integrator_id or not lease_is_live(lease):
+            return lease
+        status = _holder_status(lease.get("holder"))
+        if status == "alive":
+            raise IntegrationRefused(
+                "the integration lease is held by another live process; it is not adopted",
+                reason_code="lease_held_by_live_holder", task_id=task_id,
+                holder_pid=(lease.get("holder") or {}).get("pid"),
             )
-            renew_lease(self.store, intent=intent, lease=lease)
+        if status == "unknown":
+            raise IntegrationRefused(
+                "the integration lease is live and its holder cannot be identified; wait for it to expire",
+                reason_code="lease_holder_unknown", task_id=task_id, expires_at=lease.get("expires_at"),
+            )
+        return lease  # its holder is gone: this process takes over under the process lock
+
+    def _renewed_if_expired(self, intent: Mapping[str, Any], lease: Mapping[str, Any]) -> Mapping[str, Any]:
+        """``lease`` itself while live; otherwise its replacement (new epoch and token), renewed from ``lease``."""
+        if lease_is_live(lease):
+            return lease
+        task_id = str(intent["task_id"])
+        replacement = self._mint_lease(
+            task_id, str(intent["integration_id"]), next_lease_epoch(self.query, task_id)
+        )
+        _renew_expired_lease(self.store, intent=intent, expired=lease, lease=replacement)
+        return replacement
+
+    def _finalize(
+        self, intent: Mapping[str, Any], evidence: _Evidence, lease: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Write and validate the manifest on disk, then run transaction 2 under ``lease``.
+
+        ``lease`` is the lease THIS process claimed (or took over from a demonstrably dead holder), never
+        whatever the store currently shows: if it is expired it is renewed from itself, and transaction 2
+        then compares the manifest with the store's current lease, so a different current lease (another
+        holder took over) is refused as ``lease_fencing_mismatch`` rather than silently adopted.
+        """
+        lease = self._renewed_if_expired(intent, lease)
         manifest = _manifest(intent, lease)
         directory = (
             _integration_dir(self.root, str(intent["task_id"]))
@@ -1095,14 +1217,16 @@ class _Engine:
                 head == planned or planned in self.git.first_parent_chain(head)
             )
             if applied:
+                lease = self._held_lease(task_id)  # refuses before anything is written
                 record_reconciliation(
                     self.store, intent=intent, finding="git_step_applied", branch_head=head,
                     actions="completing the event-store side without redoing Git",
                 )
                 evidence = self._recovery_evidence(intent)
-                manifest = self._finalize(intent, evidence)
+                manifest = self._finalize(intent, evidence, lease)
                 settled.append(self._result("reconciled", manifest, intent))
             elif head == intent["branch_head_before"]:
+                self._held_lease(task_id)  # refuses before anything is written
                 record_reconciliation(
                     self.store, intent=intent, finding="git_step_not_applied", branch_head=head,
                     actions="retrying the Git step under the same intent",
@@ -1170,19 +1294,13 @@ class _Engine:
                 reason_code="reconciliation_required", task_id=task_id,
                 recorded=intent["planned_commit"], replayed=plan.commit,
             )
-        lease = self._current_lease(task_id)
-        if not lease_is_live(lease):
-            renew_lease(
-                self.store, intent=intent,
-                lease=new_lease(
-                    task_id, str(intent["integration_id"]),
-                    next_lease_epoch(self.query, task_id), self.integrator_id,
-                ),
-            )
-        manifest = self._advance_and_complete(intent, evidence)  # _finalize re-checks the lease
+        lease = self._renewed_if_expired(intent, self._held_lease(task_id))
+        manifest = self._advance_and_complete(intent, evidence, lease)  # _finalize re-checks the lease
         return self._result("reconciled", manifest, intent)
 
-    def _advance_and_complete(self, intent: Mapping[str, Any], evidence: _Evidence) -> dict[str, Any]:
+    def _advance_and_complete(
+        self, intent: Mapping[str, Any], evidence: _Evidence, lease: Mapping[str, Any]
+    ) -> dict[str, Any]:
         branch = str(intent["branch"])
         before = intent["branch_head_before"]
         moved = self.git.compare_and_swap(
@@ -1196,7 +1314,7 @@ class _Engine:
                 expected=before, actual=self.git.branch_head(branch),
             )
         self.fault("after_ref_update")
-        return self._finalize(intent, evidence)
+        return self._finalize(intent, evidence, lease)
 
     # -- selection ----------------------------------------------------------
 
@@ -1246,6 +1364,10 @@ class _Engine:
                     "parked_without_new_evidence": {
                         e.task_id: e.parked_reason for e in queue.entries if e.parked_reason
                     },
+                    # The remedy, not only the code, for the parked reasons that have one.
+                    "parked_explanations": {
+                        e.task_id: e.parked_explanation for e in queue.entries if e.parked_explanation
+                    },
                 }
             target = entry.task_id
         else:
@@ -1290,6 +1412,13 @@ class _Engine:
                 task_id=task_id, state=state,
             )
         entry = queue.entry(task_id)
+        if entry is not None and entry.parked_reason == "dependency_canceled":
+            raise IntegrationRefused(
+                "a required dependency was canceled; this task cannot be integrated until it is "
+                "replanned or superseded (moving the integration branch will not change that)",
+                reason_code="retry_without_new_evidence", task_id=task_id,
+                prior_reason=entry.parked_reason,
+            )
         if entry is not None and entry.parked_reason is not None:
             raise IntegrationRefused(
                 "retry without new evidence is forbidden; the integration branch has not "
@@ -1361,7 +1490,7 @@ class _Engine:
                 check_timeout=self.settings.check_timeout,
             )
             self.fault("after_plan")
-            lease = new_lease(task_id, integration_id, epoch, self.integrator_id)
+            lease = self._mint_lease(task_id, integration_id, epoch)
             intent = {
                 "task_id": task_id,
                 "attempt_id": evidence.attempt_id,
@@ -1385,6 +1514,7 @@ class _Engine:
                 "lease_epoch": epoch,
                 "interface_hashes": [list(pair) for pair in evidence.interface_hashes],
                 "gates": plan.gates,
+                "check_environment": plan.environment,
             }
             claim_integration(
                 self.store, intent=intent, lease=lease,
@@ -1398,7 +1528,7 @@ class _Engine:
                 "integration lease expired before the Git step", reason_code="lease_expired",
                 task_id=task_id,
             )
-        manifest = self._advance_and_complete(intent, evidence)
+        manifest = self._advance_and_complete(intent, evidence, lease)
         return self._result("integrated", manifest, intent)
 
 
