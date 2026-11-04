@@ -12,6 +12,14 @@
 **Phase:** P0 (control plane) — closes at gate G0
 **Application-code changes authorized by this plan:** None
 
+**Delivery-priority update, 2026-10-22:** The owner has requested automated model routing
+and integration today. The original deferral described below remains a record of this
+plan's scope, but is superseded as the current work priority by
+[`AUTOMATION_DELIVERY.md`](../../program/AUTOMATION_DELIVERY.md). Work on that infrastructure
+does not close G0 or authorize Swift development. All new work follows the behavioral
+evidence and verification-cost rules in AGENTS.md section 8; placeholder tests and test
+totals must not be presented as feature delivery.
+
 **Goal:** Stand up the deterministic multi-model engineering control plane described in the canonical design, so that every later phase (P1 structural foundation, P2 contract and oracle freeze, P3 parallel subsystem implementation) can be planned and executed by bounded model workers without any of them making product, architecture, or security decisions. P0 ends when gate G0 passes.
 
 **Architecture:** One Git repository rooted at the CashBooks working directory. `AGENTS.md` is the universal constitution; `CLAUDE.md` and `GEMINI.md` are thin vendor adapters that add no authority. Machine-readable contracts live under `agent-system/` (schemas, policies, roles, routing, templates, examples, work, runtime). A development-only Python CLI, `agentctl`, owns task state, dependency resolution, path and semantic locks, leases and fencing tokens, context compilation, reviewer independence, human-approval verification, gate evaluation, and the append-only event store. Models produce typed artifacts; only `agentctl` changes state.

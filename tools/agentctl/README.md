@@ -10,6 +10,19 @@ evaluation, and the append-only event store. Models produce typed artifacts;
 application. It is Python 3.12+, standard library only (see ADR-0002 and
 ADR-0003).
 
+## Current delivery status — 2026-10-22
+
+The control-plane primitives exist, but the automated worker cycle is incomplete:
+`routing.py` and `integrate.py` currently raise `NotImplementedAtLevel1`, and the concrete
+`ManualProposalAdapter` stages files and waits for a returned artifact. Candidate
+verification is implemented through `Scheduler.verify_candidate`; it is not a stub.
+
+The owner has set a delivery target of 2026-10-22 (America/Los_Angeles) for automated model
+routing and integration. See [`AUTOMATION_DELIVERY.md`](../../docs/program/AUTOMATION_DELIVERY.md)
+for observable acceptance and the implementation sequence. Update this status only when
+the corresponding behavior has been demonstrated. Passing tests of placeholders do not
+demonstrate automation, and infrastructure tests do not demonstrate application features.
+
 ## Running it
 
 From the repository root:
@@ -68,7 +81,7 @@ proof:
 | E leases + scheduler | 15 | `leases`, `scheduler`, `commands/{dispatch,ingest,ready,debug}` |
 | F context + review | 16 | `context`, `review`, `commands/{context,review}` |
 | G approval + gate | 17 | `approval`, `gate`, `commands/{approve,gate,doctor}` |
-| H integration + verify | P1 entry | `verify`, `integrate`, `routing` — **stubs only at P0**, raising `NotImplementedAtLevel1` |
+| H integration + routing | Originally P1 entry; now immediate delivery target | `integrate`, `routing` — currently stubs; `verify` delegates to implemented candidate verification |
 
 ### Layer A surface (this task)
 

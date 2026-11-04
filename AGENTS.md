@@ -217,6 +217,35 @@ Worktree isolation is a directory layout, not by itself a security boundary.
 
 ## 8. Verification and protected tests
 
+### Behavioral evidence and verification cost
+
+Effective 2026-10-22, following the owner's explicit direction:
+
+- Define observable success before implementation. Test counts, coverage percentages,
+  scaffolding, and a passing infrastructure suite do not establish feature completion.
+- Each new test must protect a named behavior or credible failure mode. Do not add tests
+  that merely mirror implementation details, repeat constants, assert placeholder failures,
+  or prove that a mock returns the value the test configured.
+- For bug fixes, reproduce the actual failure and show that the regression check fails
+  before the fix and passes afterward. If reproduction is unavailable, report that limit.
+- Use real local components for integration checks, including Git and the event store.
+  Mock external boundaries only where needed for deterministic failure injection; label
+  those results as simulated. A mocked provider cannot prove a live provider works.
+- Run focused checks during edits and the required integration checks at the integration
+  boundary. Repeat or broaden checks only for a relevant change, failure, or unresolved
+  concern. Do not add tests for low-impact documentation wording changes.
+- Report demonstrated behavior, simulated behavior, and untested paths separately.
+  Authentication, model access, invocation, and result collection require live evidence
+  before claiming that development-provider integration works. Ordinary deterministic
+  tests remain offline; this does not change PLAT-06 or the product's model-test boundary.
+- Do not weaken or delete existing protected checks to improve pass counts. Existing
+  safety and independent-review requirements remain in force.
+
+For development automation, completion requires an observed cycle from an eligible task
+through automatic model selection and invocation, candidate verification, independent
+review, and integration of the unchanged candidate, with recorded outcomes. A manual
+artifact handoff, successful dry run, or stub rejection is not proof of that cycle.
+
 Evidence is produced in this order: contract validation → scope and permission audit → build
 and static checks → task-specific tests → protected invariant checks → independent review →
 integration suite → phase gate.
@@ -279,6 +308,8 @@ recruiter-facing claim.
 
 A task is done only when **all** of the following hold:
 
+- the requested observable behavior has been demonstrated; simulated evidence and any
+  untested integration boundaries are explicitly identified;
 - the contract's deterministic checks pass, reproducibly, from a clean state;
 - protected checks pass, invoked from the trusted integration base;
 - the implementation manifest is complete and bound to the result commit, contract hash, and

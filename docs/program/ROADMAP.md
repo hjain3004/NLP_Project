@@ -4,6 +4,23 @@
 **Authority:** This document summarizes the authorized program; `docs/product/ACTIVE_SCOPE.md`
 and `docs/DOCUMENT_AUTHORITY.md` govern if a summary here is incomplete.
 
+## Immediate delivery target — 2026-10-22
+
+The owner has requested automated model routing and candidate integration by the end of
+2026-10-22 in America/Los_Angeles. This is a delivery target, not a completion claim or a
+guaranteed estimate. The infrastructure work is prioritized before application development;
+the owner must finish Swift MCP setup before Swift development starts.
+
+The executable outcome and bounded work sequence are in
+[`AUTOMATION_DELIVERY.md`](AUTOMATION_DELIVERY.md). The earlier deferral of routing and
+integration is superseded as a delivery priority by this request. Existing invariants,
+typed approval requirements, review independence, and phase-gate status are unchanged.
+G0 remains open until its actual closure requirements are met; delivering automation is
+not synonymous with closing G0. Do not expand this delivery into unrelated P0 cleanup.
+
+Report working behavior and remaining gaps, not test totals as a proxy for completion.
+Routing and integration are not complete until the documented live cycle succeeds.
+
 ## Authorized sequence
 
 | Phase | Outcome | Gate | State and contract timing |
