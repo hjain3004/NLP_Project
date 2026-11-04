@@ -437,14 +437,43 @@ class RepairConcurrencyTests(RepairCase):
         go.write_text("go")
         results = [finish(child) for child in children]
 
-        for code, _payload, err in results:
-            self.assertEqual(code, 0, err)
+        for code, payload, err in results:
+            # A refusal's reason is printed on stdout (exit 3), not stderr: show both.
+            self.assertEqual(code, 0, f"child exit {code}: stdout={payload!r} stderr={err!r}")
         outcomes = sorted(payload["outcome"] for _c, payload, _e in results)
         self.assertEqual(outcomes, ["already_authorized"] * 5 + ["authorized"])
         self.assertEqual(len({payload["authorization_id"] for _c, payload, _e in results}), 1)
         self.assertEqual(len(events_for(repo.store, repo.TASK_ID, "repair_authorized")), 1)
         self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'repair-authorization'"), 1)
         self.assertEqual(repo.state(), "ready")
+
+    def test_an_identical_request_that_commits_between_the_replay_check_and_the_spent_check_is_a_replay(self) -> None:
+        """Protects: the window the parallel test hit under CPU load (child exit 3, evidence_already_used). SIMULATED
+        interleaving: the winner's identical request commits exactly after this caller's replay checks and before
+        its read of the spent evidence; the loser must get the existing authorization, not a refusal."""
+        from unittest import mock
+
+        from agentctl import lifecycle
+
+        repo = self.repo()
+        review_id = self.block_by_review(repo)
+        real = lifecycle.repair_authorizations
+        raced: list[dict] = []
+        started: list[bool] = []
+
+        def winner_commits_first(store, task_id):
+            if not started:
+                started.append(True)
+                raced.append(authorize_repair(store, task_id, evidence=review_id, note="winner", operator="op-w"))
+            return real(store, task_id)
+
+        with mock.patch.object(lifecycle, "repair_authorizations", winner_commits_first):
+            loser = authorize_repair(repo.store, repo.TASK_ID, evidence=review_id, note="loser", operator="op-l")
+
+        self.assertEqual(raced[0]["outcome"], "authorized")
+        self.assertEqual(loser["outcome"], "already_authorized")
+        self.assertEqual(loser["authorization_id"], raced[0]["authorization_id"])
+        self.assertEqual(len(events_for(repo.store, repo.TASK_ID, "repair_authorized")), 1)
 
     def test_a_repair_that_lands_first_beats_a_supersede_that_planned_earlier(self) -> None:
         """Protects 'exactly one wins' (SIMULATED interleaving, real processes): the supersede planned against repair_required, the repair commits, the supersede is refused and changes nothing."""

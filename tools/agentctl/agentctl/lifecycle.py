@@ -429,6 +429,12 @@ def authorize_repair(
         return replayed
     spent = [a for a in repair_authorizations(store, task_id) if a["evidence"]["content_hash"] == resolved["content_hash"]]
     if spent:
+        # An IDENTICAL request that committed between the replay check above and this read is a replay (the
+        # caller gets the existing authorization), not a refusal; only different evidence naming the same
+        # content is "already spent". Reproduced under CPU load: losers got evidence_already_used here.
+        replayed = replay()
+        if replayed is not None:
+            return replayed
         raise LifecycleRefused(
             "this evidence content was already spent on an earlier repair authorization",
             reason_code="evidence_already_used", authorization_id=spent[0]["authorization_id"],
