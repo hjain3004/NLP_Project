@@ -79,9 +79,10 @@ G0 closeout leads run in parallel only where they touch none of the lane-owned f
 |---|---|---|---|
 | PRE | done | 3a1457c | preflight + plan; pushed |
 | PLAN-REVIEW | done | | APPROVE_WITH_CHANGES, all 6 blockers accepted |
-| A1 | running | | `claude/lane-a-routing` |
-| B1 | running | | `claude/lane-b-integration` |
-| FIXTURE-PIN | running | | `claude/fix-fixture-pin`; fixes G0-04 and the baseline error |
+| A1/A2 | built, repair 1 running | `claude/lane-a-routing` 0274810..f2e8025 | independent Opus review: NO_BLOCKING; coordinator made env-allowlist (host env/PII reaches child), export-record, 2 test gaps and shared-.git git hardening mandatory |
+| B1 | built, repair 1 running | `claude/lane-b-integration` e33b5f9..9d51a9e | independent Opus review: **2 BLOCKING** (gate escapes env scrub via shared .git → poisons later integrator git; gate timeout unenforced under `setsid`) + 4 non-blocking; repair dispatched with PoC-first regressions |
+| TRIAL-MERGE | done | scratch | A+B merge textually clean; combined suite 338 OK on a named branch (33 B tests fail on a detached HEAD: helper fragility, in B repair) |
+| FIXTURE-PIN | done, merged | edc6fdc | fixes G0-04 and the baseline error; suite 232 OK; G0-01..11 pass dry |
 | A2 | blocked on A1 | | |
 | REVIEW-A1, REVIEW-B1 | blocked | | |
 | DEMO | blocked | | |
@@ -95,7 +96,9 @@ recorded in its run record. Preflight probes cost about $0.05 in total.
 
 ## Blockers
 
-None yet.
+- Reviewer floor with the real registry (`complex_implementation`→openai): runnable `standard_implementation` tasks are `reviewer_unavailable`. Demo uses a labeled delivery-repo registry profile; real fix is an owner decision.
+- Lane B asked for two new state-machine transitions (pinned 24-row table, design §14.1): not added; rejected candidates are parked by artifact. Owner decision.
+- `repair_required` has no authorize path; infrastructure failures consume attempts.
 
 ## Next executable step
 
