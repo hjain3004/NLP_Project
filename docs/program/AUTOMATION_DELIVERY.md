@@ -1,7 +1,7 @@
 # Automated routing and integration delivery
 
 **Owner request:** 2026-10-22. **Target:** end of 2026-10-22, America/Los_Angeles.
-**Status:** Implementation required; no live end-to-end success recorded.
+**Status (2026-11-04):** Implemented for one provider path (Anthropic CLI) and observed end to end once in an isolated delivery clone; see `docs/program/runs/2026-11-04-automation-delivery/`. Not multi-provider, not a speedup or schedule claim, and G0 is not closed.
 **Baseline inspected:** `5442761372e8fa1b4681705062ba83c98adaa941`.
 
 The target is a working development workflow, not a test-count target. A deadline does

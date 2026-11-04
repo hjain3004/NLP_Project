@@ -6,13 +6,13 @@ against the historical ledger (`agent-system/runtime/sdd/p0-finalize-20261018/pr
 git-ignored runtime data and is not present in this clone). Classification is mine; it is not an
 audit artifact and does not count toward G0-12.
 
-Current G0 dry evaluation (`agentctl gate G0 --replay-dry-run agent-system/work/DRY-RUN/evidence/events.json --dry-run-only`,
+Status after the fixture refresh: G0-01..11 all pass in the dry evaluation below (re-run on the final tree by the coordinator). Original dry evaluation before the refresh (`agentctl gate G0 --replay-dry-run agent-system/work/DRY-RUN/evidence/events.json --dry-run-only`,
 no state written): G0-01..03, 05..11 pass; **G0-04 fails**; G0-12..14 are not evaluable
 (no audit artifact, no approvals).
 
 | # | Lead | Still true? | Class | Evidence / required action |
 |---|---|---|---|---|
-| 1 | **G0-04 fails: valid fixture `agent-system/examples/valid/03-context-manifest.json` pins a stale `AGENTS.md` SHA-256/size** (found by this session, not in the handoff) | Yes. Pin is 14437 bytes / `4ece6621…`; file is now 16639 bytes / `a7e44912…` (AGENTS.md §8 was amended 2026-10-22). Also the baseline `make test` error. | **Blocking** | Mechanical refresh of the fixture's AGENTS.md pin and recomputed manifest hash; no schema or criteria change. Fixture is fragile to any future `AGENTS.md` edit (non-blocking note). |
+| 1 | **RESOLVED 2026-11-04 (commit edc6fdc, merged): G0-04 failed: valid fixture `agent-system/examples/valid/03-context-manifest.json` pins a stale `AGENTS.md` SHA-256/size** (found by this session, not in the handoff) | Was true. Pin was 14437 bytes / `4ece6621…`; file is now 16639 bytes / `a7e44912…` (AGENTS.md §8 was amended 2026-10-22). Also the baseline `make test` error. | Resolved (was blocking) | Mechanical refresh of the fixture's AGENTS.md pin and recomputed manifest hash; no schema or criteria change. Fixture is fragile to any future `AGENTS.md` edit (non-blocking note). |
 | 2 | Integrator role says the role "owns selecting the next candidate" | Yes (`agent-system/roles/integrator.md`, Owns bullet 1) | Non-blocking wording | `AUTOMATION_DELIVERY.md` and the Lane B queue make selection deterministic. One-line role fix; level-6 doc, no gate depends on it. |
 | 3 | Missing routing fields / command-log refs in schemas & templates | Yes; `governance-change-set-v2` still applies: all 10 `before_bytes_sha256` match the current files. Current digest (`agentctl hash --json --digest-only`): `188264877cb5648faf7e710ccbbbbdad622af3b0f7ea28640c05bbeecdbb00b1`; re-verify at approval time. Reuse v2 unchanged. `agentctl approve` needs the owner's Mac key/TTY. No replacement proposal created. |
 | 4 | ADR-0005 acceptance | Yes. `docs/decisions/ADR-0005-symmetric-approval-seal.md` is `status: proposed`; `docs/decisions/README.md:62` says proposed; yet `approval-policy.json` cites it as authority. | **Blocking; needs human** | Consequential ADR acceptance needs a typed approval (v2 `consumer_requirements`). A model may not mark it accepted. |
