@@ -13,6 +13,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -80,6 +81,40 @@ class GateContainmentTests(unittest.TestCase):
         self.assertEqual(self.lab.tree_file("docs/b.txt"), "b\n")
 
 
+class GateCannotReachIntegratorTests(unittest.TestCase):
+    """F1(a), end to end through the real `agentctl integrate` process."""
+
+    def setUp(self) -> None:
+        self.lab = Lab()
+        self.addCleanup(self.lab.close)
+        self.scratch = pathlib.Path(self.lab._tmp.name)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "/proc is Linux-specific")
+    def test_gate_cannot_read_the_integrator_environment_or_repository_path_through_proc(self) -> None:
+        """The reviewer's gate read SECRET_TOKEN from /proc/$PPID/environ and the repository root
+        from /proc/$PPID/cwd, then used that path to plant a filter driver."""
+        leak = self.scratch / "leak.log"
+        gate = (
+            'case "$HOME" in *agentctl-gate-home*) '
+            '{ echo "SENTINEL=$(grep -c s3cr3t-proc /proc/$PPID/environ)"; '
+            'echo "ANY=$(grep -ls s3cr3t-proc /proc/[0-9]*/environ | wc -l)"; '
+            'for p in /proc/[0-9]*; do readlink "$p/cwd"; done; '
+            'echo "CWD=$(readlink /proc/$PPID/cwd)"; '
+            'for f in /proc/$PPID/fd/*; do readlink "$f"; done; } '
+            f'>> {leak} 2>/dev/null;; esac; true'
+        )
+        self.lab.candidate("T-A", {"docs/a.txt": "a\n"}, checks=(gate,))
+
+        with mock.patch.dict(os.environ, {"SECRET_TOKEN": "s3cr3t-proc"}):
+            run = self.lab.cli("T-A")
+
+        self.assertEqual(run.code, 0, run.stdout + run.stderr)
+        seen = leak.read_text() if leak.exists() else ""
+        self.assertNotIn("SENTINEL=1", seen)
+        self.assertIn("ANY=0", seen)
+        self.assertNotIn(str(self.lab.root), seen)
+
+
 class GateDeadlineTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("setsid"), "needs util-linux setsid")
     def test_descendant_that_escapes_the_process_group_cannot_extend_the_timeout(self) -> None:
@@ -90,8 +125,11 @@ class GateDeadlineTests(unittest.TestCase):
             elapsed = time.monotonic() - started
 
         self.assertLess(elapsed, 5.0, f"gate deadline not enforced: {elapsed:.1f}s")
-        self.assertTrue(gate["timed_out"], gate)
+        # Since lane-b-3 the escaped descendant fails the gate as soon as the shell exits
+        # (gate_left_processes) instead of at the deadline; the deadline for a hanging shell
+        # is covered by tests.test_gate_runner (descendants_of_a_timed_out_gate...).
         self.assertEqual(gate["result"], "fail")
+        self.assertEqual(gate["reason"], "gate_left_processes", gate)
 
 
 class GateTreeTests(unittest.TestCase):
