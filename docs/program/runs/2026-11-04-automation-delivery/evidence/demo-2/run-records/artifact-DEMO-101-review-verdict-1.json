@@ -1,0 +1,68 @@
+{
+  "artifact_type": "review-verdict",
+  "attempt_id": "DEMO-101-attempt-1",
+  "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+  "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+  "declared_base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "diff_hash": "ca56cf25cc1a004da29cc9128307bbaea6eefcb2af9a76e02e415c8064a21142",
+  "fencing_token": "a733f556a9005980514db20bd88e4b515c7ee0bdbbabd8e089b328e73f0293f2",
+  "findings": [
+    {
+      "blocking": false,
+      "file": "tools/agentctl/agentctl/commands/approve.py",
+      "finding_id": "F1",
+      "location": "_contained_destination: compares against root.resolve() but returns resolved_parent / name, while run() calls destination.relative_to(config.repo_root) with the unresolved config value",
+      "observed_behavior": "The fix is correct only when config.repo_root is already resolved. The contract states that assumption.",
+      "reproducible_evidence": "The helper checks containment with resolved_parent.relative_to(root.resolve()). run() calls destination.relative_to(config.repo_root) on the issuance and --recover-output paths. If load_config() ever returns a repo_root that is not resolved (for example /var/... rather than /private/var/... on macOS), the containment check passes but the caller's relative_to raises ValueError. The tests always pass root.resolve().",
+      "required_behavior": "Per the contract, root is the resolved repository root passed in. That is satisfied as written.",
+      "required_outcome": "Optional hardening: compute relative_to against a single resolved root in both places, or document that config.repo_root must be resolved.",
+      "reviewer_confidence": "medium",
+      "severity": "minor",
+      "violated_criterion": "Robustness of the relative_to contract between _contained_destination and run()"
+    },
+    {
+      "blocking": false,
+      "file": "tools/agentctl/agentctl/commands/approve.py",
+      "finding_id": "F2",
+      "location": "_contained_destination return value",
+      "observed_behavior": "A final component of '..' is accepted and only fails at write time, after registration.",
+      "reproducible_evidence": "For --out <root>/sub/.., destination.name is '..' and the parent resolves inside the root. The helper returns <root>/sub/.., and relative_to gives 'sub/..'. On the issuance path, register() then records that path before _write_exclusive_json fails with an OSError. The base code's lexical check accepted this input too, so this is not a regression.",
+      "required_behavior": "No acceptance criterion requires this. Rejecting '..' as the final component would be cleaner.",
+      "required_outcome": "Optionally reject a final component of '..' with approval_output_invalid.",
+      "reviewer_confidence": "medium",
+      "severity": "nit",
+      "violated_criterion": "Pre-existing edge case: the final component is not normalized"
+    },
+    {
+      "blocking": false,
+      "file": "tools/agentctl/tests/test_approve_output_containment.py",
+      "finding_id": "F3",
+      "location": "tests overall",
+      "observed_behavior": "No end-to-end run() test covers --recover-output with an alias path.",
+      "reproducible_evidence": "The preflight test returns before run() reaches the relative_to calls on the issuance and --recover-output paths. Those calls are covered only through the helper's return value, which is the same expression run() uses.",
+      "required_behavior": "The contract accepts a helper-level relative_to check, so this is sufficient.",
+      "required_outcome": "Optionally add a --recover-output test with a real EventStore.",
+      "reviewer_confidence": "high",
+      "severity": "nit",
+      "violated_criterion": "Caller-level coverage"
+    }
+  ],
+  "independence_attestation": {
+    "author_run_id": "814328cb-782c-426b-a8ff-6b3bb0e5db40",
+    "author_session_id": "f419d306-baae-4979-96c9-8a1d104a34b6",
+    "distinct": true
+  },
+  "lease_epoch": 1,
+  "lease_id": "19829982-e045-4fe8-9824-b67196ea81b7",
+  "review_id": "DEMO-101-attempt-1-review-1",
+  "reviewed_result_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+  "reviewer_model": "claude-opus-5-5",
+  "reviewer_provider": "anthropic",
+  "reviewer_role": "complex_implementation",
+  "reviewer_run_id": "f5773ab5-b9c4-4742-9ea8-50d2f4505a37",
+  "reviewer_session_id": "b1b73cfb-1ef4-4232-913a-2b54debf41f0",
+  "task_id": "DEMO-101",
+  "tree_hash": "1fcd104a70e772807676eb08a9fb97c7eb865fc8",
+  "verdict": "no_blocking_findings",
+  "verification_evidence_hash": "0144da07fef41e4bceba38948c580479742ca34c16b7fa043d353fb1cffcc5f7"
+}

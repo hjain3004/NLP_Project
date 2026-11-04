@@ -1,0 +1,599 @@
+{
+  "artifact_type": "event-export",
+  "chain_hash": "6c81812e917120f82ebd97c9b8e5569bec09782bb2da25d7fe2535af9a84ea1a",
+  "chain_links": [
+    "455f152e956c5886437552f8b2360654f4e4ae513018e2b77c7fe6e2291bc285",
+    "7716677ee426f75c42ab15e152a38ad47b73b9985bbecc25276fe23bb2b42ed0",
+    "c1f618e250fdeb27c3ffa12dcd15c289dd8679dbe5ffa5224505852939d05aff",
+    "d228d46d3f79d0225c31a8f7fae654c0f7e8d8b6e7e8d020a0b855171d20ab0a",
+    "bf15fd3f772b5e210f974417e65fdf5eb2843ffa7127dcd5fd1cbbb5ec2a3170",
+    "0842d5220c56732b54f2077c8fb1346e3f64c5943208e405a7d714a9465b44ae",
+    "fccf9acb7962f3276d550ed186ca0da7b1fcf83da4bbe9ca68302520d8475df0",
+    "c1368518bca35fd0ac21d0bf534b38fa5ad6ca29f06e2506f10d9af57035905b",
+    "c30bad31155cb6f0ff9ddbebdd44eacea0863b294026e045accc879f20671971",
+    "835cd7116896e50b49d9318cba99dc0a49e84cc44e132f5e19d9eb796df76be0",
+    "f06ea09f21c06ab5fc4cf68fa4cde04945ba9c021fcbdab693d35c38766c6151",
+    "22767a4c1a9e420daeb506e4b100dad0167764486cd6ece160d3a5290390e410",
+    "4004f07c45ac51533e8196d3f92ff9935d7ae99d51c455561f17a63b7bd4b616",
+    "8d922e683e101fa8f1e730b63d7c390d5caafef0f45c57e260becbef53ff0ac3",
+    "8c931cd0ab0ccfa8b660cef402252636f9119a66c7d4d467dfa00cd036b676b0",
+    "448ebef28ecad882d42d98298e11a71fa36d31670790ba73481a5cd0f443e14d",
+    "1d6929910eaed6b7455a99c07821bd19b2275635bd7927dd222e9a986f48648d",
+    "717167b04832b6181acebe7a67c35c32769d8a8668d472ebaf619e3f2c0549fd",
+    "100de355f0a40181d7ff40199351faf29b20a4eabc51ebdd105acb12c4bf2eec",
+    "c56803cd4505e543b86282eaeb9c79f58cba235a6c32fcae4cae8da1c03bc0c4",
+    "a8bc295830a0531b023904a895cbcf45acfa2616ab0c6fb199dda8996df8483e",
+    "44be0b585b39e94ae5b0acbf1261c87f64d35fdeee7dadaca6c165dafdee47a9",
+    "ad6c9e0e69d4cb52d7a99adf887e5688706167f0987351a8b80132970424547a",
+    "772301eadc0aff7f51fdb5b8f4d377bb56dac9057b2da5109fd7f8742d5092a0",
+    "2a6da10f3491300967931835d59aab4df69cdc6fb51c723ef9c20998d58aebc0",
+    "3733d87739c6d2805fe218b5ffd2e5c1e38b82d34140747e3541706e89ea9007",
+    "84abd5e2969f8d79a1fb1363dd39063c3b0ea5e6d8ede16a306964c872500c44",
+    "d2f88e89cf9dc7ad57b16fae2f5e1f0d5e858fe3ac11cc5a24d56b0068f3ea49",
+    "6c81812e917120f82ebd97c9b8e5569bec09782bb2da25d7fe2535af9a84ea1a"
+  ],
+  "event_count": 29,
+  "events": [
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+      "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+      "event_id": "a6ad7dc7-5b81-48d5-94d1-09f7661bcb00",
+      "event_type": "task_registered",
+      "next_state": "ready",
+      "occurred_at": "2026-11-04T07:04:17.944032Z",
+      "reason_code": "schema_policy_passed",
+      "repository_commits": [
+        "2df58e85e8fc3b8db8346791f2795bc67f21ccd2"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "333f8e91-da24-4835-aa08-39846c8c111b",
+      "work_package_id": "DELIVERY-DEMO-2"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+      "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+      "event_id": "dc057b34-b7dc-4af6-a333-3e75c830f0f2",
+      "event_type": "task_registered",
+      "next_state": "ready",
+      "occurred_at": "2026-11-04T07:04:17.960512Z",
+      "reason_code": "schema_policy_passed",
+      "repository_commits": [
+        "2df58e85e8fc3b8db8346791f2795bc67f21ccd2"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "cdb226bc-db83-4b87-b667-70cad1016a18",
+      "work_package_id": "DELIVERY-DEMO-2"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "DEMO-101",
+        "DEMO-102"
+      ],
+      "artifact_type": "event",
+      "event_id": "a2b106dc-dede-4f32-9e50-8f3ae5482c1e",
+      "event_type": "ready_set_computed",
+      "occurred_at": "2026-11-04T07:04:18.114895Z",
+      "reason_code": "multiple_ready_tasks",
+      "repository_commits": [],
+      "trace_id": "7d64c813-45bb-4a17-be23-21e9c12f17ac",
+      "work_package_id": "DELIVERY-DEMO-2"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+      "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+      "event_id": "0f27827d-aae3-4c4d-861f-7d8034abe27e",
+      "event_type": "lease_issued",
+      "next_state": "leased",
+      "occurred_at": "2026-11-04T07:04:22.814721Z",
+      "prior_state": "ready",
+      "reason_code": "admission_passed",
+      "repository_commits": [
+        "2df58e85e8fc3b8db8346791f2795bc67f21ccd2"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "95285ce1-8718-429a-86b6-2953048fc93f",
+      "work_package_id": "DELIVERY-DEMO-2"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+      "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+      "event_id": "584f691b-32f2-47be-865b-445cd3e188ea",
+      "event_type": "lease_issued",
+      "next_state": "leased",
+      "occurred_at": "2026-11-04T07:04:22.819095Z",
+      "prior_state": "ready",
+      "reason_code": "admission_passed",
+      "repository_commits": [
+        "2df58e85e8fc3b8db8346791f2795bc67f21ccd2"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "ec9a9299-46fa-4959-92dd-1caf26d07123",
+      "work_package_id": "DELIVERY-DEMO-2"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+      "event_id": "42f3c634-7292-4606-98d6-b8f506e32b24",
+      "event_type": "worker_acknowledged",
+      "next_state": "running",
+      "occurred_at": "2026-11-04T07:04:22.892833Z",
+      "prior_state": "leased",
+      "reason_code": "context_acknowledged",
+      "repository_commits": [],
+      "task_id": "DEMO-102",
+      "trace_id": "b46ad15d-ad61-469f-844c-17207feb5f2c"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+      "event_id": "76008f33-8240-4f59-b85b-c9c4054606fa",
+      "event_type": "worker_acknowledged",
+      "next_state": "running",
+      "occurred_at": "2026-11-04T07:04:22.909934Z",
+      "prior_state": "leased",
+      "reason_code": "context_acknowledged",
+      "repository_commits": [],
+      "task_id": "DEMO-101",
+      "trace_id": "611114ff-3d0a-42d0-9c18-07ad9f812450"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "model-run:8026bde1-7fa1-4e7b-b68c-f2873e8fcf7a"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "1879c819-0895-46c5-a413-2bf33c073015",
+      "event_type": "model_run_recorded",
+      "model_version": "claude-sonnet-5",
+      "occurred_at": "2026-11-04T07:06:48.306543Z",
+      "provider": "anthropic",
+      "reason_code": "completed",
+      "repository_commits": [],
+      "task_id": "DEMO-102",
+      "trace_id": "9b4fa651-9eca-4eed-a674-e87efe22c45a"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "f049e607-ddf1-43ff-9e8e-65f573a27f4d",
+      "event_type": "author_identity_recorded",
+      "occurred_at": "2026-11-04T07:06:48.346762Z",
+      "reason_code": "identity_recorded",
+      "repository_commits": [],
+      "task_id": "DEMO-102",
+      "trace_id": "b83a0953-1af9-4962-8140-ff4b8a261dc8"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "ea242f94-8085-40f3-9145-63da7e33e224",
+        "candidate-binding:DEMO-102:DEMO-102-attempt-1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+      "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+      "event_id": "759e48c0-02d7-46a9-a3ad-72450df716e2",
+      "event_type": "candidate_ingested",
+      "next_state": "candidate",
+      "occurred_at": "2026-11-04T07:06:48.379797Z",
+      "prior_state": "running",
+      "reason_code": "candidate_ingested",
+      "repository_commits": [
+        "cb5c73159df9097cb3374a28803f0b65c0f05c58"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "e2aac484-800a-43cd-9c6b-aa7053f7f68d"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "model-run:814328cb-782c-426b-a8ff-6b3bb0e5db40"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "eeec2f99-8866-4493-ac3a-b4e56218dfb7",
+      "event_type": "model_run_recorded",
+      "model_version": "claude-sonnet-5",
+      "occurred_at": "2026-11-04T07:09:29.307978Z",
+      "provider": "anthropic",
+      "reason_code": "completed",
+      "repository_commits": [],
+      "task_id": "DEMO-101",
+      "trace_id": "3b145ee0-de73-4371-a426-dd59b44e23f0"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "2d284d6f-558e-4dad-bdc3-a9419bfc2684",
+      "event_type": "author_identity_recorded",
+      "occurred_at": "2026-11-04T07:09:29.354928Z",
+      "reason_code": "identity_recorded",
+      "repository_commits": [],
+      "task_id": "DEMO-101",
+      "trace_id": "df7a975c-4787-48c3-857a-75c108d0e175"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "91b57dd1-5031-4b2b-99e5-ada306906e55",
+        "candidate-binding:DEMO-101:DEMO-101-attempt-1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+      "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+      "event_id": "b9c00aa5-4375-4297-ace0-a8f5381e7627",
+      "event_type": "candidate_ingested",
+      "next_state": "candidate",
+      "occurred_at": "2026-11-04T07:09:29.387191Z",
+      "prior_state": "running",
+      "reason_code": "candidate_ingested",
+      "repository_commits": [
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "3db16c7f-a46c-4459-92c9-a01df0fb8fd3"
+    },
+    {
+      "actor_role": "verifier",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "ffded355-ef72-412e-8647-7a0188d3b560",
+      "event_type": "verification_started",
+      "next_state": "deterministic_verification",
+      "occurred_at": "2026-11-04T07:09:36.823685Z",
+      "prior_state": "candidate",
+      "reason_code": "deterministic_verification_started",
+      "repository_commits": [
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "9dee8f7f-05dc-4998-b3a1-e7cf88859e76"
+    },
+    {
+      "actor_role": "verifier",
+      "artifact_refs": [
+        "verification:DEMO-101:DEMO-101-attempt-1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "48913591-37b0-4bc5-abb2-05ec679365cc",
+      "event_type": "checks_passed",
+      "next_state": "independent_review",
+      "occurred_at": "2026-11-04T07:09:37.042483Z",
+      "prior_state": "deterministic_verification",
+      "reason_code": "verification_passed",
+      "repository_commits": [
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "b677adb5-7dca-4580-b157-558592483cc5"
+    },
+    {
+      "actor_role": "verifier",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "8640f390-61aa-4076-80da-2398be1ce56a",
+      "event_type": "verification_started",
+      "next_state": "deterministic_verification",
+      "occurred_at": "2026-11-04T07:09:37.231165Z",
+      "prior_state": "candidate",
+      "reason_code": "deterministic_verification_started",
+      "repository_commits": [
+        "cb5c73159df9097cb3374a28803f0b65c0f05c58"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "04082b44-3968-40ad-bd9e-66ec431fbde3"
+    },
+    {
+      "actor_role": "verifier",
+      "artifact_refs": [
+        "verification:DEMO-102:DEMO-102-attempt-1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "54d26610-c401-4899-9443-7ec4aaaa28d1",
+      "event_type": "checks_passed",
+      "next_state": "independent_review",
+      "occurred_at": "2026-11-04T07:09:37.453051Z",
+      "prior_state": "deterministic_verification",
+      "reason_code": "verification_passed",
+      "repository_commits": [
+        "cb5c73159df9097cb3374a28803f0b65c0f05c58"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "a8b174ca-d96e-42b7-9420-f849471add99"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+      "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+      "event_id": "5613bfb8-fcd6-48b0-9dac-80bf4660ba53",
+      "event_type": "review_pack_prepared",
+      "next_state": "independent_review",
+      "occurred_at": "2026-11-04T07:09:42.249218Z",
+      "prior_state": "independent_review",
+      "reason_code": "trusted_review_pack_prepared",
+      "repository_commits": [
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "248220ef-e37c-424b-abf4-1d6fb416e586"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+      "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+      "event_id": "47f58405-7232-46e2-8dfe-f7ffc1945b95",
+      "event_type": "review_pack_prepared",
+      "next_state": "independent_review",
+      "occurred_at": "2026-11-04T07:09:42.266131Z",
+      "prior_state": "independent_review",
+      "reason_code": "trusted_review_pack_prepared",
+      "repository_commits": [
+        "cb5c73159df9097cb3374a28803f0b65c0f05c58"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "bbbd86a7-d95f-44cf-bc48-3aa92b9566e3"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "review-assignment:DEMO-101:19829982-e045-4fe8-9824-b67196ea81b7"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "2e8e1d00-1b73-4316-9569-4efa60f42826",
+      "event_type": "review_assigned",
+      "next_state": "independent_review",
+      "occurred_at": "2026-11-04T07:09:42.308765Z",
+      "prior_state": "independent_review",
+      "reason_code": "independent_reviewer_reserved",
+      "repository_commits": [],
+      "task_id": "DEMO-101",
+      "trace_id": "d86a709d-64e1-4575-a06e-72a956573d33"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "review-assignment:DEMO-102:1c4f9a55-d173-443b-bbe1-03b59460e53e"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "2a9d4742-64c5-4bcf-9930-394142852136",
+      "event_type": "review_assigned",
+      "next_state": "independent_review",
+      "occurred_at": "2026-11-04T07:09:42.323035Z",
+      "prior_state": "independent_review",
+      "reason_code": "independent_reviewer_reserved",
+      "repository_commits": [],
+      "task_id": "DEMO-102",
+      "trace_id": "55f94bd4-8cba-4776-b880-bd898105a3f5"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "model-run:1f3af50b-6b7b-4e31-a1f8-66c4b42c1dad"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "b074d40b-8fc8-4eef-94f8-eeac7bf4f69c",
+      "event_type": "model_run_recorded",
+      "model_version": "claude-opus-5-5",
+      "occurred_at": "2026-11-04T07:09:59.327085Z",
+      "provider": "anthropic",
+      "reason_code": "completed",
+      "repository_commits": [],
+      "task_id": "DEMO-102",
+      "trace_id": "d5a3fd08-ccee-4009-91cf-82dc5adb1046"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "DEMO-102-attempt-1-review-1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+      "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+      "event_id": "f0655f64-a610-4afe-af59-e7d4f62c25c8",
+      "event_type": "review_passed",
+      "next_state": "integration_ready",
+      "occurred_at": "2026-11-04T07:09:59.394002Z",
+      "prior_state": "independent_review",
+      "reason_code": "no_blocking_findings",
+      "repository_commits": [],
+      "task_id": "DEMO-102",
+      "trace_id": "d5ab6098-d3e5-428c-8edd-6f0521b1d869"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "model-run:f5773ab5-b9c4-4742-9ea8-50d2f4505a37"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "c9a8249f-960a-4e3e-b2f4-f4585d1ada23",
+      "event_type": "model_run_recorded",
+      "model_version": "claude-opus-5-5",
+      "occurred_at": "2026-11-04T07:10:05.693449Z",
+      "provider": "anthropic",
+      "reason_code": "completed",
+      "repository_commits": [],
+      "task_id": "DEMO-101",
+      "trace_id": "3162a399-4dd4-4fc3-90ed-341bd602d91f"
+    },
+    {
+      "actor_role": "scheduler",
+      "artifact_refs": [
+        "DEMO-101-attempt-1-review-1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+      "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+      "event_id": "ba9dacff-81c1-4fec-a6d9-48945be1dddd",
+      "event_type": "review_passed",
+      "next_state": "integration_ready",
+      "occurred_at": "2026-11-04T07:10:05.744125Z",
+      "prior_state": "independent_review",
+      "reason_code": "no_blocking_findings",
+      "repository_commits": [],
+      "task_id": "DEMO-101",
+      "trace_id": "f48533ce-607b-4412-87b5-11d6933a2c96"
+    },
+    {
+      "actor_role": "integrator",
+      "artifact_refs": [
+        "integration-intent:DEMO-101-I1",
+        "integration-lease:DEMO-101:48ece136-646c-4363-99cd-7081aba819f8"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "a1aeccde-4459-4e70-a615-a34d834d3b46",
+      "event_type": "integration_lease_issued",
+      "next_state": "integrating",
+      "occurred_at": "2026-11-04T07:10:11.861334Z",
+      "prior_state": "integration_ready",
+      "reason_code": "integration_lease_issued",
+      "repository_commits": [
+        "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "cfb1d942-5b7d-44ac-b05b-e67f686766c6"
+    },
+    {
+      "actor_role": "integrator",
+      "artifact_refs": [
+        "integration-record:DEMO-101",
+        "integration-intent:DEMO-101-I1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-101-attempt-1",
+      "event_id": "2150eeb3-8244-493d-8c4b-54d706e1bc5a",
+      "event_type": "integration_passed",
+      "next_state": "completed",
+      "occurred_at": "2026-11-04T07:10:11.897072Z",
+      "prior_state": "integrating",
+      "reason_code": "integration_passed",
+      "repository_commits": [
+        "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+      ],
+      "task_id": "DEMO-101",
+      "trace_id": "cc356a51-b2fd-4fab-a9d0-822ed04e5ba2"
+    },
+    {
+      "actor_role": "integrator",
+      "artifact_refs": [
+        "integration-intent:DEMO-102-I1",
+        "integration-lease:DEMO-102:d088964a-ff1e-40a2-9c23-7261e880dfed"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "a3416124-6418-464e-bd53-8d2b0500f33c",
+      "event_type": "integration_lease_issued",
+      "next_state": "integrating",
+      "occurred_at": "2026-11-04T07:10:19.183515Z",
+      "prior_state": "integration_ready",
+      "reason_code": "integration_lease_issued",
+      "repository_commits": [
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+        "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+        "dccdf896094ed6cd2f648ce886953acf26c7a7e8"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "7bd144f3-b7f9-4f8e-8c05-49e44823192a"
+    },
+    {
+      "actor_role": "integrator",
+      "artifact_refs": [
+        "integration-record:DEMO-102",
+        "integration-intent:DEMO-102-I1"
+      ],
+      "artifact_type": "event",
+      "attempt_id": "DEMO-102-attempt-1",
+      "event_id": "7771e5d8-bff0-4b7f-90c2-6cc08250b32b",
+      "event_type": "integration_passed",
+      "next_state": "completed",
+      "occurred_at": "2026-11-04T07:10:19.215690Z",
+      "prior_state": "integrating",
+      "reason_code": "integration_passed",
+      "repository_commits": [
+        "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+        "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+        "dccdf896094ed6cd2f648ce886953acf26c7a7e8"
+      ],
+      "task_id": "DEMO-102",
+      "trace_id": "10acc145-434b-4058-ab5d-4360a1a794be"
+    }
+  ],
+  "source_sequences": [
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    55,
+    56
+  ],
+  "work_package_id": "DELIVERY-DEMO-2"
+}

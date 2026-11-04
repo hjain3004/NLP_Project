@@ -1,0 +1,357 @@
+{
+ "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+ "bundle": "/home/user/wt/demo-integration.bundle (verified)",
+ "checks_design": {
+  "kept": "new task-owned test file only, one check per task",
+  "only_passing": [
+   "test_claude_cli_adapter",
+   "test_dag",
+   "test_governance"
+  ],
+  "tried_existing_suites_in_gitless_base": "gitless-precheck-base.txt"
+ },
+ "cost_usd_provider_reported": {
+  "author_runs": 0.922973,
+  "cycle_1": 1.232525,
+  "cycles_1_and_2": 2.660664,
+  "review_runs": 0.505166,
+  "total": 1.428139
+ },
+ "cycle": 2,
+ "cycle2_events": "27-57",
+ "delivery_commits": {
+  "registry_profile": "d24f481",
+  "work_package_cycle1": "5cba2e8",
+  "work_package_cycle2": "df8fbc0"
+ },
+ "event_count_total": 57,
+ "full_suite_on_integration_head": {
+  "base_expected": 391,
+  "head": "dccdf896094ed6cd2f648ce886953acf26c7a7e8",
+  "new_tests": {
+   "test_approve_output_containment": 8,
+   "test_context_runtime_exclusion": 5
+  },
+  "run_1_detached_worktree_inside_delivery": {
+   "cause": "Lane B Lab fixture: clone of a worktree detached at a branch tip gets a local agentctl/integration branch; every failure is that fixture assumption (test_integrate*.py)",
+   "failures": 23,
+   "skipped": 1,
+   "tests": 404
+  },
+  "run_2_detached_worktree_of_clean_clone": {
+   "result": "OK",
+   "seconds": 176,
+   "skipped": 1,
+   "tests": 404
+  }
+ },
+ "integration_branch": "agentctl/integration",
+ "integration_graph": [
+  "dccdf89 merge_no_ff DEMO-102 (parents 89f3bb3, cb5c731)",
+  "89f3bb3 DEMO-101 fast-forward"
+ ],
+ "integration_head": "dccdf896094ed6cd2f648ce886953acf26c7a7e8",
+ "manual_interventions": {
+  "in_run_flow": 0,
+  "read_only_diagnostics": [
+   "S1",
+   "S2",
+   "R1",
+   "B1"
+  ],
+  "setup": [
+   "contracts DELIVERY-DEMO-2 commit df8fbc0",
+   "git archive precheck"
+  ],
+  "slip": "one stray export file written to /home/user/NLP_Project/x by an operator typo, deleted immediately"
+ },
+ "outcome": "SUCCESS for DEMO-101 and DEMO-102: both completed and integrated unchanged. One non-candidate anomaly: the queue re-tried the stale cycle-1 DEMO-002 twice (rejected both times).",
+ "project_completion_date": "none",
+ "queue_results": {
+  "integrate-1": {
+   "exit_code": 0,
+   "integration_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+   "outcome": "integrated",
+   "reason_code": null,
+   "strategy": "fast_forward",
+   "task": "DEMO-101"
+  },
+  "integrate-2": {
+   "exit_code": 1,
+   "integration_commit": null,
+   "outcome": "rejected",
+   "reason_code": "affected_check_failed",
+   "strategy": null,
+   "task": "DEMO-002"
+  },
+  "integrate-3": {
+   "exit_code": 0,
+   "integration_commit": "dccdf896094ed6cd2f648ce886953acf26c7a7e8",
+   "outcome": "integrated",
+   "reason_code": null,
+   "strategy": "merge_no_ff",
+   "task": "DEMO-102"
+  },
+  "integrate-4": {
+   "exit_code": 1,
+   "integration_commit": null,
+   "outcome": "rejected",
+   "reason_code": "conflict_repair_required",
+   "strategy": null,
+   "task": "DEMO-002"
+  },
+  "integrate-5": {
+   "exit_code": 3,
+   "integration_commit": null,
+   "outcome": "queue_empty",
+   "reason_code": "queue_empty",
+   "strategy": null,
+   "task": null
+  }
+ },
+ "regression_evidence": "outputs/regression-new-tests-vs-unfixed-base.txt (approve: 2 of 8 error on unfixed source; context: 4 of 5 fail; DEMO-101 tests also catch the blocked cycle-1 candidate)",
+ "speedup_claim": "none",
+ "stale_cycle1_task_retried_by_queue": {
+  "DEMO-002": [
+   "integrate-2: affected_check_failed (same .git-dependent checks as cycle 1)",
+   "integrate-4: conflict_repair_required (touches context.py/test file now changed by DEMO-102)"
+  ],
+  "state": "integration_ready, parked (queue_empty exit 3)"
+ },
+ "tasks": {
+  "DEMO-101": {
+   "author": {
+    "cli_result_uuid": "30aaa839-04ac-42bf-a585-293121cc7849",
+    "elapsed_ms": 306568,
+    "exit_code": 0,
+    "files_changed": [
+     {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/commands/approve.py"
+     },
+     {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_approve_output_containment.py"
+     }
+    ],
+    "lease_epoch": 1,
+    "lease_id": "b76bf68b-06fd-4986-95bb-97f365e29b54",
+    "provider": "anthropic",
+    "provider_run_id": "814328cb-782c-426b-a8ff-6b3bb0e5db40",
+    "requested_model": "claude-sonnet-5",
+    "result_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+    "served_model": "claude-sonnet-5",
+    "session_id": "f419d306-baae-4979-96c9-8a1d104a34b6",
+    "usage": {
+     "cost_usd": 0.6343340000000001,
+     "input_tokens": 105662,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 305231,
+     "output_tokens": 39816
+    },
+    "wall_window_epoch": [
+     1793775862.4235473,
+     1793776169.4123065
+    ]
+   },
+   "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+   "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+   "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+   "final_state": "completed",
+   "integration": {
+    "candidate_patch_unchanged": true,
+    "candidate_result_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+    "gates": [
+     {
+      "gate": "integration:candidate-commit-preserved",
+      "result": "pass"
+     },
+     {
+      "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py",
+      "result": "pass"
+     }
+    ],
+    "integration_base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+    "integration_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+    "integration_id": "DEMO-101-I1",
+    "strategy": "conflict_free_preserving_candidate"
+   },
+   "review": {
+    "exit_code": 0,
+    "findings": [
+     {
+      "blocking": false,
+      "id": "F1",
+      "severity": "minor"
+     },
+     {
+      "blocking": false,
+      "id": "F2",
+      "severity": "nit"
+     },
+     {
+      "blocking": false,
+      "id": "F3",
+      "severity": "nit"
+     }
+    ],
+    "independence_distinct": true,
+    "review_id": "DEMO-101-attempt-1-review-1",
+    "reviewer_model": "claude-opus-5-5",
+    "reviewer_role": "complex_implementation",
+    "reviewer_run_id": "f5773ab5-b9c4-4742-9ea8-50d2f4505a37",
+    "reviewer_session_id": "b1b73cfb-1ef4-4232-913a-2b54debf41f0",
+    "usage": {
+     "cost_usd": 0.272735,
+     "input_tokens": 29922,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 22508,
+     "output_tokens": 2228
+    },
+    "verdict": "no_blocking_findings",
+    "wall_window_epoch": [
+     1793776181.8862467,
+     1793776205.7851334
+    ]
+   },
+   "verification": {
+    "checks": [
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py",
+      "exit_code": 0
+     }
+    ],
+    "evidence_hash": null,
+    "passed": true
+   }
+  },
+  "DEMO-102": {
+   "author": {
+    "cli_result_uuid": "7ed78c6d-2a47-4e9a-a9ea-689db919d7ca",
+    "elapsed_ms": 145563,
+    "exit_code": 0,
+    "files_changed": [
+     {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/context.py"
+     },
+     {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+     }
+    ],
+    "lease_epoch": 1,
+    "lease_id": "8384b479-6266-442c-9e43-79df929f5b37",
+    "provider": "anthropic",
+    "provider_run_id": "8026bde1-7fa1-4e7b-b68c-f2873e8fcf7a",
+    "requested_model": "claude-sonnet-5",
+    "result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+    "served_model": "claude-sonnet-5",
+    "session_id": "a1cdf7ef-9d40-4846-bd9a-b00c2e564639",
+    "usage": {
+     "cost_usd": 0.28863859999999997,
+     "input_tokens": 29918,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 144644,
+     "output_tokens": 18479
+    },
+    "wall_window_epoch": [
+     1793775862.4223032,
+     1793776008.4059625
+    ]
+   },
+   "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+   "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+   "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+   "final_state": "completed",
+   "integration": {
+    "candidate_patch_unchanged": true,
+    "candidate_result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+    "gates": [
+     {
+      "gate": "integration:candidate-commit-preserved",
+      "result": "pass"
+     },
+     {
+      "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+      "result": "pass"
+     }
+    ],
+    "integration_base_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+    "integration_commit": "dccdf896094ed6cd2f648ce886953acf26c7a7e8",
+    "integration_id": "DEMO-102-I1",
+    "strategy": "conflict_free_preserving_candidate"
+   },
+   "review": {
+    "exit_code": 0,
+    "findings": [
+     {
+      "blocking": false,
+      "id": "F1",
+      "severity": "minor"
+     },
+     {
+      "blocking": false,
+      "id": "F2",
+      "severity": "minor"
+     }
+    ],
+    "independence_distinct": true,
+    "review_id": "DEMO-102-attempt-1-review-1",
+    "reviewer_model": "claude-opus-5-5",
+    "reviewer_role": "complex_implementation",
+    "reviewer_run_id": "1f3af50b-6b7b-4e31-a1f8-66c4b42c1dad",
+    "reviewer_session_id": "e1ce595e-506a-4d6d-bc3c-dd785b23dcd3",
+    "usage": {
+     "cost_usd": 0.232431,
+     "input_tokens": 26514,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 16166,
+     "output_tokens": 1576
+    },
+    "verdict": "no_blocking_findings",
+    "wall_window_epoch": [
+     1793776181.8866887,
+     1793776199.4256663
+    ]
+   },
+   "verification": {
+    "checks": [
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+      "exit_code": 0
+     }
+    ],
+    "evidence_hash": null,
+    "passed": true
+   }
+  }
+ },
+ "timings": {
+  "first_run_start_to_last_integrate_end_seconds": 368.432,
+  "first_run_start_to_last_review_end_seconds": 343.363,
+  "review_overlap_seconds": 17.539,
+  "review_windows_epoch": {
+   "review-DEMO-101": [
+    1793776181.8862467,
+    1793776205.7851334
+   ],
+   "review-DEMO-102": [
+    1793776181.8866887,
+    1793776199.4256663
+   ]
+  },
+  "run_overlap_seconds": 145.982,
+  "run_windows_epoch": {
+   "run-DEMO-101": [
+    1793775862.4235473,
+    1793776169.4123065
+   ],
+   "run-DEMO-102": [
+    1793775862.4223032,
+    1793776008.4059625
+   ]
+  },
+  "sum_of_author_run_windows_seconds": 452.972
+ }
+}

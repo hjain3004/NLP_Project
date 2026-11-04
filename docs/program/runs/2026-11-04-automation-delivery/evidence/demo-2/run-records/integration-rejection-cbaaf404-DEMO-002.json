@@ -1,0 +1,20 @@
+{
+ "attempt_id": "DEMO-002-attempt-1",
+ "details": {
+  "conflicted_paths": [
+   "tools/agentctl/agentctl/context.py",
+   "tools/agentctl/tests/test_context_runtime_exclusion.py"
+  ],
+  "integration_head": "dccdf896094ed6cd2f648ce886953acf26c7a7e8"
+ },
+ "follow_up_auto_created": false,
+ "integration_head": "dccdf896094ed6cd2f648ce886953acf26c7a7e8",
+ "integrator_run_id": "integrator-run:e94523c7-4438-4737-baa2-3ef282db2d41",
+ "outcome": "repair_required",
+ "proposed_follow_up": "bounded integration-repair task with fresh verification and independent review",
+ "reason_code": "conflict_repair_required",
+ "retry_requires_new_evidence": true,
+ "state_after": "integration_ready",
+ "state_before": "integration_ready",
+ "task_id": "DEMO-002"
+}

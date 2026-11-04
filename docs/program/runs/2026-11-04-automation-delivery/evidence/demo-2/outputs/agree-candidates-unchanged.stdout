@@ -1,0 +1,8 @@
+DEMO-101 manifest result_commit 89f3bb3958abd9fc4efa769e63d61fb1b46eaf76
+branch 89f3bb3958abd9fc4efa769e63d61fb1b46eaf76
+DEMO-102 manifest result_commit cb5c73159df9097cb3374a28803f0b65c0f05c58
+branch cb5c73159df9097cb3374a28803f0b65c0f05c58
+both-candidate-commits-reachable-from-integration
+patch-id DEMO-101 candidate: ae11a5265fd177f7a4c210d09858fbc07e45fab0
+patch-id DEMO-102 candidate: c2b540f4d3f4174f47d603e44d0da0e3cb4c61d9
+patch-id integration step 89f3bb3..dccdf89: c2b540f4d3f4174f47d603e44d0da0e3cb4c61d9

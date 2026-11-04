@@ -1,0 +1,36 @@
+{
+ "candidate_binding": {
+  "attempt_id": "DEMO-102-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+  "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+  "diff_hash": "e757554c43c32d97ab3070a6604b12597bf798f957193b0877fc1fa614e41630",
+  "files_changed": [
+   {
+    "change_type": "modified",
+    "path": "tools/agentctl/agentctl/context.py"
+   },
+   {
+    "change_type": "added",
+    "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+   }
+  ],
+  "result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+  "task_id": "DEMO-102",
+  "tree_hash": "140388a933ce2ef6faf2254afe35fb4996c87b59",
+  "worktree_path": "agent-system/runtime/worktrees/DEMO-102/attempt-1"
+ },
+ "checks": [
+  {
+   "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+   "duration_ms": 173,
+   "exit_code": 0,
+   "gate_isolation": "user_pid_namespace",
+   "left_processes": 0,
+   "reason": null,
+   "stderr_hash": "9f169aa04896ef0203477ff61d8d57406ec0dab00b71ec15cf38cdae22509147",
+   "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+ ],
+ "passed": true
+}

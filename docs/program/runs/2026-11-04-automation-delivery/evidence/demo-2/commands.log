@@ -1,0 +1,222 @@
+# commands.log -- DEMO operator, CYCLE 2 (replan), 2026-11-04. Cycle 1 evidence is untouched in ../demo/.
+# Format: "=== [label] start=<epoch> end=<epoch> exit=<rc>" then command, stdout, stderr. Environment variables are not recorded.
+# Setup (not logged by label, all exit 0):
+#   cd /home/user/NLP_Project-evidence worktree: git merge --no-edit claude/brave-keller-7gd2bc  (already up to date)
+#   git archive 2df58e8 | tar -x -C <tmp>   -> .git-less copy of BASE; every existing test file run there with a minimal env
+#       (result: gitless-precheck-base.txt). Only test_claude_cli_adapter, test_dag, test_governance pass; none exercises approve.py or context.py.
+#       Dropped as checks (error at BASE without .git): test_approval*.py, test_context_staleness.py, test_plan_loading.py, and every other suite
+#       that exercises the changed modules. Tried and kept: only the task-owned new test file (verified feasible without git by a preflight probe
+#       of run() against a temp root with copied policy files: alias path rejected by the unfixed code, relative path accepted).
+#   python3 <scratchpad>/gen_contracts2.py 2df58e85...  -> agent-system/work/DELIVERY-DEMO-2/** ; committed on delivery-main as its own commit
+=== [pre-status] start=1793775857.205814117 end=1793775857.356039797 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"repair_required","task_id":"DEMO-001"},{"attempt":1,"events":13,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-002"}]}
+--- stderr
+
+=== [plan-validate-2] start=1793775857.367070471 end=1793775857.987371674 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl validate agent-system/work/DELIVERY-DEMO-2/work-package.json && python3 -m agentctl validate agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-101.json && python3 -m agentctl validate agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-102.json && python3 -m agentctl plan validate agent-system/work/DELIVERY-DEMO-2/work-package.json
+--- stdout
+valid: agent-system/work/DELIVERY-DEMO-2/work-package.json
+valid: agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-101.json
+valid: agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-102.json
+{"status":"validated","tasks":[{"context_hash":"51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808","task_id":"DEMO-101"},{"context_hash":"d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46","task_id":"DEMO-102"}],"work_package_id":"DELIVERY-DEMO-2"}
+--- stderr
+
+=== [ready-2] start=1793775857.995057193 end=1793775858.137251610 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl ready --json
+--- stdout
+{"blocked":[],"ready":[{"capability_class":"standard_implementation","locks":[],"risk":"medium","task_id":"DEMO-101"},{"capability_class":"standard_implementation","locks":[],"risk":"low","task_id":"DEMO-102"}]}
+--- stderr
+
+=== [post-status] start=1793775858.144121464 end=1793775858.300796551 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"repair_required","task_id":"DEMO-001"},{"attempt":1,"events":13,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-002"},{"attempt":null,"events":1,"lease_epoch":0,"locks":[],"orphan_evidence_count":0,"state":"ready","task_id":"DEMO-101"},{"attempt":null,"events":1,"lease_epoch":0,"locks":[],"orphan_evidence_count":0,"state":"ready","task_id":"DEMO-102"}]}
+--- stderr
+
+=== [run-DEMO-101] (background, concurrent) start=1793775862.423547383 end=1793776169.412306612 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl run DEMO-101 --timeout 600 --max-budget-usd 1.5 --export evidence/demo-2/run-records/export-run-DEMO-101.json
+--- stdout
+{"artifact_id":"91b57dd1-5031-4b2b-99e5-ada306906e55","attempt_id":"DEMO-101-attempt-1","base_commit":"2df58e85e8fc3b8db8346791f2795bc67f21ccd2","branch":"agentctl/DEMO-101/attempt-1","cli_result_uuid":"30aaa839-04ac-42bf-a585-293121cc7849","extra_models":[],"files_changed":[{"change_type":"modified","path":"tools/agentctl/agentctl/commands/approve.py"},{"change_type":"added","path":"tools/agentctl/tests/test_approve_output_containment.py"}],"outcome":"candidate","provider":"anthropic","provider_run_id":"814328cb-782c-426b-a8ff-6b3bb0e5db40","requested_model":"claude-sonnet-5","result_commit":"89f3bb3958abd9fc4efa769e63d61fb1b46eaf76","run_record":"agent-system/runtime/runs/DEMO-101/attempt-1.json","served_model":"claude-sonnet-5","session_id":"f419d306-baae-4979-96c9-8a1d104a34b6","state":"candidate","task_id":"DEMO-101","usage":{"cost_usd":0.6343340000000001,"input_tokens":105662,"latency_ms":305231,"output_tokens":39816},"worktree":"agent-system/runtime/worktrees/DEMO-101/attempt-1"}
+--- stderr
+
+=== [run-DEMO-102] (background, concurrent) start=1793775862.422303147 end=1793776008.405962570 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl run DEMO-102 --timeout 600 --max-budget-usd 1.5 --export evidence/demo-2/run-records/export-run-DEMO-102.json
+--- stdout
+{"artifact_id":"ea242f94-8085-40f3-9145-63da7e33e224","attempt_id":"DEMO-102-attempt-1","base_commit":"2df58e85e8fc3b8db8346791f2795bc67f21ccd2","branch":"agentctl/DEMO-102/attempt-1","cli_result_uuid":"7ed78c6d-2a47-4e9a-a9ea-689db919d7ca","extra_models":[],"files_changed":[{"change_type":"modified","path":"tools/agentctl/agentctl/context.py"},{"change_type":"added","path":"tools/agentctl/tests/test_context_runtime_exclusion.py"}],"outcome":"candidate","provider":"anthropic","provider_run_id":"8026bde1-7fa1-4e7b-b68c-f2873e8fcf7a","requested_model":"claude-sonnet-5","result_commit":"cb5c73159df9097cb3374a28803f0b65c0f05c58","run_record":"agent-system/runtime/runs/DEMO-102/attempt-1.json","served_model":"claude-sonnet-5","session_id":"a1cdf7ef-9d40-4846-bd9a-b00c2e564639","state":"candidate","task_id":"DEMO-102","usage":{"cost_usd":0.28863859999999997,"input_tokens":29918,"latency_ms":144644,"output_tokens":18479},"worktree":"agent-system/runtime/worktrees/DEMO-102/attempt-1"}
+--- stderr
+
+=== [status-after-run] start=1793776176.603558245 end=1793776176.711908543 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"repair_required","task_id":"DEMO-001"},{"attempt":1,"events":13,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-002"},{"attempt":1,"events":6,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"candidate","task_id":"DEMO-101"},{"attempt":1,"events":6,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"candidate","task_id":"DEMO-102"}]}
+--- stderr
+
+=== [verify-DEMO-101] start=1793776176.718813393 end=1793776177.065603485 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl verify DEMO-101
+--- stdout
+{"state":"independent_review","task_id":"DEMO-101","verification_evidence_hash":"0144da07fef41e4bceba38948c580479742ca34c16b7fa043d353fb1cffcc5f7"}
+--- stderr
+
+=== [verify-DEMO-102] start=1793776177.072797333 end=1793776177.479685047 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl verify DEMO-102
+--- stdout
+{"state":"independent_review","task_id":"DEMO-102","verification_evidence_hash":"abee25a83b299c534b2e49f9bd5b224ea7cd96d0fd27478471860b7eaa9a213e"}
+--- stderr
+
+=== [review-DEMO-101] (background, concurrent) start=1793776181.886246666 end=1793776205.785133357 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl review run DEMO-101 --timeout 600 --max-budget-usd 1.5 --export evidence/demo-2/run-records/export-review-DEMO-101.json
+--- stdout
+{"attempt_id":"DEMO-101-attempt-1","author_session_id":"f419d306-baae-4979-96c9-8a1d104a34b6","blocking_findings":0,"findings":3,"outcome":"reviewed","review_id":"DEMO-101-attempt-1-review-1","reviewer_model":"claude-opus-5-5","reviewer_role":"complex_implementation","reviewer_run_id":"f5773ab5-b9c4-4742-9ea8-50d2f4505a37","reviewer_session_id":"b1b73cfb-1ef4-4232-913a-2b54debf41f0","run_record":"agent-system/runtime/runs/DEMO-101/review-1.json","state":"integration_ready","task_id":"DEMO-101","usage":{"cost_usd":0.272735,"input_tokens":29922,"latency_ms":22508,"output_tokens":2228},"verdict":"no_blocking_findings"}
+--- stderr
+
+=== [review-DEMO-102] (background, concurrent) start=1793776181.886688753 end=1793776199.425666441 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl review run DEMO-102 --timeout 600 --max-budget-usd 1.5 --export evidence/demo-2/run-records/export-review-DEMO-102.json
+--- stdout
+{"attempt_id":"DEMO-102-attempt-1","author_session_id":"a1cdf7ef-9d40-4846-bd9a-b00c2e564639","blocking_findings":0,"findings":2,"outcome":"reviewed","review_id":"DEMO-102-attempt-1-review-1","reviewer_model":"claude-opus-5-5","reviewer_role":"complex_implementation","reviewer_run_id":"1f3af50b-6b7b-4e31-a1f8-66c4b42c1dad","reviewer_session_id":"e1ce595e-506a-4d6d-bc3c-dd785b23dcd3","run_record":"agent-system/runtime/runs/DEMO-102/review-1.json","state":"integration_ready","task_id":"DEMO-102","usage":{"cost_usd":0.232431,"input_tokens":26514,"latency_ms":16166,"output_tokens":1576},"verdict":"no_blocking_findings"}
+--- stderr
+
+=== [status-after-review] start=1793776211.066760041 end=1793776211.232133737 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"repair_required","task_id":"DEMO-001"},{"attempt":1,"events":13,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-002"},{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-101"},{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-102"}]}
+--- stderr
+
+=== [ready-after-review] start=1793776211.239907842 end=1793776211.392586129 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl ready --json
+--- stdout
+{"blocked":[],"ready":[]}
+--- stderr
+
+=== [integrate-1] start=1793776211.399102476 end=1793776211.923514940 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"affected_gates":[{"gate":"integration:candidate-commit-preserved","result":"pass"},{"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py","result":"pass"}],"branch":"agentctl/integration","candidate_result_commit":"89f3bb3958abd9fc4efa769e63d61fb1b46eaf76","integration_base_commit":"2df58e85e8fc3b8db8346791f2795bc67f21ccd2","integration_commit":"89f3bb3958abd9fc4efa769e63d61fb1b46eaf76","integration_id":"DEMO-101-I1","integrator_run_id":"integrator-run:a89ebd93-b470-4800-a574-9d86c3e2f7e7","outcome":"integrated","strategy":"fast_forward","task_id":"DEMO-101"}
+--- stderr
+
+=== [integrate-2] start=1793776217.873836009 end=1793776218.682892313 exit=1
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"details":{"gates":[{"gate":"integration:candidate-commit-preserved","result":"pass"},{"descendants_cleared":true,"duration_ms":120,"exit_code":0,"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py","gate_isolation":"user_pid_namespace","left_processes":0,"reason":null,"result":"pass","stderr_bytes":101,"stderr_hash":"869ea8047d0ae89dddb808470175fa3bdce5d6007a92e195f2d7e7e762e1f49f","stdout_bytes":0,"stdout_hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","timed_out":false},{"descendants_cleared":true,"duration_ms":170,"exit_code":1,"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py","gate_isolation":"user_pid_namespace","left_processes":0,"reason":"exit_nonzero","result":"fail","stderr_bytes":2094,"stderr_hash":"2c46f91df4377eecf49be0ef2af4ae7b6df562ba2addc14f95f770980e85b159","stdout_bytes":0,"stdout_hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","timed_out":false},{"descendants_cleared":true,"duration_ms":122,"exit_code":1,"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py","gate_isolation":"user_pid_namespace","left_processes":0,"reason":"exit_nonzero","result":"fail","stderr_bytes":6030,"stderr_hash":"0a7fa9dcc913a9e288f2fbf6f4345bcb36b6db7d1c0f93791f4d46142eba5a93","stdout_bytes":0,"stdout_hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","timed_out":false}],"integration_head":"89f3bb3958abd9fc4efa769e63d61fb1b46eaf76","planned_commit":"c99649eb398a5abaca238c5d5a83272567848592"},"integration_branch_head":"89f3bb3958abd9fc4efa769e63d61fb1b46eaf76","integrator_run_id":"integrator-run:e347864e-6a8e-4092-827f-c3f81ca44176","message":"an affected gate failed on the resulting integration tree","outcome":"rejected","reason_code":"affected_check_failed","rejection_artifact":"integration-rejection:DEMO-002:c68b9b51-2048-4fde-a698-3557f162ddf7","rejection_outcome":"repair_required","task_id":"DEMO-002","task_state":"integration_ready"}
+--- stderr
+agentctl: integrate: rejected: affected_check_failed
+
+=== [integrate-3] start=1793776218.690156726 end=1793776219.238400273 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"affected_gates":[{"gate":"integration:candidate-commit-preserved","result":"pass"},{"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py","result":"pass"}],"branch":"agentctl/integration","candidate_result_commit":"cb5c73159df9097cb3374a28803f0b65c0f05c58","integration_base_commit":"89f3bb3958abd9fc4efa769e63d61fb1b46eaf76","integration_commit":"dccdf896094ed6cd2f648ce886953acf26c7a7e8","integration_id":"DEMO-102-I1","integrator_run_id":"integrator-run:ac4f464f-3eb4-424d-b25c-f0690b00795d","outcome":"integrated","strategy":"merge_no_ff","task_id":"DEMO-102"}
+--- stderr
+
+=== [integrate-4] start=1793776225.845999044 end=1793776226.080980339 exit=1
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"details":{"conflicted_paths":["tools/agentctl/agentctl/context.py","tools/agentctl/tests/test_context_runtime_exclusion.py"],"integration_head":"dccdf896094ed6cd2f648ce886953acf26c7a7e8"},"integration_branch_head":"dccdf896094ed6cd2f648ce886953acf26c7a7e8","integrator_run_id":"integrator-run:e94523c7-4438-4737-baa2-3ef282db2d41","message":"candidate touches paths the integration branch changed since the merge base","outcome":"rejected","reason_code":"conflict_repair_required","rejection_artifact":"integration-rejection:DEMO-002:cbaaf404-c015-4545-9619-a7043e595e09","rejection_outcome":"repair_required","task_id":"DEMO-002","task_state":"integration_ready"}
+--- stderr
+agentctl: integrate: rejected: conflict_repair_required
+
+=== [status-final] start=1793776226.089326504 end=1793776226.221288281 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"repair_required","task_id":"DEMO-001"},{"attempt":1,"events":15,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-002"},{"attempt":1,"events":14,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"completed","task_id":"DEMO-101"},{"attempt":1,"events":14,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"completed","task_id":"DEMO-102"}]}
+--- stderr
+
+=== [status-DEMO-101] start=1793776226.229784552 end=1793776226.375677650 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status DEMO-101 --json
+--- stdout
+{"attempt":1,"events":14,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"completed","task_id":"DEMO-101"}
+--- stderr
+
+=== [status-DEMO-102] start=1793776226.384972739 end=1793776226.510194991 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status DEMO-102 --json
+--- stdout
+{"attempt":1,"events":14,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"completed","task_id":"DEMO-102"}
+--- stderr
+
+=== [integrate-5] start=1793776230.698015708 end=1793776230.854101864 exit=3
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"integrator_run_id":"integrator-run:55658eb4-d6e4-4019-a2d5-1968fb5bc036","outcome":"queue_empty","parked_without_new_evidence":{"DEMO-002":"conflict_repair_required"},"reason_code":"queue_empty","waiting_on_dependencies":{}}
+--- stderr
+agentctl: integrate: queue_empty: queue_empty
+
+=== [agree-git-graph] start=1793776260.710917070 end=1793776260.727576634 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl git log --graph --oneline agentctl/integration | head -8; git for-each-ref refs/heads | cat; git diff --stat 2df58e8 agentctl/integration
+--- stdout
+*   dccdf89 agentctl: integrate DEMO-102 (DEMO-102-I1) into agentctl/integration
+|\  
+| * cb5c731 agentctl: DEMO-102 DEMO-102-attempt-1
+* | 89f3bb3 agentctl: DEMO-101 DEMO-101-attempt-1
+|/  
+* 2df58e8 docs: checkpoint — lanes merged and reviewed, demo running
+* 9825b3c docs: correct Lane B test count in report 4
+* 7aa7ca8 docs: Lane B report 4 for aligning tests with the verification-time tamper audit
+93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2 commit	refs/heads/agentctl/DEMO-001/attempt-1
+6a682e461f75eebd733ccf5937bf2f85da9d31c8 commit	refs/heads/agentctl/DEMO-002/attempt-1
+89f3bb3958abd9fc4efa769e63d61fb1b46eaf76 commit	refs/heads/agentctl/DEMO-101/attempt-1
+cb5c73159df9097cb3374a28803f0b65c0f05c58 commit	refs/heads/agentctl/DEMO-102/attempt-1
+dccdf896094ed6cd2f648ce886953acf26c7a7e8 commit	refs/heads/agentctl/integration
+2df58e85e8fc3b8db8346791f2795bc67f21ccd2 commit	refs/heads/claude/brave-keller-7gd2bc
+df8fbc0cd3b58b73cc806d3c8b3587d57e43df28 commit	refs/heads/delivery-main
+ tools/agentctl/agentctl/commands/approve.py        |  16 +-
+ tools/agentctl/agentctl/context.py                 |  14 +-
+ .../tests/test_approve_output_containment.py       | 174 +++++++++++++++++++++
+ .../tests/test_context_runtime_exclusion.py        | 130 +++++++++++++++
+ 4 files changed, 329 insertions(+), 5 deletions(-)
+--- stderr
+
+=== [agree-candidates-unchanged] start=1793776260.735568991 end=1793776260.809230711 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl for t in 101 102; do python3 -c "import json;m=json.load(open('agent-system/runtime/attempts/DEMO-$t/DEMO-$t-attempt-1/implementation-manifest.json'));print('DEMO-$t manifest result_commit',m.get('result_commit'))"; echo branch $(git rev-parse agentctl/DEMO-$t/attempt-1); done; git merge-base --is-ancestor 89f3bb3 agentctl/integration && git merge-base --is-ancestor cb5c731 agentctl/integration && echo both-candidate-commits-reachable-from-integration; echo patch-id DEMO-101 candidate: $(git diff 2df58e8 89f3bb3 | git patch-id --stable | cut -c1-40); echo patch-id DEMO-102 candidate: $(git diff 2df58e8 cb5c731 | git patch-id --stable | cut -c1-40); echo patch-id integration step 89f3bb3..dccdf89: $(git diff 89f3bb3 dccdf89 | git patch-id --stable | cut -c1-40)
+--- stdout
+DEMO-101 manifest result_commit 89f3bb3958abd9fc4efa769e63d61fb1b46eaf76
+branch 89f3bb3958abd9fc4efa769e63d61fb1b46eaf76
+DEMO-102 manifest result_commit cb5c73159df9097cb3374a28803f0b65c0f05c58
+branch cb5c73159df9097cb3374a28803f0b65c0f05c58
+both-candidate-commits-reachable-from-integration
+patch-id DEMO-101 candidate: ae11a5265fd177f7a4c210d09858fbc07e45fab0
+patch-id DEMO-102 candidate: c2b540f4d3f4174f47d603e44d0da0e3cb4c61d9
+patch-id integration step 89f3bb3..dccdf89: c2b540f4d3f4174f47d603e44d0da0e3cb4c61d9
+--- stderr
+
+=== [agree-validate-records] start=1793776260.815428319 end=1793776261.760048646 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl for f in agent-system/runtime/integration/DEMO-101/records/*/integration-manifest.json agent-system/runtime/integration/DEMO-102/records/*/integration-manifest.json agent-system/runtime/attempts/DEMO-10[12]/*/*.json; do python3 -m agentctl validate $f; done
+--- stdout
+valid: agent-system/runtime/integration/DEMO-101/records/DEMO-101-I1/integration-manifest.json
+valid: agent-system/runtime/integration/DEMO-102/records/DEMO-102-I1/integration-manifest.json
+valid: agent-system/runtime/attempts/DEMO-101/DEMO-101-attempt-1/context-manifest.json
+valid: agent-system/runtime/attempts/DEMO-101/DEMO-101-attempt-1/implementation-manifest.json
+valid: agent-system/runtime/attempts/DEMO-101/DEMO-101-attempt-1/review-verdict-1.json
+valid: agent-system/runtime/attempts/DEMO-102/DEMO-102-attempt-1/context-manifest.json
+valid: agent-system/runtime/attempts/DEMO-102/DEMO-102-attempt-1/implementation-manifest.json
+valid: agent-system/runtime/attempts/DEMO-102/DEMO-102-attempt-1/review-verdict-1.json
+--- stderr
+
+=== [agree-event-counts] start=1793776261.767615619 end=1793776261.901698437 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl events export --work-package DELIVERY-DEMO-2 --out /home/user/NLP_Project/x 2>&1 | head -2; true
+--- stdout
+{"chain_hash":"6c81812e917120f82ebd97c9b8e5569bec09782bb2da25d7fe2535af9a84ea1a","events":29}
+--- stderr
+
+# NOTE: the preceding [agree-event-counts] export accidentally wrote its output to /home/user/NLP_Project/x (operator slip in the output path); that stray untracked file was deleted at once, nothing else there was touched. The export is redone below into the evidence dir.
+=== [events-export] start=1793776276.217814010 end=1793776276.322872953 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl events export --work-package DELIVERY-DEMO-2 --out /home/user/wt/demo/docs/program/runs/2026-11-04-automation-delivery/evidence/demo-2/run-records/events-export.json
+--- stdout
+{"chain_hash":"6c81812e917120f82ebd97c9b8e5569bec09782bb2da25d7fe2535af9a84ea1a","events":29}
+--- stderr
+
+# ---------------------------------------------------------------------------
+# Step f suite runs and diagnostics (not provider calls; one full suite at a time). Output files in outputs/.
+#  S1  git worktree add --detach <tmp> agentctl/integration   (detached worktree of the integration head dccdf896 inside /home/user/delivery), then
+#      PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl
+#      -> outputs/fullsuite-integration-head.log : 404 tests, FAILED failures=23, skipped=1 (165 s). All 23 failures are in Lane B's disposable-repository tests
+#         (test_integrate.py, test_integrate_hardening.py, test_integrate_queue.py) and share one assertion: the Lab asserts refs/heads/agentctl/integration
+#         does not exist in its fresh clone, but it does. Cause: helpers_lane_b.Lab clones SOURCE_REPO (the worktree) with `git clone --shared`; a worktree detached
+#         exactly at a branch tip makes git guess that branch as the clone's HEAD, so the clone has a local agentctl/integration. Harness fragility, not a candidate defect
+#         (verified by clone probe; and by S2).
+#  S2  git clone --no-hardlinks /home/user/delivery <tmp>; git fetch origin agentctl/integration; git worktree add --detach <tmp2> FETCH_HEAD   (no local branch at that commit), same full-suite command
+#      -> outputs/fullsuite-integration-head-rerun-clean-clone.log : 404 tests, OK, skipped=1 (176 s).  Both runs are on the integration head tree dccdf896.
+#  R1  regression check (AGENTS.md section 8): the two new test files copied into a .git-less copy of UNFIXED BASE, minimal env -> outputs/regression-new-tests-vs-unfixed-base.txt
+#      approve tests: 2 of 8 error on the unfixed source; context tests: 4 of 5 fail on the unfixed source. Also: the DEMO-101 tests against the blocked cycle-1 candidate
+#      source (approve.py @93d1ddc) -> the relative_to test errors with the same ValueError the reviewer predicted.
+#  B1  git bundle create /home/user/wt/demo-integration.bundle agentctl/integration ; git bundle verify -> ok (outside any repository tree, not committed)
+# Temporary worktrees/clones used for S1/S2 were removed or live under the scratchpad; /home/user/delivery's worktree list is back to the 4 task worktrees.

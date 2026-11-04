@@ -1,0 +1,20 @@
+*   dccdf89 agentctl: integrate DEMO-102 (DEMO-102-I1) into agentctl/integration
+|\  
+| * cb5c731 agentctl: DEMO-102 DEMO-102-attempt-1
+* | 89f3bb3 agentctl: DEMO-101 DEMO-101-attempt-1
+|/  
+* 2df58e8 docs: checkpoint — lanes merged and reviewed, demo running
+* 9825b3c docs: correct Lane B test count in report 4
+* 7aa7ca8 docs: Lane B report 4 for aligning tests with the verification-time tamper audit
+93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2 commit	refs/heads/agentctl/DEMO-001/attempt-1
+6a682e461f75eebd733ccf5937bf2f85da9d31c8 commit	refs/heads/agentctl/DEMO-002/attempt-1
+89f3bb3958abd9fc4efa769e63d61fb1b46eaf76 commit	refs/heads/agentctl/DEMO-101/attempt-1
+cb5c73159df9097cb3374a28803f0b65c0f05c58 commit	refs/heads/agentctl/DEMO-102/attempt-1
+dccdf896094ed6cd2f648ce886953acf26c7a7e8 commit	refs/heads/agentctl/integration
+2df58e85e8fc3b8db8346791f2795bc67f21ccd2 commit	refs/heads/claude/brave-keller-7gd2bc
+df8fbc0cd3b58b73cc806d3c8b3587d57e43df28 commit	refs/heads/delivery-main
+ tools/agentctl/agentctl/commands/approve.py        |  16 +-
+ tools/agentctl/agentctl/context.py                 |  14 +-
+ .../tests/test_approve_output_containment.py       | 174 +++++++++++++++++++++
+ .../tests/test_context_runtime_exclusion.py        | 130 +++++++++++++++
+ 4 files changed, 329 insertions(+), 5 deletions(-)

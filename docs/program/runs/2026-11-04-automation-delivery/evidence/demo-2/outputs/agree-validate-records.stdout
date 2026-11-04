@@ -1,0 +1,8 @@
+valid: agent-system/runtime/integration/DEMO-101/records/DEMO-101-I1/integration-manifest.json
+valid: agent-system/runtime/integration/DEMO-102/records/DEMO-102-I1/integration-manifest.json
+valid: agent-system/runtime/attempts/DEMO-101/DEMO-101-attempt-1/context-manifest.json
+valid: agent-system/runtime/attempts/DEMO-101/DEMO-101-attempt-1/implementation-manifest.json
+valid: agent-system/runtime/attempts/DEMO-101/DEMO-101-attempt-1/review-verdict-1.json
+valid: agent-system/runtime/attempts/DEMO-102/DEMO-102-attempt-1/context-manifest.json
+valid: agent-system/runtime/attempts/DEMO-102/DEMO-102-attempt-1/implementation-manifest.json
+valid: agent-system/runtime/attempts/DEMO-102/DEMO-102-attempt-1/review-verdict-1.json
