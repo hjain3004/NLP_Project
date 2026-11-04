@@ -35,7 +35,7 @@
       "model_id": "claude-opus-5-5",
       "model_version": "unpinned",
       "binding_type": "candidate",
-      "scope": "Challenger for the complex_implementation champion (openai, no adapter). Selectable only by explicit operator opt-in; never merge-eligible as a champion until promoted.",
+      "scope": "Challenger for the complex_implementation champion (openai, no adapter). Routable only with explicit operator opt-in, and only for task risks inside champion-challenger-v1 sample_scope. Work authored or reviewed by this binding does not make a task merge-eligible until the owner promotes it: such tasks reach integration_ready but are not integrated (challenger_not_merge_eligible).",
       "candidate_status": "unevaluated",
       "promotion_requires": {
         "policy": "champion-challenger-v1",

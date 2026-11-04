@@ -72,6 +72,7 @@ from .jsonschema_subset import validate as validate_schema
 from .lifecycle import latest_repair_authorization
 from .locks import path_patterns_overlap
 from .review import ReviewIdentity, ReviewManager
+from .integration_queue import CANDIDATE_AUTHOR_MARKER, CANDIDATE_BINDING_FINDING_ID
 from .routing import ALLOW_CANDIDATE_FLAG, route_reviewer, route_task
 from .scheduler import Scheduler, TaskSpec, run_hardened_git
 from .store import EventStore
@@ -101,7 +102,7 @@ PROMPT_TOTAL_LIMIT = 400_000
 REPAIR_DIFF_LIMIT = 60_000
 DIFF_LIMIT = 300_000
 LEASE_SAFETY_SECONDS = 60.0
-BINDING_FINDING_ID = "CP-CANDIDATE-BINDING-1"
+BINDING_FINDING_ID = CANDIDATE_BINDING_FINDING_ID
 MAX_LIST_ITEMS = 20
 MAX_LIST_ITEM_CHARS = 1000
 
@@ -750,11 +751,15 @@ def _model_run_status(result: ClaudeRunResult) -> str:
 
 
 def _record_model_run(
-    scheduler: Scheduler, *, run_id: str, task_id: str, attempt_id: str, result: ClaudeRunResult, kind: str
+    scheduler: Scheduler, *, run_id: str, task_id: str, attempt_id: str, result: ClaudeRunResult, kind: str,
+    binding_type: str,
 ) -> None:
     summary = result.to_record()
     summary.pop("argv", None)
     summary["kind"] = kind
+    # The routed binding type, stored with the run: the integration queue decides merge eligibility
+    # (champion-challenger-v1) from this stored fact, never from the registry as it reads later.
+    summary["binding_type"] = binding_type
     summary["cli_result_uuid"] = result.result_uuid
     scheduler.record_model_run(
         run_id=run_id,
@@ -970,7 +975,8 @@ def _attempt(
     )
     record["provider_result"] = result.to_record()
     _record_model_run(
-        scheduler, run_id=run_id, task_id=task_id, attempt_id=lease.attempt_id, result=result, kind="author"
+        scheduler, run_id=run_id, task_id=task_id, attempt_id=lease.attempt_id, result=result, kind="author",
+        binding_type=route.worker.binding_type,
     )
     if not result.ok:
         _end_failed_provider_attempt(scheduler, task_id, result)
@@ -1033,7 +1039,7 @@ def _attempt(
     implementation = _build_manifest(
         spec=spec, lease=lease, result=result, proposal=proposal,
         result_commit=result_commit, files_changed=files_changed,
-        deviations=[worker_notice["statement"]] if worker_notice else None,
+        deviations=[f"{CANDIDATE_AUTHOR_MARKER} {worker_notice['statement']}"] if worker_notice else None,
     )
     manifest_path = attempt_dir / "implementation-manifest.json"
     _write_json(manifest_path, implementation)
@@ -1268,7 +1274,8 @@ def review_task(
         )
         record["provider_result"] = result.to_record()
         _record_model_run(
-            scheduler, run_id=run_id, task_id=task_id, attempt_id=attempt_id, result=result, kind="reviewer"
+            scheduler, run_id=run_id, task_id=task_id, attempt_id=attempt_id, result=result, kind="reviewer",
+            binding_type=reviewer_route.binding_type,
         )
         if not result.ok:
             raise RunFailed(

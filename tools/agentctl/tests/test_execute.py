@@ -12,11 +12,18 @@ import json
 import os
 import pathlib
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
 from agentctl.errors import PermissionViolation
+from agentctl.integration_queue import (
+    CANDIDATE_AUTHOR_MARKER,
+    CHALLENGER_NOT_MERGE_ELIGIBLE,
+    candidate_binding_roles,
+    store_query,
+)
 from agentctl.execute import (
     MAX_FILE_BYTES,
     MAX_FILES,
@@ -779,9 +786,14 @@ class CandidateBindingRunTests(RunTestCase):
             "SELECT payload_json FROM artifacts WHERE artifact_type = 'implementation-manifest'")[0]["payload_json"])
         self.assertEqual((manifest["provider"], manifest["model"]), ("anthropic", "claude-opus-5-5"))
         self.assertTrue(any("unevaluated candidate" in text for text in manifest["deviations"]))
+        self.assertTrue(any(text.startswith(CANDIDATE_AUTHOR_MARKER) for text in manifest["deviations"]))
         record = json.loads((repo.root / result["run_record"]).read_text())
         self.assertEqual(record["route"]["worker"]["binding_type"], "candidate")
         self.assertEqual(record["candidate_bindings"]["roles"], ["worker", "reviewer"])
+        (run,) = [json.loads(r["payload_json"]) for r in repo.store.rows("SELECT payload_json FROM model_runs")]
+        self.assertEqual((run["kind"], run["binding_type"]), ("author", "candidate"))
+        # The stored evidence alone (no registry, no run-record file) makes the author a candidate for the queue.
+        self.assertEqual(candidate_binding_roles(store_query(repo.store), repo.TASK_ID), ("author",))
 
     def test_unsupported_classes_without_a_candidate_are_still_refused_with_opt_in(self) -> None:
         """Protects: opt-in is not a general fallback; a google-bound mechanical task is still unsupported."""
@@ -813,6 +825,53 @@ class CandidateBindingRunTests(RunTestCase):
         payload = json.loads(reviewed.stdout)
         self.assertEqual((payload["state"], payload["reviewer_binding_type"]), ("integration_ready", "candidate"))
 
+    def test_a_candidate_reviewed_task_reaches_integration_ready_but_is_never_integrated(self) -> None:
+        """Protects champion-challenger-v1 (challenger_merge_eligible: false): review passed, state integration_ready, but `integrate` refuses it and the branch does not move."""
+        repo = self.repo(registry=None)
+        self.authored(repo)
+        result = self.review(repo)
+        self.assertEqual((result["state"], result["reviewer_binding_type"]), ("integration_ready", "candidate"))
+        # What is stored is what decides, not the registry file: the real producer wrote both facts.
+        runs = {json.loads(r["payload_json"])["kind"]: json.loads(r["payload_json"])["binding_type"]
+                for r in repo.store.rows("SELECT payload_json FROM model_runs")}
+        self.assertEqual(runs, {"author": "initial_prior", "reviewer": "candidate"})
+        self.assertEqual(candidate_binding_roles(store_query(repo.store), repo.TASK_ID), ("reviewer",))
+        events = repo.store.event_count()
+
+        for env in ({}, {"AGENTCTL_ALLOW_CANDIDATE_BINDINGS": "1"}):
+            with self.subTest(env=env), mock.patch.dict(os.environ, env):
+                for args in ((repo.TASK_ID,), ()):
+                    refused = repo.cli("integrate", *args)
+                    outcome = json.loads(refused.stdout)
+                    if args:
+                        self.assertEqual((refused.returncode, outcome["outcome"]), (1, "refused"))
+                        self.assertEqual(outcome["reason_code"], CHALLENGER_NOT_MERGE_ELIGIBLE)
+                        self.assertIn("owner promotion of the binding (registry change under champion-challenger-v1) is required",
+                                      outcome["message"])
+                    else:
+                        self.assertEqual(outcome["outcome"], "queue_empty")
+                        self.assertEqual(outcome["parked_without_new_evidence"],
+                                         {repo.TASK_ID: CHALLENGER_NOT_MERGE_ELIGIBLE})
+        self.assertFalse(self.branch_exists(repo))  # the integration branch was never created, let alone moved
+        self.assertEqual(repo.state(), "integration_ready")
+        self.assertEqual(repo.store.event_count(), events)
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM artifacts WHERE artifact_type LIKE 'integration-%'"), 0)
+
+    def branch_exists(self, repo: LaneARepo) -> bool:
+        return subprocess.run(["git", "rev-parse", "--verify", "-q", "refs/heads/agentctl/integration"],
+                              cwd=repo.root, capture_output=True).returncode == 0
+
+    def test_a_champion_reviewed_task_in_the_same_setup_is_integrated(self) -> None:
+        """Protects against over-blocking: with champion bindings for author and reviewer the same flow integrates."""
+        repo = self.repo(registry=BOTH_ANTHROPIC)
+        run_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
+        repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.review(repo)
+        self.assertEqual(candidate_binding_roles(store_query(repo.store), repo.TASK_ID), ())
+        done = repo.cli("integrate", repo.TASK_ID)
+        self.assertEqual((done.returncode, json.loads(done.stdout)["outcome"]), (0, "integrated"))
+        self.assertEqual(repo.state(), "completed")
+
 
 class GitHardeningTests(RunTestCase):
     """Config planted in the SHARED .git (a worktree's .git links to it) must not execute under the control plane."""
@@ -837,6 +896,7 @@ class GitHardeningTests(RunTestCase):
         review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
         self.assertFalse(marker.exists(), "planted git config executed with the control plane's privileges")
 
+    @mock.patch.dict(os.environ, {"AGENTCTL_CHECK_ISOLATION": "legacy-unsafe"})  # asserts the LEGACY runner's tamper defence
     def test_config_planted_by_a_gate_check_is_caught_and_stays_inert_afterwards(self) -> None:
         """Protects: a check runs in the worktree, whose git config is the shared one. Verification now FAILS on the plant
         (gate_tampered_repository), and since nothing is restored, later control-plane git calls must still not execute it."""

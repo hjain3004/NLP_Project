@@ -11,6 +11,14 @@ changed only through ``EventStore.execute`` and ``scheduler.transition``. New
 artifact types: ``integration-lease``, ``integration-intent``,
 ``integration-rejection``, ``integration-reconciliation``, ``integration-record``.
 
+Merge eligibility (``champion-challenger-v1``, ``challenger_merge_eligible: false``): a task whose
+independent approval came from an unevaluated *candidate* reviewer binding, or whose author was a candidate
+binding, is parked as ``challenger_not_merge_eligible`` and is never selected, however the branch moves. The
+fact is read from evidence stored when the work was done (the approving verdict, the implementation manifest,
+the model-run rows), never from the current registry file, so a later registry edit cannot silently
+re-qualify an old review. Parking writes nothing: it costs no event or rejection per call. There is no flag
+or environment variable that lifts it.
+
 Serialization is enforced inside the claim transaction (at most one task in
 ``integrating``), not by the process-level lock that ``integrate`` also takes.
 """
@@ -37,6 +45,9 @@ from .scheduler import transition
 from .store import EventStore
 
 __all__ = [
+    "CANDIDATE_AUTHOR_MARKER",
+    "CANDIDATE_BINDING_FINDING_ID",
+    "CHALLENGER_NOT_MERGE_ELIGIBLE",
     "DEPENDENCY_CANCELED",
     "QUEUE_INELIGIBLE_STATES",
     "IntegrationBusy",
@@ -45,6 +56,8 @@ __all__ = [
     "IntegrationRejected",
     "QueueEntry",
     "build_queue",
+    "candidate_binding_roles",
+    "challenger_explanation",
     "claim_integration",
     "complete_integration",
     "current_lease",
@@ -87,6 +100,16 @@ QUEUE_INELIGIBLE_STATES = frozenset(
 #: waiting, so retrying it on every head move would only write rejection artifacts.
 DEPENDENCY_CANCELED = "dependency_canceled"
 
+#: Parked reason for a task whose independent approval, or whose authorship, came from an unevaluated
+#: candidate model binding. ``agent-system/routing/champion-challenger.json`` says
+#: ``challenger_merge_eligible: false``: such a task reaches ``integration_ready`` (its review passed) but
+#: is never integrated until the owner promotes the binding. See :func:`candidate_binding_roles`.
+CHALLENGER_NOT_MERGE_ELIGIBLE = "challenger_not_merge_eligible"
+#: The control plane's own verdict finding that discloses a candidate reviewer (written by ``review run``).
+CANDIDATE_BINDING_FINDING_ID = "CP-CANDIDATE-BINDING-1"
+#: Prefix of the control plane's manifest ``deviations`` line that discloses a candidate author.
+CANDIDATE_AUTHOR_MARKER = "[CP-CANDIDATE-BINDING-1:author]"
+
 
 class IntegrationRefused(AgentctlError):
     """A request was refused without a judgement about the candidate."""
@@ -94,6 +117,13 @@ class IntegrationRefused(AgentctlError):
     code = "integration_refused"
 
     def __init__(self, message: str, *, reason_code: str, **context: object) -> None:
+        if (
+            reason_code == "retry_without_new_evidence"
+            and context.get("prior_reason") == CHALLENGER_NOT_MERGE_ELIGIBLE
+        ):
+            # The generic "the branch has not moved" wording is false here: the head moving changes nothing.
+            # Report the governance reason as the refusal's own code, with the remedy.
+            reason_code, message = CHALLENGER_NOT_MERGE_ELIGIBLE, challenger_explanation()
         super().__init__(message, reason_code=reason_code, **context)
         self.reason_code = reason_code
 
@@ -163,10 +193,19 @@ class QueueEntry:
     topological_index: int
     waiting_on: tuple[str, ...]
     parked_reason: str | None
+    #: For ``challenger_not_merge_eligible``: which of ``author`` / ``reviewer`` was a candidate binding.
+    candidate_roles: tuple[str, ...] = ()
 
     @property
     def eligible(self) -> bool:
         return not self.waiting_on and self.parked_reason is None
+
+    @property
+    def parked_explanation(self) -> str | None:
+        """What a parked reason means and what lifts it, for the reasons that have a governance remedy."""
+        if self.parked_reason == CHALLENGER_NOT_MERGE_ELIGIBLE:
+            return challenger_explanation(self.candidate_roles)
+        return None
 
     @property
     def sort_key(self) -> tuple[int, int, str]:
@@ -223,23 +262,96 @@ def build_queue(query: Query, branch_head: str | None) -> IntegrationQueue:
                 or tasks[dependency]["state"] != TaskState.COMPLETED.value
             )
         )
+        candidate_roles = candidate_binding_roles(query, task_id)
+        if candidate_roles:
+            parked: str | None = CHALLENGER_NOT_MERGE_ELIGIBLE
+        elif any(
+            dependency in tasks and tasks[dependency]["state"] == TaskState.CANCELED.value
+            for dependency in edges.get(task_id, ())
+        ):
+            parked = DEPENDENCY_CANCELED
+        else:
+            parked = _parked_reason(query, task_id, branch_head)
         entries.append(
             QueueEntry(
                 task_id=task_id,
                 integration_order=_integration_order(json.loads(row["payload_json"])),
                 topological_index=topological.get(task_id, len(topological)),
                 waiting_on=waiting,
-                parked_reason=(
-                    DEPENDENCY_CANCELED
-                    if any(
-                        dependency in tasks and tasks[dependency]["state"] == TaskState.CANCELED.value
-                        for dependency in edges.get(task_id, ())
-                    )
-                    else _parked_reason(query, task_id, branch_head)
-                ),
+                parked_reason=parked,
+                candidate_roles=candidate_roles,
             )
         )
     return IntegrationQueue(tuple(sorted(entries, key=lambda entry: entry.sort_key)))
+
+
+def challenger_explanation(roles: Sequence[str] = ()) -> str:
+    """Why a ``challenger_not_merge_eligible`` task is withheld and what lifts it."""
+    which = " and ".join(roles) if roles else "author and/or independent reviewer"
+    return (
+        f"{CHALLENGER_NOT_MERGE_ELIGIBLE}: the {which} model binding behind this task is an unevaluated "
+        "candidate, and champion-challenger-v1 sets challenger_merge_eligible to false. The task passed "
+        "review and stays integration_ready, but it is not integrated: owner promotion of the binding "
+        "(registry change under champion-challenger-v1) is required. The stored evidence is not "
+        "re-qualified by a later registry edit; once the binding is promoted the task needs fresh "
+        "review evidence from it. No flag or environment variable waives this."
+    )
+
+
+def _is_candidate_run(query: Query, run_id: object) -> bool:
+    """``model_runs`` is written by the control plane at invocation time and records the routed binding type."""
+    if not run_id:
+        return False
+    rows = query("SELECT payload_json FROM model_runs WHERE run_id = ?", (str(run_id),))
+    return any(json.loads(row["payload_json"]).get("binding_type") == "candidate" for row in rows)
+
+
+def candidate_binding_roles(query: Query, task_id: str) -> tuple[str, ...]:
+    """Roles (``author`` / ``reviewer``) of the task's latest attempt that ran on an unevaluated candidate binding.
+
+    Read from stored evidence only: the approving verdict's ``CP-CANDIDATE-BINDING-1`` finding, the
+    ``binding_type`` recorded on the reviewer's model run, the implementation manifest's candidate
+    deviation, and the ``binding_type`` recorded on the author's model run. The current registry is
+    deliberately not consulted: a later registry edit must not re-qualify an old approval. Evidence about
+    earlier attempts is ignored (a repaired task is judged by the attempt that was approved).
+    """
+    attempt = query(
+        "SELECT attempt_id, author_run_id FROM attempts WHERE task_id = ? "
+        "ORDER BY attempt_number DESC LIMIT 1",
+        (task_id,),
+    )
+    if not attempt:
+        return ()
+    attempt_id, author_run_id = attempt[0]["attempt_id"], attempt[0]["author_run_id"]
+    roles: list[str] = []
+
+    author = _is_candidate_run(query, author_run_id)
+    for row in query(
+        "SELECT payload_json FROM artifacts WHERE task_id = ? AND attempt_id = ? "
+        "AND artifact_type = 'implementation-manifest'",
+        (task_id, attempt_id),
+    ):
+        deviations = json.loads(row["payload_json"]).get("deviations") or ()
+        author = author or any(
+            isinstance(text, str) and text.startswith(CANDIDATE_AUTHOR_MARKER) for text in deviations
+        )
+    if author:
+        roles.append("author")
+
+    reviewer = False
+    for row in query(
+        "SELECT reviewer_run_id, payload_json FROM reviews WHERE task_id = ? AND attempt_id = ? "
+        "AND verdict = 'no_blocking_findings'",
+        (task_id, attempt_id),
+    ):
+        findings = json.loads(row["payload_json"]).get("findings") or ()
+        reviewer = reviewer or any(
+            isinstance(finding, Mapping) and finding.get("finding_id") == CANDIDATE_BINDING_FINDING_ID
+            for finding in findings
+        ) or _is_candidate_run(query, row["reviewer_run_id"])
+    if reviewer:
+        roles.append("reviewer")
+    return tuple(roles)
 
 
 def _parked_reason(query: Query, task_id: str, branch_head: str | None) -> str | None:
