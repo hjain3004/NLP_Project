@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import pathlib
+import signal
 import sqlite3
 import subprocess
+import sys
+import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -30,6 +34,8 @@ from .store import EventStore
 
 __all__ = [
     "ADMISSION_CONDITIONS",
+    "CAPABILITY_RANK",
+    "CHECK_TIMEOUT_SECONDS",
     "SCHEDULER_CYCLE",
     "TRANSITION_RULES",
     "AdmissionDecision",
@@ -227,6 +233,78 @@ _CAPABILITY_RANK = {
 }
 
 
+#: Public name for routing's reviewer-floor comparisons.
+CAPABILITY_RANK = _CAPABILITY_RANK
+
+#: Wall-clock limit for each contract-owned deterministic check. A check that reaches it
+#: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier.
+CHECK_TIMEOUT_SECONDS = 600.0
+
+_CHECK_ENV_PASSTHROUGH = ("PYTHONPATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ")
+
+
+def _check_environment(home: str) -> dict[str, str]:
+    """Environment for a deterministic check: no credentials, no provider variables.
+
+    ``HOME`` is a fresh empty directory (so no ``~/.claude``, ``~/.ssh``, git
+    credential helpers), ``PATH`` is minimal, and only a short allowlist of
+    non-secret variables is inherited. Nothing named ``CLAUDE_*``/``ANTHROPIC_*``
+    can reach a check.
+    """
+    path = ["/usr/local/bin", "/usr/bin", "/bin"]
+    interpreter_dir = os.path.dirname(os.path.realpath(sys.executable))
+    if interpreter_dir not in path:
+        path.insert(0, interpreter_dir)
+    env = {"PATH": os.pathsep.join(path), "HOME": home}
+    for name in _CHECK_ENV_PASSTHROUGH:
+        if name in os.environ:
+            env[name] = os.environ[name]
+    return env
+
+
+def _run_check(command: str, cwd: pathlib.Path, timeout: float) -> tuple[int, bytes, bytes, bool]:
+    """Run one check in its own process group; kill the whole group on timeout."""
+    with tempfile.TemporaryDirectory(prefix="agentctl-check-home-") as home:
+        proc = subprocess.Popen(
+            command,
+            cwd=cwd,
+            shell=True,
+            executable="/bin/sh",
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_check_environment(home),
+            start_new_session=True,
+        )
+        timed_out = False
+        try:
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _kill_process_group(proc.pid)
+                try:
+                    stdout, stderr = proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout, stderr = b"", b""
+                    proc.wait()
+        except BaseException:
+            _kill_process_group(proc.pid)
+            proc.wait()
+            raise
+        finally:
+            _kill_process_group(proc.pid)
+    return (124 if timed_out else proc.returncode), stdout or b"", stderr or b"", timed_out
+
+
+def _kill_process_group(pgid: int) -> None:
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
 def task_approval_scope(spec: TaskSpec) -> str:
     if not spec.human_approval_action:
         raise PlanningError("task has no required human approval action", task_id=spec.task_id)
@@ -356,6 +434,10 @@ class Scheduler:
         if not rows:
             raise PlanningError("unknown task", task_id=task_id)
         return TaskSpec.from_payload(json.loads(rows[0]["payload_json"]))
+
+    def task_spec(self, task_id: str) -> TaskSpec:
+        """The registered, immutable spec of ``task_id`` (read-only)."""
+        return self._spec(task_id)
 
     def _admission_facts(
         self,
@@ -661,6 +743,88 @@ class Scheduler:
             return "attempt_failed"
         return str(self.store.execute(f"schema-failed:{lease['lease_id']}", event, failure))
 
+    def fail_attempt(self, task_id: str, reason_code: str) -> str:
+        """End a running attempt whose worker output was received but is unusable.
+
+        Used for evaluated failures that existing paths do not cover (a scope-audit
+        rejection, an unusable proposal). ``running -> repair_required`` while the
+        task still has attempts left, ``-> escalated`` when none remain (both are the
+        permitted outcomes of ``submission_failed``). The lease and its semantic locks
+        are released and the attempt is marked ``failed``. Never advances toward a
+        candidate. Infrastructure failures that evaluated nothing use
+        :meth:`expire_lease` instead, and malformed artifacts use
+        :meth:`handle_schema_error`.
+        """
+        self.leases.expire_dead()
+        lease_rows = self.store.rows(
+            "SELECT * FROM leases WHERE task_id = ? AND active = 1 ORDER BY epoch DESC LIMIT 1",
+            (task_id,),
+        )
+        if not lease_rows:
+            raise IllegalTransition("attempt failure has no active attempt", task_id=task_id)
+        lease = lease_rows[0]
+        current = str(self.store.status(task_id)["state"])
+        remaining = int(self.store.scalar(
+            "SELECT attempts_remaining FROM budgets WHERE scope_type = 'task' AND scope_id = ?",
+            (task_id,),
+        ) or 0)
+        outcome = TaskState.REPAIR_REQUIRED if remaining > 0 else TaskState.ESCALATED
+        transition(current, "submission_failed", outcome)
+        event = make_event(
+            event_type="submission_failed", reason_code=reason_code,
+            actor_role="scheduler", task_id=task_id, attempt_id=lease["attempt_id"],
+            prior_state=current, next_state=outcome.value,
+        )
+
+        def failure(connection: sqlite3.Connection) -> str:
+            row = connection.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if row is None or row["state"] != current:
+                raise IllegalTransition("task changed before attempt failure", task_id=task_id)
+            self._end_active_attempt(connection, lease, "failed", outcome.value)
+            return outcome.value
+
+        return str(self.store.execute(f"attempt-failed:{lease['lease_id']}", event, failure))
+
+    def record_model_run(
+        self,
+        *,
+        run_id: str,
+        task_id: str,
+        attempt_id: str,
+        provider: str,
+        model_version: str | None,
+        status: str,
+        usage: Mapping[str, Any] | None,
+        summary: Mapping[str, Any],
+    ) -> str:
+        """Persist one provider invocation (success or failure) in ``model_runs``.
+
+        ``run_id`` is the control-plane-minted run identity. ``usage`` is the
+        provider's raw usage object (``{}`` when none was reported, never zeros).
+        ``summary`` must already be redacted and free of prompts and document text.
+        """
+        event = make_event(
+            event_type="model_run_recorded", reason_code=status, actor_role="scheduler",
+            task_id=task_id, attempt_id=attempt_id, provider=provider,
+            model_version=model_version, artifact_refs=[f"model-run:{run_id}"],
+        )
+
+        def insert(connection: sqlite3.Connection) -> str:
+            connection.execute(
+                "INSERT INTO model_runs(run_id, task_id, attempt_id, provider, model_version, "
+                "status, usage_json, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id, task_id, attempt_id, provider, model_version, status,
+                    json.dumps(dict(usage or {}), sort_keys=True, separators=(",", ":")),
+                    json.dumps(dict(summary), sort_keys=True, separators=(",", ":")),
+                ),
+            )
+            return run_id
+
+        return str(self.store.execute(f"model-run:{run_id}", event, insert))
+
     def ingest_manifest(self, task_id: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
         spec = self._spec(task_id)
         self.leases.expire_dead()
@@ -925,21 +1089,18 @@ class Scheduler:
         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
         results: list[dict[str, Any]] = []
         for command in spec.deterministic_checks:
-            completed = subprocess.run(
-                command,
-                cwd=worktree,
-                shell=True,
-                executable="/bin/sh",
-                capture_output=True,
+            exit_code, stdout, stderr, timed_out = _run_check(
+                command, worktree, CHECK_TIMEOUT_SECONDS
             )
-            results.append(
-                {
-                    "command": command,
-                    "exit_code": completed.returncode,
-                    "stdout_hash": hashlib.sha256(completed.stdout).hexdigest(),
-                    "stderr_hash": hashlib.sha256(completed.stderr).hexdigest(),
-                }
-            )
+            result: dict[str, Any] = {
+                "command": command,
+                "exit_code": exit_code,
+                "stdout_hash": hashlib.sha256(stdout).hexdigest(),
+                "stderr_hash": hashlib.sha256(stderr).hexdigest(),
+            }
+            if timed_out:
+                result["timed_out"] = True
+            results.append(result)
         passed = all(item["exit_code"] == 0 for item in results)
         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
         evidence_hash = sha256_of_json(evidence)
