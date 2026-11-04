@@ -202,5 +202,24 @@ class IntegratorHardeningTests(unittest.TestCase):
         self.assertEqual(state(), before)
 
 
+class SensitiveEnvironmentTests(unittest.TestCase):
+    def test_integrator_drops_credential_variables_and_keeps_the_rest(self) -> None:
+        """F5: the integrate command drops ANTHROPIC_*/CLAUDE*/*TOKEN*/*SECRET*/*KEY* from os.environ."""
+        from unittest import mock
+
+        from agentctl.gate_runner import drop_sensitive_environment
+
+        synthetic = {
+            "ANTHROPIC_API_KEY": "sk-synthetic", "CLAUDE_CODE_X": "synthetic",
+            "MY_TOKEN": "synthetic", "DB_SECRET": "synthetic", "KEEP_ME": "kept",
+        }
+        with mock.patch.dict(os.environ, synthetic, clear=True):
+            removed = drop_sensitive_environment()
+            remaining = dict(os.environ)
+
+        self.assertEqual(removed, ["ANTHROPIC_API_KEY", "CLAUDE_CODE_X", "DB_SECRET", "MY_TOKEN"])
+        self.assertEqual(remaining, {"KEEP_ME": "kept"})
+
+
 if __name__ == "__main__":
     unittest.main()

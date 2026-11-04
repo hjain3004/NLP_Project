@@ -53,6 +53,7 @@ import contextlib
 import ctypes
 import hashlib
 import os
+import re
 import resource
 import shutil
 import signal
@@ -69,6 +70,7 @@ from typing import Any
 __all__ = [
     "DEFAULT_LIMITS",
     "GATE_ID_VARIABLE",
+    "drop_sensitive_environment",
     "integrator_hardening",
     "namespace_isolation_available",
     "run_checks",
@@ -207,6 +209,23 @@ def scrubbed_environment(home: str) -> dict[str, str]:
         # The gate tree is outside any repository; never let git search upwards.
         "GIT_CEILING_DIRECTORIES": "/",
     }
+
+
+_SENSITIVE = re.compile(r"^(ANTHROPIC_|CLAUDE)|TOKEN|SECRET|KEY|PASSWORD|PASSWD|CREDENTIAL", re.IGNORECASE)
+
+
+def drop_sensitive_environment() -> list[str]:
+    """Remove credential-like variables (ANTHROPIC_*, CLAUDE*, *TOKEN*, *SECRET*, *KEY*, ...)
+    from this process's ``os.environ`` and return their names (never their values).
+
+    The integrator needs none of them. This does not rewrite the initial environment
+    block the kernel shows in ``/proc/<pid>/environ``; gates are kept from reading that
+    by the PID namespace (and non-dumpable mode), and never inherit ``os.environ``.
+    """
+    names = sorted(name for name in os.environ if _SENSITIVE.search(name))
+    for name in names:
+        del os.environ[name]
+    return names
 
 
 # ------------------------------------------------------------- processes ----

@@ -13,6 +13,7 @@ import json
 import os
 import sys
 
+from ..gate_runner import drop_sensitive_environment
 from ..integrate import DEFAULT_BRANCH, IntegrationSettings, exit_code_for, integrate
 
 NAME = "integrate"
@@ -25,6 +26,8 @@ _OPTIONS = {"--branch", "--base", "--integrator-id", "--check-timeout"}
 
 
 def run(argv: list[str]) -> int:
+    # The integrator reads no credential; never keep one where a gate could be handed it.
+    drop_sensitive_environment()
     task_id: str | None = None
     options: dict[str, str] = {}
     index = 0
