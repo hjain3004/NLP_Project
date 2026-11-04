@@ -12,9 +12,11 @@ import json
 import os
 import pathlib
 import shutil
+import signal
 import tempfile
 import unittest
 import uuid
+from unittest import mock
 
 from agentctl.adapters.claude_cli import ClaudeCliAdapter, build_argv
 
@@ -64,14 +66,11 @@ class InvocationTests(AdapterTestCase):
             build_argv("claude", "claude-test-1", SCHEMA, 0.25, session)[1:], call["argv"]
         )
 
-    def test_child_runs_outside_the_repository_with_environment_passed_unchanged(self) -> None:
-        """Protects: a repo CLAUDE.md cannot leak into the worker; the environment is passed through (names only observed here)."""
-        os.environ["AGENTCTL_TEST_PASSTHROUGH"] = "x"
-        self.addCleanup(os.environ.pop, "AGENTCTL_TEST_PASSTHROUGH", None)
+    def test_child_runs_in_an_empty_directory_outside_the_repository(self) -> None:
+        """Protects: a repo CLAUDE.md or project settings cannot leak into the worker (environment is covered by ChildEnvironmentTests)."""
         self.invoke()
         (call,) = self.fake.calls()
         self.assertFalse(pathlib.Path(call["cwd"]).is_relative_to(SOURCE_ROOT))
-        self.assertIn("AGENTCTL_TEST_PASSTHROUGH", call["env_names"])
 
     def test_success_captures_ids_served_model_and_usage_without_inventing_numbers(self) -> None:
         """Protects: session/result ids, served model, summed input tokens, raw usage, latency and cost are captured as reported."""
@@ -98,6 +97,74 @@ class InvocationTests(AdapterTestCase):
         )
         self.assertEqual((result.status, result.provider, result.model), ("completed", "anthropic", "claude-test-1"))
         self.assertEqual((result.task_id, result.attempt_id, result.contract_hash), ("T", "T-attempt-1", "d" * 64))
+
+
+HOST_ONLY = {
+    # Variables a hosting agent session sets that must never reach a worker model's process.
+    "CLAUDECODE": "1",
+    "CLAUDE_CODE_SESSION_ID": "host-session",
+    "CLAUDE_CODE_REMOTE_SESSION_ID": "host-remote",
+    "CLAUDE_CODE_CHILD_SESSION": "1",
+    "CLAUDE_CODE_USER_EMAIL": "operator@example.invalid",
+    "CLAUDE_CODE_ACCOUNT_UUID": "account",
+    "CLAUDE_CODE_ORGANIZATION_UUID": "organization",
+    "CLAUDE_CODE_MESSAGING_TOKEN": "messaging-secret",
+    "CLAUDE_CODE_MESSAGING_SOCKET": "/tmp/socket",
+    "CLAUDE_SESSION_INGRESS_TOKEN_FILE": "/tmp/ingress",
+    "CLAUDE_ADDITIONAL_DIRECTORIES": "/tmp/extra",
+    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1",
+    "CLAUDE_CODE_DEBUG": "1",
+    "CLAUDE_CODE_DIAGNOSTICS_FILE": "/tmp/diag",
+    "CLAUDE_CODE_TEE_SDK_STDOUT": "1",
+    "CLAUDE_CODE_REMOTE": "true",
+    "GITHUB_TOKEN": "gh-secret",
+    "AWS_SECRET_ACCESS_KEY": "aws-secret",
+    "GIT_CONFIG_COUNT": "1",
+}
+NEEDED = {
+    "ANTHROPIC_BASE_URL": "http://gateway.invalid",
+    "HTTPS_PROXY": "http://proxy.invalid",
+    "NO_PROXY": "localhost",
+    "SSL_CERT_FILE": "/etc/ca.pem",
+    "NODE_EXTRA_CA_CERTS": "/etc/ca.pem",
+}
+
+
+class ChildEnvironmentTests(AdapterTestCase):
+    """SIMULATED provider that records the NAMES (and HOME's contents) of what it was given."""
+
+    def test_child_gets_an_allowlisted_environment_not_the_host_session(self) -> None:
+        """Protects AGENTS.md sections 2 and 4: host-session variables (email, attribution, session ids, tokens) cannot reach the worker's context."""
+        with mock.patch.dict(os.environ, {**HOST_ONLY, **NEEDED}):
+            self.invoke()
+        (call,) = self.fake.calls()
+        names = set(call["env_names"])
+        self.assertEqual(names & set(HOST_ONLY), set(), "host-session variables leaked to the child")
+        self.assertIn("PATH", names)
+        for needed in NEEDED:
+            self.assertIn(needed, names)
+
+    def test_child_home_is_an_empty_private_directory_unless_the_operator_names_one(self) -> None:
+        """Protects: the operator's real home (memory, account data) is not visible; an explicit AGENTCTL_CLAUDE_HOME is honoured."""
+        real_home = os.path.expanduser("~")
+        self.invoke()
+        (call,) = self.fake.calls()
+        self.assertNotEqual(call["home"], real_home)
+        self.assertEqual(call["home_entries"], [])
+        chosen = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, chosen, True)
+        with mock.patch.dict(os.environ, {"AGENTCTL_CLAUDE_HOME": chosen}):
+            self.invoke()
+        self.assertEqual(self.fake.calls()[1]["home"], chosen)
+
+    def test_escaped_grandchild_holding_stdout_does_not_delay_a_finished_result(self) -> None:
+        """Protects: a descendant in its own session that keeps the output open cannot stall collection of an already-finished run."""
+        pid_file = pathlib.Path(self.directory.name) / "escaped.pid"
+        self.fake.set(structured_output={"answer": "pong"}, escape_pid_file=str(pid_file))
+        result = self.invoke(timeout_seconds=30)
+        self.addCleanup(lambda: os.path.exists(f"/proc/{pid_file.read_text()}") and os.kill(int(pid_file.read_text()), signal.SIGKILL))
+        self.assertTrue(result.ok, result.failure_detail)
+        self.assertLess(result.wall_ms, 8000)
 
 
 class FailureClassificationTests(AdapterTestCase):

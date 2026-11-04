@@ -32,11 +32,13 @@ The child runs in its own process group with a hard wall-clock timeout. On
 timeout, cancellation, or any exception the whole group is killed (so a
 grandchild cannot outlive the attempt), the child is reaped, and partial output
 is captured. Credentials and ``~/.claude`` are never read, copied, or logged by
-this module, and environment *values* are never recorded.
+this module, and environment *values* are never recorded. The child receives an
+**allowlisted** environment (see ``child_environment``), never the host's.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -48,8 +50,10 @@ import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from pathlib import Path
+from typing import Any, Iterator, Mapping, Sequence
 
+from ..errors import ConfigError
 from ..jsonschema_subset import validate as validate_schema
 from .base import Adapter, RunResult
 
@@ -64,6 +68,8 @@ __all__ = [
     "ClaudeCliAdapter",
     "ClaudeRunResult",
     "build_argv",
+    "child_environment",
+    "child_sandbox",
     "classify_output",
     "redact",
     "run_bounded",
@@ -279,25 +285,12 @@ def _kill_group(pgid: int) -> None:
         pass
 
 
-def _reap(proc: subprocess.Popen[bytes]) -> tuple[bytes, bytes]:
-    """Collect remaining output from an already-killed child and reap it."""
-    try:
-        out, err = proc.communicate(timeout=_REAP_GRACE_SECONDS)
-    except subprocess.TimeoutExpired as exc:
-        # A process that escaped the group is still holding a pipe open.
-        out, err = exc.stdout or b"", exc.stderr or b""
-        for pipe in (proc.stdout, proc.stderr, proc.stdin):
-            if pipe is not None:
-                try:
-                    pipe.close()
-                except OSError:
-                    pass
-        try:
-            proc.kill()
-        except OSError:
-            pass
-        proc.wait()
-    return out or b"", err or b""
+_OUTPUT_READ_LIMIT = 32 * 1024 * 1024
+
+
+def _read_capped(path: Path) -> bytes:
+    with open(path, "rb") as handle:
+        return handle.read(_OUTPUT_READ_LIMIT)
 
 
 def run_bounded(
@@ -310,44 +303,117 @@ def run_bounded(
 ) -> BoundedProcess:
     """Run ``argv`` in its own process group under a hard wall-clock limit.
 
-    The whole group is killed on timeout, on any exception (including
-    ``KeyboardInterrupt``), and after a normal exit, so no descendant outlives
-    the call. The child is always reaped.
+    Input and output go through temporary files, **not pipes**: a descendant that
+    escapes the group (its own session) and keeps a pipe open could otherwise stall
+    collection long after the child has finished. The wait is on the child itself, so
+    the limit is a hard deadline. The whole group is killed on timeout, on any exception
+    (including ``KeyboardInterrupt``), and after a normal exit; the child is always reaped.
     """
     started = time.monotonic()
 
     def elapsed_ms() -> int:
         return int((time.monotonic() - started) * 1000)
 
-    try:
-        proc = subprocess.Popen(
-            list(argv),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=cwd,
-            env=None if env is None else dict(env),
-            start_new_session=True,
-        )
-    except OSError as exc:
-        return BoundedProcess(None, b"", b"", False, elapsed_ms(), spawn_error=type(exc).__name__)
-
-    pgid = proc.pid  # start_new_session makes the child its own group leader
-    timed_out = False
-    try:
+    with tempfile.TemporaryDirectory(prefix="agentctl-io-") as scratch_name:
+        scratch = Path(scratch_name)
+        stdin_source: Any = subprocess.DEVNULL
+        if stdin is not None:
+            (scratch / "stdin").write_bytes(stdin)
+            stdin_source = open(scratch / "stdin", "rb")
         try:
-            stdout, stderr = proc.communicate(input=stdin, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_group(pgid)
-            stdout, stderr = _reap(proc)
-    except BaseException:
-        _kill_group(pgid)
-        _reap(proc)
-        raise
-    finally:
-        _kill_group(pgid)  # grandchildren that outlived the leader
-    return BoundedProcess(proc.returncode, stdout or b"", stderr or b"", timed_out, elapsed_ms())
+            with open(scratch / "stdout", "wb") as out, open(scratch / "stderr", "wb") as err:
+                try:
+                    proc = subprocess.Popen(
+                        list(argv),
+                        stdin=stdin_source,
+                        stdout=out,
+                        stderr=err,
+                        cwd=cwd,
+                        env=None if env is None else dict(env),
+                        start_new_session=True,
+                    )
+                except OSError as exc:
+                    return BoundedProcess(None, b"", b"", False, elapsed_ms(), spawn_error=type(exc).__name__)
+                pgid = proc.pid  # start_new_session makes the child its own group leader
+                timed_out = False
+                try:
+                    try:
+                        proc.wait(timeout=timeout)
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                        _kill_group(pgid)
+                        proc.wait()
+                except BaseException:
+                    _kill_group(pgid)
+                    proc.wait()
+                    raise
+                finally:
+                    _kill_group(pgid)  # descendants that outlived the leader
+        finally:
+            if stdin is not None:
+                stdin_source.close()
+        return BoundedProcess(
+            proc.returncode,
+            _read_capped(scratch / "stdout"),
+            _read_capped(scratch / "stderr"),
+            timed_out,
+            elapsed_ms(),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# The child's environment                                                     #
+# --------------------------------------------------------------------------- #
+
+#: Names the CLI needs to start, reach the API gateway/proxy, and trust its CAs.
+_ENV_ALLOW_EXACT = frozenset(
+    {
+        "PATH", "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "TERM", "NO_COLOR",
+        "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "ALL_PROXY",
+        "https_proxy", "http_proxy", "no_proxy", "all_proxy",
+        "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+        # Explicit credential/config locations, passed by name only (values are never read or logged).
+        "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR",
+    }
+)
+_ENV_ALLOW_PREFIXES = ("ANTHROPIC_", "LC_")
+#: Underscore-separated name tokens that mark host-session state; they win over the allowlist.
+_ENV_DENY_TOKENS = frozenset(
+    {
+        "CLAUDECODE", "SESSION", "REMOTE", "INGRESS", "DEBUG", "DIAGNOSTICS", "TEE", "EMAIL",
+        "ACCOUNT", "ORGANIZATION", "MESSAGING", "ADDITIONAL",
+    }
+)
+#: Operator-chosen HOME for the child (a dedicated directory holding only the CLI login, if the CLI
+#: authenticates from files). Unset means a fresh empty directory, so the operator's own memory,
+#: account data, and settings are not visible to the worker model.
+CHILD_HOME_VARIABLE = "AGENTCTL_CLAUDE_HOME"
+
+
+def child_environment(environ: Mapping[str, str], home: str) -> dict[str, str]:
+    """The allowlisted environment for a worker process (names only are ever inspected)."""
+    env: dict[str, str] = {}
+    for name, value in environ.items():
+        allowed = name in _ENV_ALLOW_EXACT or name.startswith(_ENV_ALLOW_PREFIXES)
+        if allowed and not (set(name.upper().split("_")) & _ENV_DENY_TOKENS):
+            env[name] = value
+    env["HOME"] = home
+    return env
+
+
+@contextlib.contextmanager
+def child_sandbox(environ: Mapping[str, str] | None = None) -> Iterator[tuple[dict[str, str], str]]:
+    """Yield ``(env, cwd)``: the allowlisted environment and an empty working directory outside any repo."""
+    environ = os.environ if environ is None else environ
+    chosen = environ.get(CHILD_HOME_VARIABLE)
+    if chosen and not Path(chosen).is_dir():
+        raise ConfigError(f"{CHILD_HOME_VARIABLE} must name an existing directory")
+    with tempfile.TemporaryDirectory(prefix="agentctl-claude-") as base_name:
+        base = Path(base_name)
+        (base / "work").mkdir()
+        home = Path(chosen) if chosen else base / "home"
+        home.mkdir(exist_ok=True)
+        yield child_environment(environ, str(home)), str(base / "work")
 
 
 # --------------------------------------------------------------------------- #
@@ -697,15 +763,12 @@ class ClaudeCliAdapter(Adapter):
         if executable is None:
             process = BoundedProcess(None, b"", b"", False, 0, spawn_error="FileNotFoundError")
         else:
-            # A neutral, empty working directory: the model has no tools, and a repository
-            # CLAUDE.md or project settings must not leak into the worker's context.
-            with tempfile.TemporaryDirectory(prefix="agentctl-claude-") as neutral_cwd:
+            # Allowlisted environment, a private empty HOME, and an empty working directory outside
+            # any repository: the model has no tools, and neither host-session state nor a
+            # repository CLAUDE.md may reach its context.
+            with child_sandbox() as (env, neutral_cwd):
                 process = run_bounded(
-                    argv,
-                    stdin=prompt.encode("utf-8"),
-                    timeout=float(timeout),
-                    env=dict(os.environ),
-                    cwd=neutral_cwd,
+                    argv, stdin=prompt.encode("utf-8"), timeout=float(timeout), env=env, cwd=neutral_cwd
                 )
         return classify_output(
             process,

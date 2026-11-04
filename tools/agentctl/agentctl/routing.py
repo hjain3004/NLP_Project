@@ -37,7 +37,6 @@ applied.
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 from dataclasses import asdict, dataclass
@@ -45,7 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import ADAPTER_BINDINGS
-from .adapters.claude_cli import run_bounded
+from .adapters.claude_cli import child_sandbox, run_bounded
 from .config import repo_root as resolve_repo_root
 from .errors import HumanGate, PlanningError
 from .scheduler import CAPABILITY_RANK
@@ -159,12 +158,10 @@ def _policy(root: Path) -> dict[str, Any]:
 
 def _logged_in(executable: str) -> bool | None:
     """``claude auth status`` -> loggedIn. Only that one boolean is retained; None = unknown."""
-    result = run_bounded(
-        [executable, "auth", "status"],
-        stdin=None,
-        timeout=_AUTH_PROBE_SECONDS,
-        env=dict(os.environ),
-    )
+    with child_sandbox() as (env, cwd):  # the same environment the worker will get
+        result = run_bounded(
+            [executable, "auth", "status"], stdin=None, timeout=_AUTH_PROBE_SECONDS, env=env, cwd=cwd
+        )
     if result.spawn_error is not None or result.timed_out:
         return None
     try:

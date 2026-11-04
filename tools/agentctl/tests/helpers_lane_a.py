@@ -43,8 +43,10 @@ if args[:2] == ["auth", "status"]:
 
 stdin = sys.stdin.read()
 with open(os.path.join(here, "calls.jsonl"), "a") as log:
+    home = os.environ.get("HOME", "")
     log.write(json.dumps({"argv": args, "stdin": stdin, "cwd": os.getcwd(),
-                           "env_names": sorted(os.environ)}) + "\n")
+                           "env_names": sorted(os.environ), "home": home,
+                           "home_entries": sorted(os.listdir(home)) if os.path.isdir(home) else None}) + "\n")
 
 def flag(name):
     return args[args.index(name) + 1] if name in args else None
@@ -59,6 +61,13 @@ if scenario.get("expire_lease_db"):
     connection.execute("UPDATE leases SET expires_at = '2000-01-01T00:00:00.000000Z' WHERE active = 1")
     connection.commit()
     connection.close()
+
+if scenario.get("escape_pid_file"):
+    # A descendant in its own session that keeps our stdout/stderr open (defeats pipe draining).
+    escaped = subprocess.Popen(["sleep", "15"], start_new_session=True)
+    open(scenario["escape_pid_file"], "w").write(str(escaped.pid))
+if scenario.get("make_dir_at"):
+    os.makedirs(scenario["make_dir_at"], exist_ok=True)
 
 if mode == "sleep":
     grandchild = subprocess.Popen(["sleep", "300"])
@@ -187,6 +196,7 @@ class LaneARepo:
         deterministic_checks: tuple[str, ...] = ("test -d docs/lane-a",),
         registry: Mapping[str, tuple[str, str]] | None = None,
         symlink_target: pathlib.Path | None = None,
+        symlink_name: str = "escape",
         integration_order: int = 1,
     ) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -211,7 +221,7 @@ class LaneARepo:
         (notes / "notes.md").write_text("original line\n", encoding="utf-8")
         (self.root / "docs/lane-a-outside.md").write_text("outside scope\n", encoding="utf-8")
         if symlink_target is not None:
-            os.symlink(symlink_target, notes / "escape")
+            os.symlink(str(symlink_target), notes / symlink_name)
         git(self.root, "add", "-A")
         git(self.root, "commit", "--quiet", "-m", "fixture: base for Lane A task")
         self.base_commit = git(self.root, "rev-parse", "HEAD")
