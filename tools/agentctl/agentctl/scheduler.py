@@ -246,6 +246,12 @@ CAPABILITY_RANK = _CAPABILITY_RANK
 #: namespace where available, no surviving descendants).
 CHECK_TIMEOUT_SECONDS = 600.0
 
+#: Contract risks for which unsandboxed gates are refused (AGENTS.md section 7), and the named reasons
+#: verification and integration record for the two verification refusals.
+UNSANDBOXED_GATE_REFUSED_RISKS = frozenset({"high", "critical"})
+UNSANDBOXED_GATE_HIGH_RISK = "unsandboxed_gate_high_risk"
+NO_DETERMINISTIC_CHECKS = "no_deterministic_checks"
+
 #: Options for every git command the control plane runs. A worktree's ``.git`` links to the
 #: SHARED git directory, so anything a worker or a gate check plants in the repository config
 #: (``diff.external``, ``core.fsmonitor``, a pager) would otherwise execute later under the
@@ -1036,6 +1042,13 @@ class Scheduler:
     def verify_candidate(self, task_id: str) -> dict[str, Any]:
         """Run contract-owned deterministic checks and bind their evidence to a candidate."""
         spec = self._spec(task_id)
+        if spec.risk in UNSANDBOXED_GATE_REFUSED_RISKS:
+            # Gates run unsandboxed at the control-plane uid (AGENTS.md section 7: prohibited for
+            # high-risk tasks). Refuse before any state transition or check, so the task is unchanged.
+            raise PermissionViolation(
+                "deterministic checks run unsandboxed and are prohibited for high-risk tasks",
+                task_id=task_id, reason_code=UNSANDBOXED_GATE_HIGH_RISK, risk=spec.risk,
+            )
         status = str(self.store.status(task_id)["state"])
         transition(status, "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
         attempt = self.store.rows(
@@ -1076,8 +1089,15 @@ class Scheduler:
         self.store.execute(f"verify-start:{task_id}:{attempt['attempt_id']}", started, begin)
         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
         results, tamper = self._run_gate_checks(worktree, spec.deterministic_checks)
-        passed = not tamper and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
+        # No check means nothing was verified; `all([])` must never read as a pass.
+        vacuous = not spec.deterministic_checks
+        passed = (
+            not vacuous and not tamper
+            and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
+        )
         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
+        if vacuous:
+            evidence["failure_reason"] = NO_DETERMINISTIC_CHECKS
         if tamper:
             evidence["repository_tamper"] = tamper
         evidence_hash = sha256_of_json(evidence)
@@ -1087,7 +1107,8 @@ class Scheduler:
             event_type=event_name,
             reason_code=(
                 "verification_passed" if passed
-                else str(tamper["reason_code"]) if tamper else "verification_failed"
+                else str(tamper["reason_code"]) if tamper
+                else NO_DETERMINISTIC_CHECKS if vacuous else "verification_failed"
             ),
             actor_role="verifier",
             task_id=task_id,

@@ -65,6 +65,7 @@ from .integration_queue import (
 from .interfaces import current_interface_binding
 from .locks import semantic_lock_claims
 from .models import TaskState
+from .scheduler import NO_DETERMINISTIC_CHECKS, UNSANDBOXED_GATE_HIGH_RISK, UNSANDBOXED_GATE_REFUSED_RISKS
 from .store import EventStore
 from .validate import validate_artifact
 
@@ -533,6 +534,21 @@ def _verify(store: EventStore, git: _Git, task_id: str, integrator_id: str) -> _
     root = store.repository_root
     task = store.rows("SELECT * FROM tasks WHERE task_id = ?", (task_id,))[0]
     payload = json.loads(task["payload_json"])
+
+    # (0) Pre-claim refusals read the contract, not a stored pass: gates run unsandboxed (prohibited
+    # for high-risk tasks, AGENTS.md section 7), and a contract with no checks verified nothing.
+    if payload.get("risk") in UNSANDBOXED_GATE_REFUSED_RISKS:
+        raise _reject(
+            UNSANDBOXED_GATE_HIGH_RISK, "human_required",
+            "gates run unsandboxed and are prohibited for high-risk tasks",
+            retry_requires_new_evidence=True, risk=payload.get("risk"),
+        )
+    if not payload.get("deterministic_checks"):
+        raise _reject(
+            NO_DETERMINISTIC_CHECKS, "repair_required",
+            "the task contract owns no deterministic check, so nothing was verified",
+            retry_requires_new_evidence=True,
+        )
 
     # (a) required dependencies are completed.
     waiting = [

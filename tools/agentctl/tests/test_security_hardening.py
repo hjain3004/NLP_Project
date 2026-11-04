@@ -71,6 +71,7 @@ class TrustedCandidateTests(unittest.TestCase):
             semantic_locks={},
             maximum_attempts=3,
             maximum_artifact_corrections=1,
+            deterministic_checks=("true",),
         )
         self.scheduler.register_task(self.spec)
 
