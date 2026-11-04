@@ -171,8 +171,8 @@ class HighRiskRefusalTests(_LabCase):
     def test_verify_allow_list_refuses_every_risk_that_is_not_low_or_medium(self) -> None:
         """Review repair: an allow-list, so spelling variants and unknown values cannot slip through."""
         cases = {
-            " High": "unsandboxed_gate_high_risk",
-            "CRITICAL": "unsandboxed_gate_high_risk",
+            " High": "gate_risk_not_permitted_until_sandbox_reviewed",
+            "CRITICAL": "gate_risk_not_permitted_until_sandbox_reviewed",
             "bogus": "unsandboxed_gate_unknown_risk",
             "": "unsandboxed_gate_unknown_risk",
         }
@@ -199,7 +199,7 @@ class HighRiskRefusalTests(_LabCase):
     def test_integration_allow_list_rejects_variant_unknown_and_missing_risk(self) -> None:
         """SIMULATED: stored contract risk rewritten after verification."""
         cases = (
-            ("T-IA0", "json_set(payload_json, '$.risk', ' High')", "unsandboxed_gate_high_risk"),
+            ("T-IA0", "json_set(payload_json, '$.risk', ' High')", "gate_risk_not_permitted_until_sandbox_reviewed"),
             ("T-IA1", "json_set(payload_json, '$.risk', 'bogus')", "unsandboxed_gate_unknown_risk"),
             ("T-IA2", "json_remove(payload_json, '$.risk')", "unsandboxed_gate_unknown_risk"),
         )
@@ -229,7 +229,7 @@ class HighRiskRefusalTests(_LabCase):
                 with self.assertRaises(PermissionViolation) as raised:
                     self.lab.scheduler.verify_candidate(task_id)
 
-                self.assertEqual(raised.exception.context["reason_code"], "unsandboxed_gate_high_risk")
+                self.assertEqual(raised.exception.context["reason_code"], "gate_risk_not_permitted_until_sandbox_reviewed")
                 self.assertEqual(self.lab.state(task_id), "candidate")
                 self.assertEqual(len(self.lab.events(task_id=task_id)), events_before)
                 self.assertEqual(self.lab.artifacts("verification-evidence", task_id), [])
@@ -260,7 +260,7 @@ class HighRiskRefusalTests(_LabCase):
         result = integrate("T-HRI", store=self.lab.store)
 
         self.assertEqual(result["outcome"], "rejected", result)
-        self.assertEqual(result["reason_code"], "unsandboxed_gate_high_risk", result)
+        self.assertEqual(result["reason_code"], "gate_risk_not_permitted_until_sandbox_reviewed", result)
         self.assertIsNone(self.lab.branch_head(BRANCH))
         self.assertEqual(self.lab.state("T-HRI"), "integration_ready")
         self.assertFalse(marker.exists(), "an integration gate ran for a high-risk task")

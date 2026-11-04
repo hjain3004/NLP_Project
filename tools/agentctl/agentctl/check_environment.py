@@ -6,14 +6,16 @@ Whatever stage runs it, against whichever commit, it sees exactly this:
 
 * **Tree.** The commit's tree materialised byte for byte from Git objects into a fresh temporary directory
   outside the repository (no filters, no attributes, no ``.git``, symlinks never followed, duplicate and
-  clashing entries refused), mounted read-write at ``/work``.
+  clashing entries refused), mounted read-write at ``/work``. This happens again FOR EVERY CHECK: a check can
+  write whatever it likes inside its own run, but nothing it leaves behind (files, the synthetic repository's
+  index, commits, branches, config) exists for the next check.
 * **Sandbox.** ``runc`` (see :mod:`agentctl.sandbox`): uid 65534, no capabilities, no network, a private
   PID namespace, a read-only host runtime subset, a private ``/tmp``; nothing of the control plane exists
   inside it. The command line is ``/bin/sh -c <check>`` with working directory ``/work``.
 * **Environment variables.** Only ``PATH``, ``HOME=/tmp``, ``LANG``, ``TZ``, ``PYTHONDONTWRITEBYTECODE``
   and ``AGENTCTL_CANDIDATE_COMMIT``. ``PYTHONPATH`` is never set: a check that needs it says so in its own
   command (``PYTHONPATH=tools/agentctl python3 -m unittest ...``).
-* **Git.** Inside the sandbox, before the first check, a PRIVATE synthetic repository is created in
+* **Git.** Inside the sandbox, before EACH check, a PRIVATE synthetic repository is created in
   ``/work``: ``git init``, a fixed identity and dates, ``git add -A -f``, one commit
   ``check-environment snapshot of <commit>``. ``git rev-parse --show-toplevel``, ``git ls-files`` and
   ``git status`` therefore work, from the materialised tree only; it holds no control-plane metadata. Its
@@ -417,25 +419,29 @@ def run_candidate_checks(
         return outcome
     work = Path(tempfile.mkdtemp(prefix="agentctl-check-env-"))
     try:
-        tree_dir, out_dir = work / "tree", work / "out"
-        materialize_tree(reader, commit, tree_dir)
+        out_dir = work / "out"
         env = {
             "PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8", "TZ": "UTC",
             "PYTHONDONTWRITEBYTECODE": "1", "AGENTCTL_CANDIDATE_COMMIT": commit,
         }
-        snapshot = sandbox.run_in_sandbox(
-            _SNAPSHOT_COMMAND, tree_dir=str(tree_dir), timeout=SNAPSHOT_TIMEOUT_SECONDS,
-            out_dir=str(out_dir), env=env, label=f"{label}-snapshot",
-        )
-        if snapshot["exit_code"] != 0 or snapshot["timed_out"]:
-            outcome["failure_reason"] = "check_environment_setup_failed"
-            outcome["setup"] = {
-                "exit_code": snapshot["exit_code"], "timed_out": snapshot["timed_out"],
-                "stderr_hash": snapshot["stderr_hash"], "started": snapshot["started"],
-            }
-            return outcome
         items: list[dict[str, Any]] = []
         for index, command in enumerate(commands):
+            # Every check gets its OWN pristine tree and its own synthetic repository, rebuilt from Git
+            # objects, so nothing an earlier check wrote (files, index, commits, config) can reach a later one.
+            tree_dir = work / f"tree-{index}"
+            materialize_tree(reader, commit, tree_dir)
+            snapshot = sandbox.run_in_sandbox(
+                _SNAPSHOT_COMMAND, tree_dir=str(tree_dir), timeout=SNAPSHOT_TIMEOUT_SECONDS,
+                out_dir=str(out_dir), env=env, label=f"{label}-snapshot-{index}",
+            )
+            if snapshot["exit_code"] != 0 or snapshot["timed_out"]:
+                outcome["failure_reason"] = "check_environment_setup_failed"
+                outcome["setup"] = {
+                    "exit_code": snapshot["exit_code"], "timed_out": snapshot["timed_out"],
+                    "stderr_hash": snapshot["stderr_hash"], "started": snapshot["started"],
+                }
+                outcome["checks"] = []
+                return outcome
             try:
                 result = sandbox.run_in_sandbox(
                     command, tree_dir=str(tree_dir), timeout=float(timeout), out_dir=str(out_dir),
@@ -447,6 +453,7 @@ def run_candidate_checks(
                     "stdout_hash": "", "stderr_hash": "", "stdout_bytes": 0, "stderr_bytes": 0, "duration_ms": 0,
                 }
             items.append(_check_item(command, result))
+            shutil.rmtree(tree_dir, ignore_errors=True)
         outcome["checks"] = items
         outcome["passed"] = all(item["result"] == "pass" for item in items)
         return outcome

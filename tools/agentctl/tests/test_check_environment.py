@@ -226,6 +226,74 @@ class CheckCannotReachTheHostTests(_Case):
 
 
 @NEEDS_RUNC
+class ChecksCannotInfluenceEachOtherTests(_Case):
+    """Review finding (medium): checks used to share one /work tree and one synthetic repository, so an early
+    check could rewrite the tree and amend the synthetic commit and a later check would then pass on content
+    that was never committed. Every check now starts from a freshly materialised pristine tree."""
+
+    PLANT = "echo good > lint.txt; git add -A; git -c user.name=x -c user.email=x@x.invalid commit -q --amend -m planted"
+    LATER = "grep -qx good lint.txt && git diff --quiet HEAD"
+
+    def run_stage(self, label: str, checks: tuple[str, ...]) -> dict:
+        from agentctl.check_environment import run_candidate_checks
+
+        candidate = self.candidate(f"T-ISO-{label}", ("true",))
+        return run_candidate_checks(
+            self.lab.root, candidate.result_commit, checks, label=label, timeout=60.0,
+            spec_fields={"task_id": candidate.task_id},
+        )
+
+    def test_a_check_cannot_rewrite_the_tree_or_the_synthetic_repo_for_a_later_check_in_either_stage(self) -> None:
+        for label in ("verify", "integrate"):
+            with self.subTest(stage=label):
+                outcome = self.run_stage(label, (self.PLANT, self.LATER))
+
+                first, second = outcome["checks"]
+                self.assertEqual(first["result"], "pass", first)
+                self.assertEqual(second["result"], "fail", "a later check passed on content an earlier check planted")
+                self.assertEqual(second["reason"], "exit_nonzero")
+                self.assertIs(outcome["passed"], False)
+
+    def test_neither_file_state_nor_repository_state_survives_into_the_next_check(self) -> None:
+        plant = (
+            "echo scratch > scratch.txt; rm -f docs/hardening.txt; mkdir -p planted/dir; "
+            "git config user.name changed; git checkout -q -b planted-branch; git tag planted-tag; "
+            "echo dirty >> docs/hardening.txt"
+        )
+        pristine = (
+            "test ! -e scratch.txt && test ! -d planted && test \"$(cat docs/hardening.txt)\" = synthetic "
+            "&& git diff --quiet HEAD && test -z \"$(git status --porcelain)\" "
+            "&& test \"$(git rev-parse --abbrev-ref HEAD)\" = main && test -z \"$(git tag)\" "
+            "&& test \"$(git config user.name)\" = 'agentctl check-environment' "
+            "&& test \"$(git rev-list --count HEAD)\" = 1"
+        )
+
+        outcome = self.run_stage("verify", (plant, pristine, pristine))
+
+        self.assertEqual([item["result"] for item in outcome["checks"]], ["pass", "pass", "pass"], outcome["checks"])
+
+    def test_a_check_may_still_write_scratch_files_and_commit_within_itself(self) -> None:
+        within = (
+            "echo scratch > scratch.txt && test \"$(cat scratch.txt)\" = scratch && git add -A "
+            "&& git -c user.name=x -c user.email=x@x.invalid commit -q -m inner && git diff --quiet HEAD"
+        )
+
+        outcome = self.run_stage("verify", (within,))
+
+        self.assertIs(outcome["passed"], True, outcome["checks"])
+
+    def test_the_reviewers_command_pair_fails_in_a_real_verification_and_nothing_advances(self) -> None:
+        self.candidate("T-ISO-V", (self.PLANT, self.LATER))
+
+        result = self.lab.scheduler.verify_candidate("T-ISO-V")
+
+        self.assertNotEqual(result["state"], "independent_review", result)
+        evidence = self.evidence("T-ISO-V")
+        self.assertIs(evidence["passed"], False)
+        self.assertEqual([item["result"] for item in evidence["checks"]], ["pass", "fail"])
+
+
+@NEEDS_RUNC
 class TimeoutKillsEverythingTests(_Case):
     def test_a_timed_out_check_leaves_no_process_and_no_container(self) -> None:
         """setsid / double-fork stragglers die with the PID namespace; `runc list` is empty afterwards."""
@@ -460,18 +528,47 @@ class IsolationSelectionTests(_Case):
             with self.assertRaises(PermissionViolation) as raised:
                 self.lab.scheduler.verify_candidate(task_id)
 
-            self.assertEqual(raised.exception.context["reason_code"], "unsandboxed_gate_high_risk")
+            self.assertEqual(raised.exception.context["reason_code"], "gate_risk_not_permitted_until_sandbox_reviewed")
             self.assertEqual(self.lab.state(task_id), "candidate")
         self.assertFalse(marker.exists())
 
-    def test_a_high_risk_task_is_verified_inside_the_sandbox_by_default(self) -> None:
-        """DECISION (flagged in the report): the risk allow-list guards only the unsandboxed runner."""
-        self.candidate("T-HRS", ("true",), risk="high")
+    def test_high_and_critical_risk_are_refused_even_under_the_sandbox_before_any_transition_event_or_check(self) -> None:
+        """Coordinator veto: the sandbox boundary has had one review; high/critical stay refused until a further
+        independent review and an owner decision. Allow-list: unknown risk is refused too."""
+        marker = self.host / "must-not-run.marker"
+        cases = (("high", "gate_risk_not_permitted_until_sandbox_reviewed"),
+                 (" CRITICAL", "gate_risk_not_permitted_until_sandbox_reviewed"),
+                 ("bogus", "unsandboxed_gate_unknown_risk"))
+        for index, (risk, reason) in enumerate(cases):
+            task_id = f"T-HRS{index}"
+            self.candidate(task_id, (f"touch {marker}",), risk=risk)
+            events_before = len(self.lab.events(task_id=task_id))
 
-        result = self.lab.scheduler.verify_candidate("T-HRS")
+            with self.assertRaises(PermissionViolation) as raised:
+                self.lab.scheduler.verify_candidate(task_id)
 
-        self.assertEqual(result["state"], "independent_review")
-        self.assertEqual(self.evidence("T-HRS")["environment"]["isolation"], "runc")
+            self.assertEqual(raised.exception.context["reason_code"], reason)
+            self.assertEqual(self.lab.state(task_id), "candidate")
+            self.assertEqual(len(self.lab.events(task_id=task_id)), events_before)
+            self.assertEqual(self.lab.artifacts("verification-evidence", task_id), [])
+        self.assertFalse(marker.exists(), "a check ran for a task whose risk is not permitted")
+
+    def test_integration_refuses_a_high_risk_task_under_the_sandbox_without_running_gates_or_moving_the_branch(self) -> None:
+        """SIMULATED: the contract risk is raised after verification (as if an older build had verified it)."""
+        marker = self.host / "integration-gate-ran.marker"
+        self.lab.candidate("T-HRI", FILES, checks=(f"touch {marker}; true",))
+        self.lab.tamper(
+            "UPDATE tasks SET payload_json = json_set(payload_json, '$.risk', 'high') WHERE task_id = ?",
+            ("T-HRI",),
+        )
+
+        result = integrate("T-HRI", store=self.lab.store)
+
+        self.assertEqual(result["outcome"], "rejected", result)
+        self.assertEqual(result["reason_code"], "gate_risk_not_permitted_until_sandbox_reviewed", result)
+        self.assertIsNone(self.lab.branch_head(BRANCH))
+        self.assertEqual(self.lab.state("T-HRI"), "integration_ready")
+        self.assertFalse(marker.exists(), "an integration gate ran for a high-risk task")
 
     def test_integration_records_legacy_unsafe_in_its_intent_when_selected(self) -> None:
         os.environ["AGENTCTL_CHECK_ISOLATION"] = "legacy-unsafe"

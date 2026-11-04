@@ -75,7 +75,7 @@ from .integration_queue import (
 from .interfaces import current_interface_binding
 from .locks import semantic_lock_claims
 from .models import TaskState
-from .scheduler import NO_DETERMINISTIC_CHECKS, effective_checks, unsandboxed_gate_refusal
+from .scheduler import NO_DETERMINISTIC_CHECKS, effective_checks, gate_risk_refusal
 from .store import EventStore
 from .validate import validate_artifact
 
@@ -464,15 +464,17 @@ def _verify(store: EventStore, git: _Git, task_id: str, integrator_id: str) -> _
     task = store.rows("SELECT * FROM tasks WHERE task_id = ?", (task_id,))[0]
     payload = json.loads(task["payload_json"])
 
-    # (0) Pre-claim refusals read the contract, not a stored pass: the explicitly selected legacy runner is
-    # unsandboxed (prohibited for high-risk tasks, AGENTS.md section 7), and a contract with no checks
-    # verified nothing. The default runc sandbox has no risk restriction; whether it is available is checked
-    # where the gates are about to run (`_plan`), so crash recovery that runs no gate does not need it.
-    refusal = unsandboxed_gate_refusal(payload.get("risk")) if _isolation() == ISOLATION_LEGACY else None
+    # (0) Pre-claim refusals read the contract, not a stored pass: high/critical (and unknown) risk is refused
+    # under every isolation until the sandbox boundary has had a further independent review and an owner
+    # decision, and a contract with no checks verified nothing. Whether the sandbox is available is checked where
+    # the gates are about to run (`_plan`), so crash recovery that runs no gate does not need it.
+    _isolation()  # an unrecognised selector is refused, never ignored
+    refusal = gate_risk_refusal(payload.get("risk"))
     if refusal is not None:
         raise _reject(
             refusal, "human_required",
-            "gates run unsandboxed and are allowed only for low and medium risk tasks",
+            "gates are allowed only for low and medium risk tasks until the sandbox boundary has had a further "
+            "independent review and an owner decision",
             retry_requires_new_evidence=True, risk=str(payload.get("risk"))[:40],
         )
     if not effective_checks(payload.get("deterministic_checks")):

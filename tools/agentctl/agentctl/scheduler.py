@@ -256,21 +256,27 @@ CAPABILITY_RANK = _CAPABILITY_RANK
 #: ``AGENTCTL_CHECK_ISOLATION=legacy-unsafe`` selects the old ``gate_runner`` path instead.
 CHECK_TIMEOUT_SECONDS = DEFAULT_CHECK_TIMEOUT_SECONDS
 
-#: Only these contract risks may run unsandboxed gates (AGENTS.md section 7: prohibited for high-risk
-#: tasks). An allow-list: any other value, however spelled, is refused. The named reasons are what
-#: verification and integration record.
-UNSANDBOXED_GATE_ALLOWED_RISKS = frozenset({"low", "medium"})
-UNSANDBOXED_GATE_HIGH_RISK = "unsandboxed_gate_high_risk"
+#: Only these contract risks may have their deterministic checks run, under ANY isolation (AGENTS.md section 7:
+#: unsandboxed tools are prohibited for high-risk tasks; the runc boundary has had one independent review that
+#: found blocking issues, so high and critical stay refused until the boundary has had a further independent
+#: review and an owner decision). An allow-list: any other value, however spelled, is refused. The named
+#: reasons are what verification and integration record.
+GATE_ALLOWED_RISKS = frozenset({"low", "medium"})
+UNSANDBOXED_GATE_ALLOWED_RISKS = GATE_ALLOWED_RISKS  # earlier name, kept for importers
+GATE_RISK_NOT_PERMITTED = "gate_risk_not_permitted_until_sandbox_reviewed"
 UNSANDBOXED_GATE_UNKNOWN_RISK = "unsandboxed_gate_unknown_risk"
 NO_DETERMINISTIC_CHECKS = "no_deterministic_checks"
 
 
-def unsandboxed_gate_refusal(risk: object) -> str | None:
-    """The named reason gates may not run for ``risk``, or ``None`` when low or medium."""
+def gate_risk_refusal(risk: object) -> str | None:
+    """The named reason checks may not run for ``risk``, or ``None`` when low or medium."""
     normalized = str(risk).strip().lower() if risk is not None else ""
-    if normalized in UNSANDBOXED_GATE_ALLOWED_RISKS:
+    if normalized in GATE_ALLOWED_RISKS:
         return None
-    return UNSANDBOXED_GATE_HIGH_RISK if normalized in {"high", "critical"} else UNSANDBOXED_GATE_UNKNOWN_RISK
+    return GATE_RISK_NOT_PERMITTED if normalized in {"high", "critical"} else UNSANDBOXED_GATE_UNKNOWN_RISK
+
+
+unsandboxed_gate_refusal = gate_risk_refusal  # earlier name, kept for importers
 
 
 def effective_checks(checks: Sequence[object] | None) -> tuple[str, ...]:
@@ -1101,16 +1107,15 @@ class Scheduler:
         spec = self._spec(task_id)
         isolation = selected_isolation()  # an unrecognised selector is refused, never ignored
         checks = effective_checks(spec.deterministic_checks)
-        if isolation == ISOLATION_LEGACY:
-            refusal = unsandboxed_gate_refusal(spec.risk)
-            if refusal is not None:
-                # The legacy runner is unsandboxed at the control-plane uid (AGENTS.md section 7:
-                # prohibited for high-risk tasks). Refuse before any state transition or check.
-                raise PermissionViolation(
-                    "deterministic checks run unsandboxed and are prohibited for high-risk tasks",
-                    task_id=task_id, reason_code=refusal, risk=str(spec.risk)[:40],
-                )
-        elif checks:
+        refusal = gate_risk_refusal(spec.risk)
+        if refusal is not None:
+            # Refused under every isolation, before any state transition, event or check (see GATE_ALLOWED_RISKS).
+            raise PermissionViolation(
+                "deterministic checks are not permitted for this task's risk until the sandbox boundary has had a "
+                "further independent review and an owner decision",
+                task_id=task_id, reason_code=refusal, risk=str(spec.risk)[:40],
+            )
+        if isolation != ISOLATION_LEGACY and checks:
             require_sandbox()  # fail closed before any transition: reason_code sandbox_unavailable
         status = str(self.store.status(task_id)["state"])
         transition(status, "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
