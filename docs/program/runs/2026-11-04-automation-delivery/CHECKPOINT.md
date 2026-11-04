@@ -23,10 +23,10 @@ G0 is **not** closed and cannot be from this environment.
 | DEMO cycle 1 | recorded, incomplete | `reports/demo-1.md`: reviewer caught a real defect in DEMO-001's candidate; DEMO-002 rejected at integration (my contract used git-dependent checks) |
 | DEMO cycle 2 (DEMO-101/102 replans) | done | `reports/demo-2.md`; integration merge `dccdf89`; merged into the session branch by coordinator `git merge` at `881264f` (**outside the control plane**; commits unchanged) |
 | Final architecture audit (fresh Opus) | done | `reports/final-audit-review-input.md` — AUDIT_PASS_WITH_NONBLOCKING; **review input, not a G0-12 artifact** |
-| HARDENING-1 (audit F1a/F1b/F3) | in progress | branch `claude/verify-hardening` |
-| Draft PR | pending | after HARDENING-1 |
+| HARDENING-1 (audit F1a/F1b/F3) | done, merged | `reports/hardening-1.md`; independent review found a blank-check hole (`[""]`) and a risk deny-list → one repair `caa5434` → mutation-confirmed |
+| Draft PR | opened by coordinator after this commit | see handoff |
 
-Suite at last coordinator check (tip `182e4f1`): 404 tests OK, 1 skipped (opt-in live test); `docs verify` ok.
+Suite at last coordinator check (merged tip): 417 tests OK, 1 skipped (opt-in live test); `docs verify` ok; dry G0 evaluation (11 deterministic criteria) passes.
 
 ## Deviations to know
 
@@ -43,7 +43,7 @@ Suite at last coordinator check (tip `182e4f1`): 404 tests OK, 1 skipped (opt-in
 
 - Candidate/gate code runs at the control-plane uid, before review, with network access; the tamper
   check covers `.git` metadata only; the event store is not protected from gates (audit F1).
-  HARDENING-1 adds: verify drops sensitive env, empty check lists fail, high/critical risk refused.
+  HARDENING-1 added: verify drops sensitive env, empty/blank check lists fail, only low/medium risk may run gates. Proposal (not applied; schema commitment): `minLength`/`pattern` on `deterministic_checks` items.
   Still open: separate uid/network namespace; cross-checking store rows against the event chain.
 - Verify (with `.git` link) vs integrate (`.git`-less) environments differ (audit F2).
 - Superseded tasks re-enter the integration queue; `repair_required` has no authorize path (audit F4).
@@ -69,4 +69,4 @@ Agent-session spend is not reported to this session.
 
 ## Next executable step
 
-Merge HARDENING-1 after an independent review, rerun the suite, push, open the draft PR.
+Owner: see 'Blockers needing the owner'. Engineering: next work is owner-gated design (reviewer-floor bindings, state-machine rows, gate sandbox uid/network namespace).
