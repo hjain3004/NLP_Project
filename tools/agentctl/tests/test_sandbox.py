@@ -177,6 +177,20 @@ class LayoutAndPrivilegeTests(_Case):
         self.assertTrue((self.tree / "created").exists())  # the tree is the writable, persistent part
         self.assertEqual(os.lstat(self.tree / "present.txt").st_uid, sandbox.SANDBOX_UID)
 
+    def test_every_runtime_mount_carries_the_read_only_flag_and_work_is_read_write(self) -> None:
+        """File permissions alone (uid 65534 versus root-owned /usr) would hide a missing `ro` mount flag."""
+        text = self.output("cat /proc/self/mountinfo")
+
+        options = {}
+        for line in text.splitlines():
+            fields = line.split()
+            options[fields[4]] = fields[5].split(",")
+        for point in ("/", "/usr", "/etc/alternatives"):
+            if point in options:
+                self.assertIn("ro", options[point], point)
+        self.assertIn("rw", options["/work"])
+        self.assertNotIn("ro", options["/work"])
+
     def test_no_capabilities_no_new_privileges_seccomp_and_no_user_namespace(self) -> None:
         text = self.output(
             "grep -E '^(CapEff|CapBnd|CapPrm|CapAmb|NoNewPrivs|Seccomp):' /proc/self/status; "

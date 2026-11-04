@@ -576,6 +576,11 @@ done
 [ -e /var/run/docker.sock ] && { echo "FAIL docker-socket-visible"; exit 15; }
 if ( : > /usr/agentctl-write-probe ) 2>/dev/null; then echo "FAIL usr-writable"; exit 16; fi
 if ( : > /etc/agentctl-write-probe ) 2>/dev/null; then echo "FAIL etc-writable"; exit 16; fi
+# The mounts themselves must be read-only (file permissions alone would hide a missing `ro` flag).
+for point in / /usr; do
+  grep -qE " $point ro[ ,]" /proc/self/mountinfo || { echo "FAIL $point-not-mounted-read-only"; exit 16; }
+done
+grep -qE " /work rw[ ,]" /proc/self/mountinfo || { echo "FAIL work-not-mounted-read-write"; exit 17; }
 ( : > /work/agentctl-write-probe ) 2>/dev/null || { echo "FAIL work-not-writable"; exit 17; }
 rm -f /work/agentctl-write-probe
 others=$(sed -n '3,$p' /proc/net/dev | cut -d: -f1 | tr -d ' ' | grep -v '^lo$' | grep -c . )
@@ -684,8 +689,8 @@ def probe(refresh: bool = False) -> dict[str, Any]:
 
     The canary run asserts, from inside the container: non-root uid; a planted host-only canary
     file path is not visible; the root directory holds only the expected entries; ``/root``,
-    ``/home`` and the Docker socket are absent; ``/usr`` and ``/etc`` are not writable while
-    ``/work`` is; the only network interface is loopback with no route, a listener the probing process holds
+    ``/home`` and the Docker socket are absent; ``/`` and ``/usr`` are mounted read-only (flag, not just permissions) and ``/etc`` is not writable while
+    ``/work`` is read-write; the only network interface is loopback with no route, a listener the probing process holds
     on its own ``127.0.0.1`` cannot be connected to and neither can a TEST-NET address; a user namespace
     cannot be created. Returns ``available``,
     ``reason`` (``ok`` or a stable code), ``limits_enforced`` and a ``runtime_hash``.
