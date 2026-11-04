@@ -246,6 +246,28 @@ CAPABILITY_RANK = _CAPABILITY_RANK
 #: namespace where available, no surviving descendants).
 CHECK_TIMEOUT_SECONDS = 600.0
 
+#: Only these contract risks may run unsandboxed gates (AGENTS.md section 7: prohibited for high-risk
+#: tasks). An allow-list: any other value, however spelled, is refused. The named reasons are what
+#: verification and integration record.
+UNSANDBOXED_GATE_ALLOWED_RISKS = frozenset({"low", "medium"})
+UNSANDBOXED_GATE_HIGH_RISK = "unsandboxed_gate_high_risk"
+UNSANDBOXED_GATE_UNKNOWN_RISK = "unsandboxed_gate_unknown_risk"
+NO_DETERMINISTIC_CHECKS = "no_deterministic_checks"
+
+
+def unsandboxed_gate_refusal(risk: object) -> str | None:
+    """The named reason gates may not run for ``risk``, or ``None`` when low or medium."""
+    normalized = str(risk).strip().lower() if risk is not None else ""
+    if normalized in UNSANDBOXED_GATE_ALLOWED_RISKS:
+        return None
+    return UNSANDBOXED_GATE_HIGH_RISK if normalized in {"high", "critical"} else UNSANDBOXED_GATE_UNKNOWN_RISK
+
+
+def effective_checks(checks: Sequence[object] | None) -> tuple[str, ...]:
+    """The runnable checks: non-blank strings. Blank or non-string entries verify nothing (``sh -c ""``
+    exits 0), so they are ignored next to a real check and never run; all-blank is vacuous."""
+    return tuple(item for item in (checks or ()) if isinstance(item, str) and item.strip())
+
 #: Options for every git command the control plane runs. A worktree's ``.git`` links to the
 #: SHARED git directory, so anything a worker or a gate check plants in the repository config
 #: (``diff.external``, ``core.fsmonitor``, a pager) would otherwise execute later under the
@@ -1036,6 +1058,14 @@ class Scheduler:
     def verify_candidate(self, task_id: str) -> dict[str, Any]:
         """Run contract-owned deterministic checks and bind their evidence to a candidate."""
         spec = self._spec(task_id)
+        refusal = unsandboxed_gate_refusal(spec.risk)
+        if refusal is not None:
+            # Gates run unsandboxed at the control-plane uid (AGENTS.md section 7: prohibited for
+            # high-risk tasks). Refuse before any state transition or check, so the task is unchanged.
+            raise PermissionViolation(
+                "deterministic checks run unsandboxed and are prohibited for high-risk tasks",
+                task_id=task_id, reason_code=refusal, risk=str(spec.risk)[:40],
+            )
         status = str(self.store.status(task_id)["state"])
         transition(status, "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
         attempt = self.store.rows(
@@ -1075,9 +1105,17 @@ class Scheduler:
 
         self.store.execute(f"verify-start:{task_id}:{attempt['attempt_id']}", started, begin)
         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
-        results, tamper = self._run_gate_checks(worktree, spec.deterministic_checks)
-        passed = not tamper and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
+        checks = effective_checks(spec.deterministic_checks)
+        results, tamper = self._run_gate_checks(worktree, checks)
+        # No (non-blank) check means nothing was verified; `all([])` must never read as a pass.
+        vacuous = not checks
+        passed = (
+            not vacuous and not tamper
+            and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
+        )
         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
+        if vacuous:
+            evidence["failure_reason"] = NO_DETERMINISTIC_CHECKS
         if tamper:
             evidence["repository_tamper"] = tamper
         evidence_hash = sha256_of_json(evidence)
@@ -1087,7 +1125,8 @@ class Scheduler:
             event_type=event_name,
             reason_code=(
                 "verification_passed" if passed
-                else str(tamper["reason_code"]) if tamper else "verification_failed"
+                else str(tamper["reason_code"]) if tamper
+                else NO_DETERMINISTIC_CHECKS if vacuous else "verification_failed"
             ),
             actor_role="verifier",
             task_id=task_id,

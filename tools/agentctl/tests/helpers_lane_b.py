@@ -185,7 +185,7 @@ class Lab:
         task_id: str,
         files: dict[str, str],
         *,
-        checks: tuple[str, ...] = (),
+        checks: tuple[str, ...] = ("true",),
         dependencies: tuple[str, ...] = (),
         interface_pins: dict[str, str] | None = None,
         review: bool = True,
