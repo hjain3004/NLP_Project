@@ -1406,6 +1406,13 @@ class _Engine:
                 task_id=task_id, state=state,
             )
         entry = queue.entry(task_id)
+        if entry is not None and entry.parked_reason == "dependency_canceled":
+            raise IntegrationRefused(
+                "a required dependency was canceled; this task cannot be integrated until it is "
+                "replanned or superseded (moving the integration branch will not change that)",
+                reason_code="retry_without_new_evidence", task_id=task_id,
+                prior_reason=entry.parked_reason,
+            )
         if entry is not None and entry.parked_reason is not None:
             raise IntegrationRefused(
                 "retry without new evidence is forbidden; the integration branch has not "
