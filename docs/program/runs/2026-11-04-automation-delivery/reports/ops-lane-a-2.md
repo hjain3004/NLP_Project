@@ -9,9 +9,9 @@
 | `f20ee1b` | Merge of `claude/ops-lifecycle` (`0fed469`). **No textual conflicts** (git merged cleanly; Lane A and Lane B touched disjoint files). One *semantic* conflict, below. |
 | `660e433` | Fix 1: seccomp socket-family allow-list, probe assertion, tests. Lane B hand-off: `queue_empty` shows `parked_explanations`. |
 | `00691cb` | Fix 3 (risk refusal restored) and Fix 2 (per-check pristine tree), `CHECK_ENVIRONMENT.md`. |
-| (next) | Fix 4: lifecycle race. |
-| (next) | Semantic merge conflict: `test_lifecycle` demo-002 test selects the legacy runner. |
-| (this commit) | This report. |
+| `36fac37` | Fix 4: lifecycle race. |
+| `8a5bf1c` | Semantic merge conflict: `test_lifecycle` demo-002 test selects the legacy runner. |
+| `b1388bd` | This report. |
 
 ## Merge
 
