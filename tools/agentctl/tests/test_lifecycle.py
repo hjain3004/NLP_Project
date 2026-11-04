@@ -27,6 +27,7 @@ from typing import Any
 from unittest import mock
 
 from agentctl.errors import ContractStale
+from agentctl.events import make_event
 from agentctl.execute import RunFailed, RunRefused, review_task, run_task
 from agentctl.integration_queue import DEPENDENCY_CANCELED, QUEUE_INELIGIBLE_STATES, build_queue, store_query
 from agentctl.lifecycle import (
@@ -377,6 +378,37 @@ class RepairRefusalTests(RepairCase):
                 authorize_repair(repo.store, repo.TASK_ID, **kwargs)
             self.assertEqual(raised.exception.reason_code, reason)
         self.assert_unchanged(repo, before, "repair_required")
+
+    def test_attempt_evidence_for_an_attempt_other_than_the_latest_is_refused(self) -> None:
+        """Protects: `attempt:<id>` must name the task's LATEST attempt; an older attempt's failure cannot justify repairing the newer one."""
+        repo = self.repo(deterministic_checks=("test -f docs/lane-a/never-created.txt",))
+        self.author(repo)
+        repo.scheduler.verify_candidate(repo.TASK_ID)  # attempt 1 fails its check
+        authorize_repair(repo.store, repo.TASK_ID, note="first repair",
+                         evidence=f"verification:{repo.TASK_ID}:{repo.TASK_ID}-attempt-1")
+        self.fake.set(structured_output=proposal(path="AppleBooks/secret.txt"))  # attempt 2 fails its scope audit
+        with self.assertRaises(RunFailed):
+            run_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
+        self.assertEqual(repo.state(), "repair_required")
+        older, newest = f"{repo.TASK_ID}-attempt-1", f"{repo.TASK_ID}-attempt-2"
+        # SIMULATED: the shape a scope-audit failure leaves (an ended attempt), applied to the older attempt, so the
+        # state check alone cannot be what refuses it. The refusal must come from the latest-attempt check.
+        repo.store.execute(
+            "fixture:attempt-1-ended",
+            make_event(event_type="test_fixture_mutation", reason_code="simulated_fixture", actor_role="test-harness"),
+            lambda c: c.execute("UPDATE attempts SET state = 'failed' WHERE attempt_id = ?", (older,)).rowcount,
+        )
+        before = counts(repo.store)
+
+        with self.assertRaises(LifecycleRefused) as raised:
+            authorize_repair(repo.store, repo.TASK_ID, evidence=f"attempt:{older}", note="wrong attempt")
+
+        self.assertEqual(raised.exception.reason_code, "evidence_wrong_attempt")
+        self.assertEqual(counts(repo.store), before)
+        self.assertEqual(repo.state(), "repair_required")
+        self.assertEqual(len(events_for(repo.store, repo.TASK_ID, "repair_authorized")), 1)  # only the first repair
+        accepted = authorize_repair(repo.store, repo.TASK_ID, evidence=f"attempt:{newest}", note="right attempt")
+        self.assertEqual((accepted["outcome"], accepted["previous_attempt_id"]), ("authorized", newest))
 
     def test_cli_repair_reports_json_and_distinct_exit_codes(self) -> None:
         """Protects the operator surface: 0 authorized/idempotent, 3 refused, 2 usage."""
