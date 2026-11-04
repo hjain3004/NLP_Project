@@ -56,7 +56,7 @@ The two Lane A lines were mutated only transiently to confirm the Lane B tests e
 
 - The skip is Lane A's live-provider test (`test_claude_cli_adapter.py`, needs `AGENTCTL_LIVE_PROVIDER=1`); no Lane B test is skipped on this host. Two Lane B tests carry platform guards (`/proc` is Linux-specific; `setsid` needs util-linux) and both ran.
 - The full suite no longer shows the earlier `test_validate_valid` baseline error: the merged branches carry the fixture-pin refresh, so there are **0 errors, 0 failures**. I did not touch that fixture.
-- Lane B tests in `test_integrate*.py`: 47 (was 46: +1 new test).
+- Lane B test methods in `test_integrate*.py`: 58 (hardening 16 -> 17: +1 new test; no test removed or weakened).
 
 ## Untested or unchanged
 
