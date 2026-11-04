@@ -69,7 +69,7 @@ from .hashing import sha256_hex
 from .jsonschema_subset import validate as validate_schema
 from .locks import path_patterns_overlap
 from .review import ReviewIdentity, ReviewManager
-from .routing import route_reviewer, route_task
+from .routing import ALLOW_CANDIDATE_FLAG, route_reviewer, route_task
 from .scheduler import Scheduler, TaskSpec, run_hardened_git
 from .store import EventStore
 from .validate import validate_artifact
@@ -97,6 +97,7 @@ PROMPT_FILE_LIMIT = 100_000
 PROMPT_TOTAL_LIMIT = 400_000
 DIFF_LIMIT = 300_000
 LEASE_SAFETY_SECONDS = 60.0
+BINDING_FINDING_ID = "CP-CANDIDATE-BINDING-1"
 MAX_LIST_ITEMS = 20
 MAX_LIST_ITEM_CHARS = 1000
 
@@ -165,14 +166,17 @@ class RunOptions:
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_budget_usd: float = DEFAULT_MAX_BUDGET_USD
     export_path: str | None = None
+    #: Operator opt-in to a disclosed, unevaluated candidate binding (see ``routing``).
+    allow_candidate_bindings: bool = False
 
 
 def parse_run_options(argv: list[str], usage: str) -> RunOptions | None:
-    """Parse ``<task-id> [--timeout S] [--max-budget-usd X] [--export PATH]``; None on error."""
+    """Parse ``<task-id> [--timeout S] [--max-budget-usd X] [--export PATH] [--allow-candidate-bindings]``; None on error."""
     task_id: str | None = None
     timeout = DEFAULT_TIMEOUT_SECONDS
     budget = DEFAULT_MAX_BUDGET_USD
     export: str | None = None
+    allow_candidates = False
     index = 0
     try:
         while index < len(argv):
@@ -183,6 +187,8 @@ def parse_run_options(argv: list[str], usage: str) -> RunOptions | None:
                 budget, index = float(argv[index + 1]), index + 2
             elif argument == "--export":
                 export, index = argv[index + 1], index + 2
+            elif argument == ALLOW_CANDIDATE_FLAG:
+                allow_candidates, index = True, index + 1
             elif argument.startswith("-") or task_id is not None:
                 raise ValueError(argument)
             else:
@@ -192,7 +198,7 @@ def parse_run_options(argv: list[str], usage: str) -> RunOptions | None:
     if task_id is None or not (0 < timeout < float("inf")) or not (0 < budget < float("inf")):
         print(usage, file=sys.stderr)
         return None
-    return RunOptions(task_id, timeout, budget, export)
+    return RunOptions(task_id, timeout, budget, export, allow_candidates)
 
 
 # --------------------------------------------------------------------------- #
@@ -568,6 +574,7 @@ def _build_manifest(
     proposal: Mapping[str, Any],
     result_commit: str,
     files_changed: list[dict[str, str]],
+    deviations: list[str] | None = None,
 ) -> dict[str, Any]:
     """Implementation manifest from lease + provider facts; nothing structural from the model."""
     return {
@@ -590,7 +597,7 @@ def _build_manifest(
         "acceptance_criteria_addressed": _clean_strings(proposal["acceptance_criteria_addressed"]),
         "assumptions": _clean_strings(proposal["assumptions"]),
         "decisions": [],
-        "deviations": [],
+        "deviations": list(deviations or []),
         "discovered_dependencies": [],
         "unresolved_risks": _clean_strings(proposal["unresolved_risks"]),
         "usage": {
@@ -618,6 +625,68 @@ def _materialize_attempt_artifacts(
 # --------------------------------------------------------------------------- #
 # Records                                                                     #
 # --------------------------------------------------------------------------- #
+
+
+def candidate_disclosure(route: Any) -> dict[str, Any] | None:
+    """Plain statement + facts when any routed role is an unevaluated candidate binding, else None.
+
+    ``route`` is a :class:`~agentctl.routing.TaskRoute`. The statement is what run records, manifests
+    and verdicts repeat, so a reader of any one of them cannot mistake the binding for a champion.
+    """
+    roles = {"worker": route.worker, "reviewer": getattr(route, "reviewer", None)}
+    chosen = {name: decision for name, decision in roles.items() if decision is not None and decision.is_candidate}
+    return _disclosure(chosen)
+
+
+def _disclosure(chosen: Mapping[str, Any]) -> dict[str, Any] | None:
+    if not chosen:
+        return None
+    return {
+        "roles": list(chosen),
+        "statement": (
+            "The "
+            + " and ".join(chosen)
+            + " model binding is an unevaluated candidate (binding_type candidate, champion-challenger-v1), "
+            "selected by explicit operator opt-in because the champion binding has no runnable adapter. "
+            "It inherits no historical trust; promotion to champion is an owner decision."
+        ),
+        "bindings": {
+            name: {
+                "capability_class": decision.capability_class,
+                "provider": decision.provider,
+                "model_id": decision.model_id,
+                "binding_type": decision.binding_type,
+                "champion_unavailable_reason": decision.champion_unavailable_reason,
+            }
+            for name, decision in chosen.items()
+        },
+    }
+
+
+def _binding_finding(disclosure: Mapping[str, Any]) -> dict[str, Any]:
+    """The control plane's own non-blocking verdict finding disclosing a candidate reviewer binding."""
+    binding = disclosure["bindings"]["reviewer"]
+    return {
+        "finding_id": BINDING_FINDING_ID,
+        "severity": "important",
+        "violated_criterion": "champion-challenger-v1: the reviewer binding is an unevaluated candidate",
+        "file": "agent-system/routing/capability-registry.json",
+        "location": "entries[binding_type=candidate]",
+        "reproducible_evidence": (
+            f"route decision: {binding['capability_class']} -> {binding['provider']}/{binding['model_id']}, "
+            f"binding_type {binding['binding_type']}; {binding['champion_unavailable_reason']}"
+        ),
+        "observed_behavior": (
+            "[control-plane note, not a reviewer finding] " + str(disclosure["statement"])
+        ),
+        "required_behavior": (
+            "Rely on this verdict as sole approval only after the owner promotes the binding or accepts "
+            "this reviewer for this task."
+        ),
+        "required_outcome": "Owner decision on the candidate binding (promote, evaluate, or bind elsewhere).",
+        "reviewer_confidence": "high",
+        "blocking": False,
+    }
 
 
 def _model_run_status(result: ClaudeRunResult) -> str:
@@ -699,6 +768,7 @@ def run_task(
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     max_budget_usd: float = DEFAULT_MAX_BUDGET_USD,
     export_path: str | None = None,
+    allow_candidate_bindings: bool | None = None,
 ) -> dict[str, Any]:
     """Execute one ready task through one provider invocation. See the module docstring."""
     _check_export_path(export_path)
@@ -714,7 +784,10 @@ def run_task(
             f"task is {state!r}; only a ready task can be run", status="not_ready",
             payload={"task_id": task_id, "state": state},
         )
-    route = route_task(task_id, store=store, root=root, check_auth=True)
+    route = route_task(
+        task_id, store=store, root=root, check_auth=True,
+        allow_candidate_bindings=allow_candidate_bindings,
+    )
     if not route.available:
         raise RunRefused(
             route.message, status=route.status, payload={"task_id": task_id, "route": route.to_payload()}
@@ -742,6 +815,9 @@ def run_task(
         "worktree_path": lease.worktree_path,
         "options": {"timeout_seconds": timeout_seconds, "max_budget_usd": max_budget_usd},
     }
+    disclosure = candidate_disclosure(route)
+    if disclosure is not None:
+        record["candidate_bindings"] = disclosure
     record_path = _run_record_path(root, task_id, f"attempt-{lease.epoch}")
     outcome: dict[str, Any] = {}
     try:
@@ -750,6 +826,8 @@ def run_task(
             timeout_seconds=timeout_seconds, max_budget_usd=max_budget_usd,
         )
         record["outcome"] = {"status": "candidate", **{k: outcome[k] for k in ("result_commit",)}}
+        if disclosure is not None:
+            outcome["candidate_bindings"] = disclosure
         outcome.update(_finish_record(root, record, record_path, export_path, started))
         return outcome
     except RunFailed as failure:
@@ -883,9 +961,11 @@ def _attempt(
             actor_role=spec.capability_class,
         ),
     )
+    worker_notice = _disclosure({"worker": route.worker} if route.worker.is_candidate else {})
     implementation = _build_manifest(
         spec=spec, lease=lease, result=result, proposal=proposal,
         result_commit=result_commit, files_changed=files_changed,
+        deviations=[worker_notice["statement"]] if worker_notice else None,
     )
     manifest_path = attempt_dir / "implementation-manifest.json"
     _write_json(manifest_path, implementation)
@@ -1014,6 +1094,7 @@ def review_task(
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     max_budget_usd: float = DEFAULT_MAX_BUDGET_USD,
     export_path: str | None = None,
+    allow_candidate_bindings: bool | None = None,
 ) -> dict[str, Any]:
     """Run an independent reviewer for a task in ``independent_review`` and ingest its verdict."""
     _check_export_path(export_path)
@@ -1030,7 +1111,8 @@ def review_task(
         )
     spec = scheduler.task_spec(task_id)
     reviewer_route = route_reviewer(
-        spec.capability_class, risk=spec.risk, root=root, check_auth=True
+        spec.capability_class, risk=spec.risk, root=root, check_auth=True,
+        allow_candidate_bindings=allow_candidate_bindings,
     )
     if not reviewer_route.available:
         raise RunRefused(
@@ -1094,6 +1176,9 @@ def review_task(
         "options": {"timeout_seconds": timeout_seconds, "max_budget_usd": max_budget_usd,
                     "effective_timeout_seconds": timeout},
     }
+    disclosure = _disclosure({"reviewer": reviewer_route} if reviewer_route.is_candidate else {})
+    if disclosure is not None:
+        record["candidate_bindings"] = disclosure
     record_path = _run_record_path(root, task_id, f"review-{assignment['lease_epoch']}")
     try:
         if timeout <= 0:
@@ -1134,6 +1219,18 @@ def review_task(
                 payload={"task_id": task_id, "attempt_id": attempt_id, "outcome": "review_failed",
                          "failure_class": MALFORMED_OUTPUT},
             )
+        if disclosure is not None:
+            if BINDING_FINDING_ID in ids:
+                raise RunFailed(
+                    "reviewer output reuses the control plane's disclosure finding id",
+                    failure_class=MALFORMED_OUTPUT,
+                    payload={"task_id": task_id, "attempt_id": attempt_id, "outcome": "review_failed",
+                             "failure_class": MALFORMED_OUTPUT},
+                )
+            reviewer_findings = findings
+            findings = [*findings, _binding_finding(disclosure)]
+        else:
+            reviewer_findings = findings
         verdict = {
             "artifact_type": "review-verdict",
             "review_id": f"{attempt_id}-review-{assignment['lease_epoch']}",
@@ -1182,15 +1279,18 @@ def review_task(
             "review_id": ingested["review_id"],
             "state": ingested["state"],
             "verdict": verdict["verdict"],
-            "findings": len(findings),
-            "blocking_findings": sum(1 for finding in findings if finding["blocking"]),
+            "findings": len(reviewer_findings),
+            "blocking_findings": sum(1 for finding in reviewer_findings if finding["blocking"]),
             "reviewer_role": assignment["reviewer_role"],
+            "reviewer_binding_type": reviewer_route.binding_type,
             "reviewer_model": result.served_model,
             "reviewer_session_id": assignment["reviewer_session_id"],
             "reviewer_run_id": assignment["reviewer_run_id"],
             "author_session_id": author.model_session_id,
             "usage": dict(result.usage),
         }
+        if disclosure is not None:
+            outcome["candidate_bindings"] = disclosure
         outcome.update(_finish_record(root, record, record_path, export_path, started))
         return outcome
     except RunFailed as failure:

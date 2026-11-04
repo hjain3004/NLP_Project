@@ -639,11 +639,11 @@ class ReviewRunTests(RunTestCase):
         registry_path = repo.root / "agent-system/routing/capability-registry.json"
         document = json.loads(registry_path.read_text())
         for entry in document["entries"]:
-            if entry["capability_class"] == "complex_implementation":
+            if entry["capability_class"] == "complex_implementation" and entry["binding_type"] != "candidate":
                 entry["provider"], entry["model_id"] = "openai", "gpt-5.6-terra"
         registry_path.write_text(json.dumps(document))
         with self.assertRaises(RunRefused) as raised:
-            self.review(repo)
+            self.review(repo)  # the registry now also lists a candidate; without opt-in it is not used
         self.assertEqual(raised.exception.status, "reviewer_unavailable")
         self.assertEqual(len(self.fake.calls()), 1)
         self.assertEqual(repo.state(), "independent_review")
@@ -668,6 +668,150 @@ class ReviewRunTests(RunTestCase):
         usage = repo.cli("review", "bogus")
         self.assertEqual(usage.returncode, 2)
         self.assertIn("review run <task-id>", usage.stderr)
+
+
+class CandidateBindingRunTests(RunTestCase):
+    """REAL registry (champion openai reviewer unsupported, disclosed anthropic candidate) + SIMULATED provider.
+
+    These prove the control plane's handling of the opt-in and the disclosure it records. They do not prove
+    that the candidate model reviews well: that is exactly what champion-challenger-v1 has not yet evaluated.
+    """
+
+    VERDICT = {"verdict": "no_blocking_findings", "findings": []}
+
+    def authored(self, repo: LaneARepo, **kwargs):
+        author = run_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5,
+                          allow_candidate_bindings=True, **kwargs)
+        repo.scheduler.verify_candidate(repo.TASK_ID)
+        return author
+
+    def review(self, repo: LaneARepo, *, allow: bool = True, **scenario):
+        self.fake.set(**{"structured_output": self.VERDICT, **scenario})
+        return review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5,
+                           allow_candidate_bindings=allow)
+
+    def test_run_is_refused_without_opt_in_and_the_message_names_the_candidate_and_flag(self) -> None:
+        """Protects: with the real registry nothing runs unless the operator opts in; the refusal is actionable."""
+        repo = self.repo(registry=None)
+        with self.assertRaises(RunRefused) as raised:
+            self.run_it(repo)
+        self.assertEqual(raised.exception.status, "reviewer_unavailable")
+        for needle in ("claude-opus-5-5", "--allow-candidate-bindings", "AGENTCTL_ALLOW_CANDIDATE_BINDINGS", "owner decision"):
+            self.assertIn(needle, raised.exception.message)
+        self.assertEqual((repo.state(), repo.store.scalar("SELECT COUNT(*) FROM leases"), self.fake.calls()),
+                         ("ready", 0, []))
+
+    def test_opt_in_run_records_the_candidate_reviewer_binding_before_any_review_exists(self) -> None:
+        """Protects: the run record states the reviewer binding is an unevaluated candidate and why the champion was not used."""
+        repo = self.repo(registry=None)
+        result = self.authored(repo)
+        self.assertEqual(repo.state(), "independent_review")
+        record = json.loads((repo.root / result["run_record"]).read_text())
+        self.assertEqual(record["route"]["worker"]["binding_type"], "initial_prior")
+        self.assertEqual(record["route"]["reviewer"]["binding_type"], "candidate")
+        self.assertEqual(record["route"]["reviewer"]["model_id"], "claude-opus-5-5")
+        self.assertIn("openai/gpt-5.6-terra", record["route"]["reviewer"]["champion_unavailable_reason"])
+        self.assertEqual(record["candidate_bindings"]["roles"], ["reviewer"])
+        self.assertIn("unevaluated candidate", record["candidate_bindings"]["statement"])
+        argv = self.fake.calls()[0]["argv"]
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-sonnet-5")  # the champion authors
+
+    def test_review_with_opt_in_uses_the_candidate_model_and_the_verdict_says_so(self) -> None:
+        """Protects: the stored verdict carries a non-blocking control-plane finding that the reviewer binding is an unevaluated candidate."""
+        repo = self.repo(registry=None)
+        author = self.authored(repo)
+        result = self.review(repo)
+
+        self.assertEqual((result["state"], result["verdict"]), ("integration_ready", "no_blocking_findings"))
+        self.assertEqual((result["reviewer_binding_type"], result["reviewer_model"]), ("candidate", "claude-opus-5-5"))
+        reviewer_call = self.fake.calls()[1]["argv"]
+        self.assertEqual(reviewer_call[reviewer_call.index("--model") + 1], "claude-opus-5-5")
+        verdict = json.loads(repo.store.rows("SELECT payload_json FROM reviews")[0]["payload_json"])
+        self.assertEqual(verdict["reviewer_role"], "complex_implementation")
+        self.assertEqual(verdict["reviewer_model"], "claude-opus-5-5")
+        (note,) = [f for f in verdict["findings"] if f["finding_id"].startswith("CP-CANDIDATE-BINDING")]
+        self.assertFalse(note["blocking"])
+        self.assertIn("unevaluated candidate", note["observed_behavior"])
+        self.assertIn("control-plane note", note["observed_behavior"])
+        self.assertEqual(note["file"], "agent-system/routing/capability-registry.json")
+        self.assertTrue(verdict["independence_attestation"]["distinct"])
+        self.assertNotEqual(result["reviewer_session_id"], author["session_id"])
+        record = json.loads((repo.root / result["run_record"]).read_text())
+        self.assertEqual(record["route"]["binding_type"], "candidate")  # review record's route IS the reviewer decision
+        self.assertIn("openai/gpt-5.6-terra", record["route"]["champion_unavailable_reason"])
+        self.assertIn("unevaluated candidate", record["candidate_bindings"]["statement"])
+
+    def test_the_note_never_makes_a_clean_verdict_blocking_nor_hides_a_real_block(self) -> None:
+        """Protects: the disclosure is added alongside reviewer findings; the blocking decision stays the reviewer's."""
+        repo = self.repo(registry=None)
+        self.authored(repo)
+        result = self.review(repo, structured_output={"verdict": "blocking_findings", "findings": [FINDING]})
+        self.assertEqual((result["state"], result["blocking_findings"]), ("repair_required", 1))
+        ids = [f["finding_id"] for f in json.loads(
+            repo.store.rows("SELECT payload_json FROM reviews")[0]["payload_json"])["findings"]]
+        self.assertEqual(sorted(ids), sorted([FINDING["finding_id"], "CP-CANDIDATE-BINDING-1"]))
+
+    def test_review_without_opt_in_is_refused_even_after_an_opted_in_run(self) -> None:
+        """Protects: the opt-in is per command; an earlier opted-in run does not carry over."""
+        repo = self.repo(registry=None)
+        self.authored(repo)
+        with self.assertRaises(RunRefused) as raised:
+            self.review(repo, allow=False)
+        self.assertEqual(raised.exception.status, "reviewer_unavailable")
+        self.assertIn("--allow-candidate-bindings", raised.exception.message)
+        self.assertEqual((len(self.fake.calls()), repo.state()), (1, "independent_review"))
+
+    def test_served_model_rule_applies_to_the_candidate(self) -> None:
+        """Protects: a candidate is accepted only if the routed model id appears in the provider's served models."""
+        repo = self.repo(registry=None)
+        self.authored(repo)
+        with self.assertRaises(RunFailed) as raised:
+            self.review(repo, mode="model_mismatch")
+        self.assertEqual(raised.exception.failure_class, "model_unavailable")
+        self.assertEqual((repo.state(), repo.store.scalar("SELECT COUNT(*) FROM reviews")), ("independent_review", 0))
+
+    def test_candidate_author_is_disclosed_in_the_manifest_deviations(self) -> None:
+        """Protects: when the opt-in routes the AUTHOR to a candidate, the implementation manifest says so."""
+        repo = self.repo(registry=None, capability_class="complex_implementation")
+        result = run_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5,
+                          allow_candidate_bindings=True)
+        manifest = json.loads(repo.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = 'implementation-manifest'")[0]["payload_json"])
+        self.assertEqual((manifest["provider"], manifest["model"]), ("anthropic", "claude-opus-5-5"))
+        self.assertTrue(any("unevaluated candidate" in text for text in manifest["deviations"]))
+        record = json.loads((repo.root / result["run_record"]).read_text())
+        self.assertEqual(record["route"]["worker"]["binding_type"], "candidate")
+        self.assertEqual(record["candidate_bindings"]["roles"], ["worker", "reviewer"])
+
+    def test_unsupported_classes_without_a_candidate_are_still_refused_with_opt_in(self) -> None:
+        """Protects: opt-in is not a general fallback; a google-bound mechanical task is still unsupported."""
+        repo = self.repo(registry=None, capability_class="mechanical_execution")
+        with self.assertRaises(RunRefused) as raised:
+            run_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5,
+                     allow_candidate_bindings=True)
+        self.assertEqual(raised.exception.status, "unsupported_provider")
+        self.assertEqual((repo.store.scalar("SELECT COUNT(*) FROM leases"), self.fake.calls()), (0, []))
+
+    def test_cli_flag_and_environment_opt_in_both_work_and_default_is_refusal(self) -> None:
+        """Protects: `run --allow-candidate-bindings` and `review run --allow-candidate-bindings` (or the env var) are the only ways in."""
+        repo = self.repo(registry=None)
+        prefix = pathlib.Path(self.bin.name)
+        refused = repo.cli("run", repo.TASK_ID, path_prefix=prefix)
+        self.assertEqual(refused.returncode, 3)
+        self.assertIn("--allow-candidate-bindings", refused.stderr)
+        ran = repo.cli("run", repo.TASK_ID, "--allow-candidate-bindings", "--timeout", "60",
+                       "--max-budget-usd", "0.5", path_prefix=prefix)
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.fake.set(structured_output=self.VERDICT)
+        no_flag = repo.cli("review", "run", repo.TASK_ID, path_prefix=prefix)
+        self.assertEqual(no_flag.returncode, 3)
+        with mock.patch.dict(os.environ, {"AGENTCTL_ALLOW_CANDIDATE_BINDINGS": "1"}):
+            reviewed = repo.cli("review", "run", repo.TASK_ID, "--timeout", "60", "--max-budget-usd", "0.5",
+                                path_prefix=prefix)
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        payload = json.loads(reviewed.stdout)
+        self.assertEqual((payload["state"], payload["reviewer_binding_type"]), ("integration_ready", "candidate"))
 
 
 class GitHardeningTests(RunTestCase):

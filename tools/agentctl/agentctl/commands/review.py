@@ -18,7 +18,10 @@ from ..store import EventStore
 from ..validate import validate_artifact
 
 NAME = "review"
-RUN_USAGE = "usage: agentctl review run <task-id> [--timeout SECONDS] [--max-budget-usd USD] [--export PATH]"
+RUN_USAGE = (
+    "usage: agentctl review run <task-id> [--timeout SECONDS] [--max-budget-usd USD] [--export PATH] "
+    "[--allow-candidate-bindings]"
+)
 
 
 def _print(payload: dict[str, Any]) -> None:
@@ -40,6 +43,7 @@ def _review_run(argv: list[str]) -> int:
             timeout_seconds=options.timeout_seconds,
             max_budget_usd=options.max_budget_usd,
             export_path=options.export_path,
+            allow_candidate_bindings=options.allow_candidate_bindings,
         )
     except RunRefused as refused:
         _print({"task_id": options.task_id, "outcome": "refused", "status": refused.status,
@@ -74,7 +78,8 @@ def run(argv: list[str]) -> int:
             "review assign <task-id> <review-task-id> <review-attempt-id> "
             "<provider-run-id> <model-session-id> <actor-role> | "
             "review ingest <task-id> <verdict> | "
-            "review run <task-id> [--timeout SECONDS] [--max-budget-usd USD] [--export PATH]",
+            "review run <task-id> [--timeout SECONDS] [--max-budget-usd USD] [--export PATH] "
+            "[--allow-candidate-bindings]",
             file=sys.stderr,
         )
         return 2
