@@ -9,7 +9,7 @@
 
 - Full suite: `cd /home/user/wt/lane-b && PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl`
   -> **278 tests, 1 error**, the pre-existing `test_validate_valid` (`03-context-manifest.json`, stale `AGENTS.md` hash). Not touched.
-- Lane B tests: 45 (was 33). Run from a **detached** worktree as well (`git worktree add --detach`): the Lane B suites pass (item 7).
+- Lane B tests: 46 (was 33); the suite total rose from 265 to 278. Run from a **detached** worktree as well (`git worktree add --detach`): the Lane B suites pass (item 7).
 - For every defence below I broke the production line and confirmed the named test fails, then restored it (mutate-and-confirm table at the end).
 
 ## Blocking 1 -- gate escapes the env scrub and poisons later integrator runs
