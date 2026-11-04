@@ -182,5 +182,23 @@ class VerifyCandidateHardeningTests(unittest.TestCase):
         self.assertEqual(result["state"], "independent_review")
 
 
+class IntegrationOrderTests(unittest.TestCase):
+    def test_registered_task_payload_carries_the_contracts_integration_order(self) -> None:
+        """Protects: the integration queue can order by dependencies.integration_order, which TaskSpec used to drop."""
+        from agentctl.scheduler import TaskSpec
+        from .helpers_lane_a import LaneARepo
+
+        repo = LaneARepo(self, integration_order=7)
+        payload = json.loads(repo.store.rows("SELECT payload_json FROM tasks")[0]["payload_json"])
+        self.assertEqual(payload["integration_order"], 7)
+        self.assertEqual(repo.scheduler.task_spec(repo.TASK_ID).integration_order, 7)
+        # The ordering field is not part of either hash.
+        self.assertEqual(repo.store.rows("SELECT contract_hash FROM tasks")[0]["contract_hash"],
+                         repo.contract["identity"]["contract_hash"])
+        # Payloads registered before the field existed still load, with the order unknown.
+        legacy = {k: v for k, v in payload.items() if k != "integration_order"}
+        self.assertIsNone(TaskSpec.from_payload(legacy).integration_order)
+
+
 if __name__ == "__main__":
     unittest.main()

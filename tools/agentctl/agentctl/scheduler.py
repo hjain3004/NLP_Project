@@ -200,6 +200,8 @@ class TaskSpec:
     deterministic_checks: tuple[str, ...] = ()
     human_approval_ref: str | None = None
     human_approval_action: str | None = None
+    #: ``dependencies.integration_order`` of the contract; None for payloads registered before it was carried.
+    integration_order: int | None = None
 
     def with_semantic_locks(self, claims: Mapping[str, str]) -> "TaskSpec":
         return replace(self, semantic_locks=dict(claims))

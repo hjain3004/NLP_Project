@@ -187,6 +187,7 @@ class LaneARepo:
         deterministic_checks: tuple[str, ...] = ("test -d docs/lane-a",),
         registry: Mapping[str, tuple[str, str]] | None = None,
         symlink_target: pathlib.Path | None = None,
+        integration_order: int = 1,
     ) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         test.addCleanup(self.temporary.cleanup)
@@ -237,6 +238,7 @@ class LaneARepo:
         )
         contract["routing"].update(capability_class=capability_class, risk=risk)
         contract["verification"]["deterministic_checks"] = list(deterministic_checks)
+        contract["dependencies"]["integration_order"] = integration_order
         contract["budgets"]["maximum_attempts"] = maximum_attempts
         contract["budgets"]["maximum_artifact_corrections"] = 0
         unhashed = copy.deepcopy(contract)
