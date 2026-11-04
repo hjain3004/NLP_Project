@@ -834,7 +834,7 @@ def _cancel(
     executed: list[dict[str, str]] = []
     began_without_decision = not resumed
     first = True
-    while True:
+    for _attempt in range(len(TaskState) + 2):  # a chain is at most four steps; bound any livelock
         task = _task(store, task_id)
         current = str(task["state"])
         if current == TaskState.CANCELED.value:
@@ -861,6 +861,12 @@ def _cancel(
         first = False
         executed.append(step.to_payload())
         hook(f"after_step:{len(executed)}")
+    else:
+        raise LifecycleRefused(
+            f"task {task_id} is {_task(store, task_id)['state']!r} after repeated steps; the cancellation made "
+            "no progress and was stopped. Inspect the task with `agentctl task status-chain`",
+            reason_code="no_progress",
+        )
 
     hook("after_cancel")
     final_decision = _decision(store, task_id) or decision
