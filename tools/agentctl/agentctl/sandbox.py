@@ -20,7 +20,11 @@ What a sandboxed command can see and do (the contract, enforced by the kernel):
   a seccomp filter that refuses ``unshare``/``setns``/``mount``/``ptrace``/``bpf``/``keyctl``/...
   and ``clone`` with any ``CLONE_NEW*`` flag (``clone3`` answers ENOSYS so libc falls back).
 * **Network.** A new network namespace with no interface but loopback and no route: no external
-  connection can be made and the host's ``127.0.0.1`` is a different, unreachable namespace.
+  connection can be made and the host's ``127.0.0.1`` is a different, unreachable namespace. Socket
+  families that are NOT namespaced (``AF_VSOCK`` reaches the hypervisor on a Firecracker guest; also
+  packet, bluetooth, alg, ...) are blocked by the seccomp filter: only ``AF_UNIX``, ``AF_INET``,
+  ``AF_INET6`` and ``AF_NETLINK`` sockets can be created (everything else is EPERM), and ``io_uring``
+  and ``socketcall`` (which would route around that filter) are refused.
 * **Processes.** New PID, IPC, UTS and mount namespaces. When the command's shell exits (or the
   deadline passes) the PID namespace's init dies and the kernel kills every straggler, however
   it daemonised. OCI rlimits bound open files, processes, file size (core dumps are off). Memory,
@@ -111,7 +115,23 @@ _DENIED_SYSCALLS = (
     "vm86", "vm86old", "modify_ldt", "pciconfig_read", "pciconfig_write", "uselib", "ustat",
     "sysfs", "_sysctl", "kcmp", "pidfd_getfd", "landlock_create_ruleset", "mbind",
     "set_mempolicy", "migrate_pages", "move_pages",
+    # io_uring can open sockets (IORING_OP_SOCKET) without passing the ``socket`` filter below, and the
+    # 32-bit ``socketcall`` multiplexer hides the family behind a pointer; neither is needed by a check.
+    "io_uring_setup", "io_uring_enter", "io_uring_register", "socketcall",
 )
+#: Socket families a check may create: AF_UNIX, AF_INET, AF_INET6, AF_NETLINK. Everything else is refused with
+#: EPERM, notably AF_VSOCK (40), which is NOT namespaced: on a Firecracker guest a check could otherwise reach
+#: the hypervisor. A network namespace only contains the families that live inside one.
+ALLOWED_SOCKET_FAMILIES = (1, 2, 10, 16)
+#: Every family number below 17 that is NOT allowed gets its own equality rule, and one ``>=`` rule covers
+#: everything from 17 up. (Two comparisons on the same argument in one rule are mis-compiled by this
+#: libseccomp: ``>=3 and <=9`` denied every family.) The argument is compared as 64 bits, so a family with
+#: garbage in the upper half of the register is refused too.
+_DENIED_FAMILY_EQUALS = tuple(
+    family for family in range(max(ALLOWED_SOCKET_FAMILIES)) if family not in ALLOWED_SOCKET_FAMILIES
+)
+_DENIED_FAMILY_FROM = max(ALLOWED_SOCKET_FAMILIES) + 1
+_SOCKET_SYSCALLS = ("socket", "socketpair")
 #: ``CLONE_NEWNS|NEWCGROUP|NEWUTS|NEWIPC|NEWUSER|NEWPID|NEWNET``: one rule per bit so any of them denies.
 _CLONE_NAMESPACE_FLAGS = (
     0x00020000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000,
@@ -214,6 +234,16 @@ def _seccomp_profile() -> dict[str, Any]:
                 "args": [{"index": 0, "value": flag, "valueTwo": flag, "op": "SCMP_CMP_MASKED_EQ"}],
             }
         )
+    for family in _DENIED_FAMILY_EQUALS:
+        rules.append(
+            {"names": list(_SOCKET_SYSCALLS), **deny, "args": [{"index": 0, "value": family, "op": "SCMP_CMP_EQ"}]}
+        )
+    rules.append(
+        {
+            "names": list(_SOCKET_SYSCALLS), **deny,
+            "args": [{"index": 0, "value": _DENIED_FAMILY_FROM, "op": "SCMP_CMP_GE"}],
+        }
+    )
     profile: dict[str, Any] = {"defaultAction": "SCMP_ACT_ALLOW", "syscalls": rules}
     architectures = _SECCOMP_ARCHITECTURES.get(platform.machine())
     if architectures:
@@ -600,6 +630,27 @@ for target in (("127.0.0.1", int(os.environ["PROBE_PORT"])), ("192.0.2.1", 9)):
 sys.exit(0)
 PY
 fi
+if command -v python3 >/dev/null 2>&1; then
+  python3 - <<'PY' || { echo "FAIL socket-family-filter"; exit 22; }
+import errno, socket, sys
+# Families that are not namespaced (vsock reaches the hypervisor) must be refused by seccomp (EPERM), whether
+# or not this kernel has them; the allowed families must still be creatable. Creation only, never connect.
+for family in (40, 38, 17, 31, 9, 0, 255):
+    try:
+        socket.socket(family, socket.SOCK_STREAM).close()
+    except OSError as exc:
+        if exc.errno == errno.EPERM:
+            continue
+    sys.exit(1)
+for family in (socket.AF_UNIX, socket.AF_INET, socket.AF_INET6):
+    try:
+        socket.socket(family, socket.SOCK_STREAM).close()
+    except OSError as exc:
+        if exc.errno != errno.EAFNOSUPPORT:  # IPv6 may be absent; the filter must not be what refuses it
+            sys.exit(1)
+sys.exit(0)
+PY
+fi
 if command -v unshare >/dev/null 2>&1 && unshare --user true 2>/dev/null; then echo "FAIL user-namespace-allowed"; exit 21; fi
 echo "RUNTIME git=$(git --version 2>/dev/null || echo none)"
 echo "RUNTIME python=$(python3 -c 'import sys;print(sys.version.split()[0])' 2>/dev/null || echo none)"
@@ -691,7 +742,9 @@ def probe(refresh: bool = False) -> dict[str, Any]:
     file path is not visible; the root directory holds only the expected entries; ``/root``,
     ``/home`` and the Docker socket are absent; ``/`` and ``/usr`` are mounted read-only (flag, not just permissions) and ``/etc`` is not writable while
     ``/work`` is read-write; the only network interface is loopback with no route, a listener the probing process holds
-    on its own ``127.0.0.1`` cannot be connected to and neither can a TEST-NET address; a user namespace
+    on its own ``127.0.0.1`` cannot be connected to and neither can a TEST-NET address; sockets of
+    families that are not namespaced (vsock, packet, bluetooth, alg, ...) cannot be created (EPERM, creation
+    only: the probe never connects to a vsock peer) while unix/inet/inet6 can; a user namespace
     cannot be created. Returns ``available``,
     ``reason`` (``ok`` or a stable code), ``limits_enforced`` and a ``runtime_hash``.
     """

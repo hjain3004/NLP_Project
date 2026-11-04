@@ -280,6 +280,68 @@ class HostIsolationTests(_Case):
         self.assertEqual(text.split()[-1], "lo")  # the only interface
         self.assertEqual(accepted, [])
 
+    def test_socket_families_that_are_not_namespaced_cannot_even_be_created(self) -> None:
+        """Protects: AF_VSOCK reaches the hypervisor from a Firecracker guest and is not in any network
+        namespace, so the seccomp filter must refuse to create it (and the other un-namespaced families).
+        Creation only: the test never connects to a vsock peer. Also io_uring, which can open sockets
+        without passing through ``socket(2)``."""
+        text = self.output(
+            "python3 - <<'PY'\n"
+            "import ctypes, errno, os, socket\n"
+            "names = {40: 'vsock', 17: 'packet', 31: 'bluetooth', 38: 'alg', 9: 'x25', 15: 'key', 0: 'unspec'}\n"
+            "for family, name in names.items():\n"
+            "    for how in ('socket', 'socketpair'):\n"
+            "        try:\n"
+            "            (socket.socket(family, socket.SOCK_STREAM) if how == 'socket'\n"
+            "             else socket.socketpair(family, socket.SOCK_STREAM)[0]).close()\n"
+            "            print('CREATED', name, how)\n"
+            "        except OSError as error:\n"
+            "            print(name, how, errno.errorcode.get(error.errno))\n"
+            "libc = ctypes.CDLL(None, use_errno=True)\n"
+            "params = ctypes.create_string_buffer(120)\n"
+            "print('io_uring', libc.syscall(425, 4, params), errno.errorcode.get(ctypes.get_errno()))\n"
+            "PY"
+        )
+
+        self.assertNotIn("CREATED", text)
+        for name in ("vsock", "packet", "bluetooth", "alg", "x25", "key", "unspec"):
+            for how in ("socket", "socketpair"):
+                self.assertIn(f"{name} {how} EPERM", text)
+        self.assertIn("io_uring -1 EPERM", text)
+
+    def test_the_families_a_check_legitimately_needs_still_work_including_loopback_inside_the_namespace(self) -> None:
+        text = self.output(
+            "python3 - <<'PY'\n"
+            "import os, socket\n"
+            "a, b = socket.socketpair(); a.send(b'x'); assert b.recv(1) == b'x'; print('unix-socketpair')\n"
+            "server = socket.socket(socket.AF_UNIX); server.bind('/tmp/s.sock'); server.listen(1)\n"
+            "client = socket.socket(socket.AF_UNIX); client.connect('/tmp/s.sock'); print('unix-connect')\n"
+            "listener = socket.socket(); listener.bind(('127.0.0.1', 0)); listener.listen(1)\n"
+            "peer = socket.create_connection(listener.getsockname(), timeout=2); print('inet-loopback')\n"
+            "socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, 0).close(); print('netlink')\n"
+            "PY\n"
+            "python3 -c 'import multiprocessing as m; q = m.Queue(); q.put(1); print(q.get())'"
+        )
+
+        self.assertEqual(text.split(), ["unix-socketpair", "unix-connect", "inet-loopback", "netlink", "1"])
+
+    def test_the_seccomp_profile_allows_exactly_unix_inet_inet6_and_netlink(self) -> None:
+        """Protects the profile's arithmetic (no kernel needed): every family number 0..255 and some wild values
+        are refused except 1, 2, 10 and 16, for ``socket`` and ``socketpair``."""
+        rules = [r for r in sandbox._seccomp_profile()["syscalls"] if "socket" in r["names"]]
+
+        def refused(family: int) -> bool:
+            def holds(argument: dict) -> bool:
+                value, op = argument["value"], argument["op"]
+                return {"SCMP_CMP_EQ": family == value, "SCMP_CMP_GE": family >= value,
+                        "SCMP_CMP_LE": family <= value}[op]
+            return any(all(holds(a) for a in rule["args"]) for rule in rules)
+
+        allowed = [family for family in list(range(256)) + [2**32 + 2, 2**63, 2**64 - 1] if not refused(family)]
+        self.assertEqual(allowed, [1, 2, 10, 16])
+        for rule in rules:
+            self.assertEqual(rule["names"], ["socket", "socketpair"])
+
 
 @NEEDS_RUNC
 class DeadlineLimitsAndCleanupTests(_Case):

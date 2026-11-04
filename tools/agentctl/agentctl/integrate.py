@@ -1362,6 +1362,10 @@ class _Engine:
                     "parked_without_new_evidence": {
                         e.task_id: e.parked_reason for e in queue.entries if e.parked_reason
                     },
+                    # The remedy, not only the code, for the parked reasons that have one.
+                    "parked_explanations": {
+                        e.task_id: e.parked_explanation for e in queue.entries if e.parked_explanation
+                    },
                 }
             target = entry.task_id
         else:

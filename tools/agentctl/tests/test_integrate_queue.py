@@ -182,6 +182,9 @@ class ChallengerMergeEligibilityTests(unittest.TestCase):
             idle = self.lab.cli()
             self.assertEqual((idle.code, idle.json["outcome"]), (3, "queue_empty"))
             self.assertEqual(idle.json["parked_without_new_evidence"], {"T-a": CHALLENGER_NOT_MERGE_ELIGIBLE})
+            # The listing carries the remedy text, not only the reason code.
+            self.assertIn(PROMOTION_TEXT, idle.json["parked_explanations"]["T-a"])
+            self.assertIn("champion-challenger-v1", idle.json["parked_explanations"]["T-a"])
         self.assertEqual(self.lab.branch_head(), head)
         self.assertEqual(self.lab.store.event_count(), events, "a parked task must cost no event per call")
         self.assertEqual(self.lab.artifacts("integration-rejection", "T-a"), [])
