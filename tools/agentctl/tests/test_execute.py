@@ -23,6 +23,7 @@ from agentctl.execute import (
     RunFailed,
     RunRefused,
     audit_proposal,
+    review_task,
     run_task,
 )
 
@@ -448,6 +449,170 @@ class ScopeAuditTests(RunTestCase):
                 files(write("docs/new.md"), {"path": "docs/keep.md", "action": "delete", "content": ""}), **kwargs
             )
             self.assertEqual([(c.path, c.action) for c in planned], [("docs/new.md", "write"), ("docs/keep.md", "delete")])
+
+
+FINDING = {
+    "finding_id": "F-1",
+    "severity": "important",
+    "violated_criterion": "acceptance behavior",
+    "file": "docs/lane-a/notes.md",
+    "location": "line 2",
+    "reproducible_evidence": "diff shows the second line is missing a trailing newline",
+    "observed_behavior": "no trailing newline",
+    "required_behavior": "file ends with a newline",
+    "required_outcome": "add the newline",
+    "reviewer_confidence": "high",
+    "blocking": True,
+}
+
+
+class ReviewRunTests(RunTestCase):
+    """`review run` with a SIMULATED reviewer: identity, ordering, binding, and independence are real."""
+
+    def authored(self, repo: LaneARepo) -> dict:
+        author = self.run_it(repo)
+        repo.scheduler.verify_candidate(repo.TASK_ID)
+        self.assertEqual(repo.state(), "independent_review")
+        return author
+
+    def review(self, repo: LaneARepo, **scenario):
+        self.fake.set(**{"structured_output": {"verdict": "no_blocking_findings", "findings": []}, **scenario})
+        return review_task(repo.TASK_ID, store=repo.store, timeout_seconds=60, max_budget_usd=0.5)
+
+    def test_independent_review_ingests_a_verdict_bound_to_a_fresh_registered_session(self) -> None:
+        """Protects: a fresh reviewer process under a pre-registered assignment advances the task via the existing ingest checks."""
+        repo = self.repo()
+        author = self.authored(repo)
+        result = self.review(repo)
+
+        self.assertEqual((result["verdict"], result["state"]), ("no_blocking_findings", "integration_ready"))
+        self.assertEqual(repo.state(), "integration_ready")
+        author_call, reviewer_call = self.fake.calls()
+        session = lambda call: call["argv"][call["argv"].index("--session-id") + 1]  # noqa: E731
+        self.assertNotEqual(session(author_call), session(reviewer_call))
+        self.assertEqual(result["reviewer_session_id"], session(reviewer_call))
+        self.assertNotEqual(result["reviewer_session_id"], author["session_id"])
+        review = repo.store.rows("SELECT * FROM reviews")[0]
+        self.assertEqual((review["reviewer_session_id"], review["reviewer_run_id"]),
+                         (result["reviewer_session_id"], result["reviewer_run_id"]))
+        verdict = json.loads(review["payload_json"])
+        candidate = json.loads(repo.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = 'candidate-binding'")[0]["payload_json"])
+        self.assertEqual(verdict["reviewed_result_commit"], author["result_commit"])
+        self.assertEqual((verdict["tree_hash"], verdict["diff_hash"]), (candidate["tree_hash"], candidate["diff_hash"]))
+        self.assertEqual(verdict["independence_attestation"]["author_session_id"], author["session_id"])
+        self.assertTrue(verdict["independence_attestation"]["distinct"])
+        self.assertEqual(verdict["reviewer_role"], "complex_implementation")
+
+    def test_assignment_is_registered_before_the_reviewer_process_runs(self) -> None:
+        """Protects: the fenced assignment and minted identity exist first; the model run is recorded after."""
+        repo = self.repo()
+        self.authored(repo)
+        self.review(repo)
+        order = [row["event_type"] for row in repo.store.rows(
+            "SELECT event_type FROM events WHERE task_id = ? ORDER BY sequence", (repo.TASK_ID,))]
+        assigned = order.index("review_assigned")
+        reviewer_run = max(i for i, name in enumerate(order) if name == "model_run_recorded")
+        self.assertLess(assigned, reviewer_run)
+        self.assertLess(order.index("review_pack_prepared"), assigned)
+
+    def test_reviewer_prompt_has_the_diff_and_not_the_authors_claims(self) -> None:
+        """Protects: the reviewer sees the candidate diff text and changed files, but not the author's assumptions or summary."""
+        repo = self.repo()
+        self.fake.set(structured_output=proposal(
+            assumptions=["PERSUASIVE-AUTHOR-ASSUMPTION"], summary="PERSUASIVE-AUTHOR-SUMMARY"))
+        self.authored(repo)
+        self.review(repo)
+        prompt = self.fake.calls()[1]["stdin"]
+        self.assertIn("+line two", prompt)
+        self.assertIn("-original line", prompt)
+        self.assertIn("<<<FILE docs/lane-a/notes.md>>>", prompt)
+        self.assertNotIn("PERSUASIVE-AUTHOR", prompt)
+        argv = self.fake.calls()[1]["argv"]
+        self.assertEqual(argv[argv.index("--tools") + 1], "")
+
+    def test_blocking_findings_send_the_task_to_repair(self) -> None:
+        """Protects: a blocking verdict is recorded and does not reach integration_ready."""
+        repo = self.repo()
+        self.authored(repo)
+        result = self.review(
+            repo, structured_output={"verdict": "blocking_findings", "findings": [FINDING]}
+        )
+        self.assertEqual((result["verdict"], result["state"], result["blocking_findings"]),
+                         ("blocking_findings", "repair_required", 1))
+
+    def test_reviewer_output_missing_required_finding_fields_is_rejected(self) -> None:
+        """Protects: the reviewer schema derived from review-verdict.schema.json is enforced; a sloppy finding ingests nothing."""
+        repo = self.repo()
+        self.authored(repo)
+        bad = {k: v for k, v in FINDING.items() if k != "reproducible_evidence"}
+        with self.assertRaises(RunFailed) as raised:
+            self.review(repo, structured_output={"verdict": "blocking_findings", "findings": [bad]})
+        self.assertEqual(raised.exception.failure_class, "malformed_output")
+        self.assertEqual(repo.state(), "independent_review")
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
+
+    def test_reviewer_provider_failure_ingests_nothing_and_is_recorded(self) -> None:
+        """Protects: a failed reviewer run leaves the task in independent_review and the failed run in model_runs."""
+        repo = self.repo()
+        self.authored(repo)
+        with self.assertRaises(RunFailed) as raised:
+            self.review(repo, mode="exit_nonzero")
+        self.assertEqual(raised.exception.failure_class, "nonzero_exit")
+        self.assertEqual(repo.state(), "independent_review")
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
+        self.assertEqual(
+            [row["status"] for row in repo.store.rows("SELECT status FROM model_runs ORDER BY rowid")],
+            ["completed", "nonzero_exit"],
+        )
+
+    def test_same_actor_role_as_the_author_is_rejected_before_any_reviewer_runs(self) -> None:
+        """Protects: independence is enforced by the existing five-dimension check; complex_implementation cannot review its own class (no model call is made)."""
+        repo = self.repo(capability_class="complex_implementation")
+        self.authored(repo)
+        with self.assertRaises(PermissionViolation) as raised:
+            self.review(repo)
+        self.assertEqual(raised.exception.context["dimension"], "actor_role")
+        self.assertEqual(len(self.fake.calls()), 1)  # only the author ever ran
+        self.assertEqual(repo.state(), "independent_review")
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
+
+    def test_unroutable_reviewer_class_refuses_without_a_model_call(self) -> None:
+        """Protects: if the reviewer binding becomes unsupported (real openai entry), review is refused, never substituted."""
+        repo = self.repo()
+        self.authored(repo)
+        registry_path = repo.root / "agent-system/routing/capability-registry.json"
+        document = json.loads(registry_path.read_text())
+        for entry in document["entries"]:
+            if entry["capability_class"] == "complex_implementation":
+                entry["provider"], entry["model_id"] = "openai", "gpt-5.6-terra"
+        registry_path.write_text(json.dumps(document))
+        with self.assertRaises(RunRefused) as raised:
+            self.review(repo)
+        self.assertEqual(raised.exception.status, "reviewer_unavailable")
+        self.assertEqual(len(self.fake.calls()), 1)
+        self.assertEqual(repo.state(), "independent_review")
+
+    def test_review_requires_the_independent_review_state(self) -> None:
+        """Protects: a ready or candidate task cannot be reviewed."""
+        repo = self.repo()
+        with self.assertRaises(RunRefused) as raised:
+            self.review(repo)
+        self.assertEqual(raised.exception.status, "not_in_review")
+
+    def test_cli_review_run_end_to_end(self) -> None:
+        """Protects: `python3 -m agentctl review run` is the ordinary entry point and the manual subcommands still work."""
+        repo = self.repo()
+        self.authored(repo)
+        self.fake.set(structured_output={"verdict": "no_blocking_findings", "findings": []})
+        completed = repo.cli("review", "run", repo.TASK_ID, "--timeout", "60", "--max-budget-usd", "0.5",
+                             path_prefix=pathlib.Path(self.bin.name))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual((payload["outcome"], payload["state"]), ("reviewed", "integration_ready"))
+        usage = repo.cli("review", "bogus")
+        self.assertEqual(usage.returncode, 2)
+        self.assertIn("review run <task-id>", usage.stderr)
 
 
 class DatabaseIntegrityTests(RunTestCase):
