@@ -1,115 +1,72 @@
-# Automation delivery — coordinator checkpoint
+# Automation delivery — coordinator checkpoint (2026-11-04)
 
 **Owner of this file:** the coordinator (parent) session only. Workers publish uniquely named
-reports under `reports/`; they never edit this file.
-**Base:** `bc7c369a5b31b91094e48d07a29dfc47daedbd36` (main). **Branch:** `claude/brave-keller-7gd2bc`.
-**Authority:** AGENTS.md; `docs/program/AUTOMATION_DELIVERY.md`. This file adds no authority.
+reports under `reports/`. This file adds no authority; AGENTS.md governs.
+**Base:** `bc7c369a5b31b91094e48d07a29dfc47daedbd36`. **Branch:** `claude/brave-keller-7gd2bc` (pushed).
 
-## Preflight facts (2026-11-04, cloud container, Linux)
+## Outcome in one paragraph
 
-| Item | Observed |
-|---|---|
-| Python | 3.13.18 |
-| Provider CLIs on PATH | `claude` 2.1.318 only. No `codex`, `gemini`, `kiro`. |
-| Claude auth | `claude auth status`: logged in (OAuth). Credentials never read. |
-| Structured output | `claude -p --output-format json` returns `session_id`, result `uuid`, `modelUsage` (actual served model), `usage` tokens, `total_cost_usd`, `is_error`, `terminal_reason`, `api_error_status`, `structured_output` (with `--json-schema`). |
-| No-tool execution | `--tools ""` gives a run with no tools (true `proposal_only`). |
-| Registry model ids | `claude-sonnet-5` served as `claude-sonnet-5`. `claude-opus` is rejected (`is_error:true`, 404, `subtype:"success"` — so `subtype` must not be trusted). `claude-opus-5-5`, `claude-haiku-5-5` also served. |
-| Registry gap | `complex_implementation` → openai, `mechanical_execution` → google, `architectural_authority` → openai: no CLI here. These classes must report `unavailable`, not be substituted. |
-| Baseline | `make -C tools/agentctl test`: 234 tests, 1 error (`test_validate_valid`, fixture `03-context-manifest.json` pins a stale `AGENTS.md` hash from before the 2026-10-22 edit). `docs verify` ok. `git diff --check` clean. Log: `evidence/baseline-test.log`. |
-
-## Design decisions (frozen for the lanes)
-
-1. **Enforcement class for automated workers is `proposal_only`.** The model gets no tools. It
-   returns a typed proposal (full-file contents); the control plane scope-audits, writes,
-   commits in the leased worktree, and builds the implementation manifest from lease/provider facts.
-   `sandboxed_tools` is not implemented: no verified sandbox exists here.
-2. **One provider path:** Anthropic via `claude -p`. Others return an explicit
-   `unsupported_provider` / `unavailable` result. No substitution.
-3. **Identities:** session id and control-plane run id are minted before invocation (`--session-id`), the CLI-echoed session id is verified, the result `uuid` is kept as evidence (amended after plan review: `ReviewManager.assign` needs ids before the run).
-4. **Usage:** record provider-reported values; absent means `null`/unavailable, never 0.
-   The current manifest requires four numeric usage fields; the Claude CLI reports all four, so no
-   schema change is needed for this path. A provider that cannot report them needs a schema proposal.
-5. **Integration state is kept in existing tables** (`tasks`, `artifacts`, `events`): no `store.py`
-   schema change. Git ref advance uses compare-and-swap (`git update-ref <ref> <new> <old>`) after
-   checks pass on a detached integration worktree; an intent artifact is written first so a crash
-   between Git and SQLite is reconciled from actual Git state before retry.
-6. Bootstrap implementation lanes run **outside** the control plane (no lease/attempt asserted).
-   Only the delivery-demonstration tasks run through the control plane.
-
-## Plan review (independent Opus session, read-only): APPROVE_WITH_CHANGES
-
-Accepted and forwarded to the lanes: (1) reviewer floor — with the real registry every runnable
-task is `reviewer_unavailable` (complex_implementation→openai, planning→`claude-opus` rejected);
-routing reports this honestly; the demo needs an explicitly labeled **delivery-repo registry
-profile** binding the reviewer class to `claude-opus-5-5` (a real registry change in main would be
-a separate owner decision); (2) integration has no legal failure exit and no lease path — Lane B
-runs all checks on a detached worktree while the task stays `integration_ready`, records rejections
-as non-advancing events/artifacts, mints an `integration-lease` artifact, and may call
-`store.execute` + `transition()`; (3) ids minted pre-run; (4) artifacts written to per-attempt dirs
-for on-disk cross-link validation; (5) Lane A also owns the scheduler/lease/review tests;
-(6) `verify_candidate` gets timeout + scrubbed env. Non-blocking notes (lease expiry bound,
-no `--fallback-model`, child cwd outside repo, `repair_required` dead end) are in the lane briefs.
-Baseline error is the unowned stale fixture pin → handled by a separate mechanical worktree.
-
-## Lanes, ownership, dependencies
-
-| Lane | Branch | Owner (model) | Writes (exclusive) | Reads/consumes |
-|---|---|---|---|---|
-| A routing + provider + review run | `claude/lane-a-routing` | Sonnet worker | `routing.py`, `adapters/claude_cli.py`, `adapters/__init__.py`, `execute.py`, `commands/run.py`, `commands/review.py`, `scheduler.py`/`review.py`/`leases.py`/`store.py` (**single owner of shared internals**), `tests/test_routing.py`, `tests/test_claude_cli_adapter.py`, `tests/test_execute.py`, `tests/helpers_lane_a.py` | — |
-| B integration queue | `claude/lane-b-integration` | Sonnet worker | `integrate.py`, `integration_queue.py`, `commands/integrate.py`, `tests/test_integrate*.py`, `tests/helpers_lane_b.py` | scheduler/review/store via public API only; changes to shared internals are requested from the coordinator → Lane A |
-| C reviewer/verifier | fresh sessions | independent | none | candidates |
-| Coordinator | `claude/brave-keller-7gd2bc` | parent | this file, `tests/test_stubs.py` (placeholder assertions removed before lane base), README status | everything |
-
-Semantic locks: `contract:agentctl-shared-internals` (Lane A owns). Lane B must not edit
-`scheduler.py`, `review.py`, `leases.py`, `store.py`, `events.py`, `models.py`.
-
-The lanes share no interface that needs to be frozen first: both consume the *existing* event-store
-rows at `integration_ready` (`candidate-binding`, `verification-evidence`, `implementation-manifest`,
-`reviews`, `attempts.author_*`). Lane A produces those rows through the ordinary CLI; Lane B's tests
-build the same rows with disposable Git repositories through the existing public scheduler/review API.
-
-Sequence: A1 (routing + adapter + `run`) ∥ B1 (integration). A2 (`review run`) after A1.
-Review of A1/B1 as each lands. Demo (Priority 1+2 joined) after both are merged to the session branch.
-G0 closeout leads run in parallel only where they touch none of the lane-owned files.
+Routing, one live provider path (Anthropic `claude -p`, no tools), `run`, `review run`, serialized
+`integrate`, and a shared hardened gate runner are implemented and merged. The full cycle was
+observed live once for two small real fixes in an isolated delivery clone: concurrent authoring
+(about 146 s overlap), verification, fresh-session independent review, unchanged integration.
+G0 is **not** closed and cannot be from this environment.
 
 ## Task states
 
-| ID | State | Commit | Notes |
-|---|---|---|---|
-| PRE | done | 3a1457c | preflight + plan; pushed |
-| PLAN-REVIEW | done | | APPROVE_WITH_CHANGES, all 6 blockers accepted |
-| A1/A2/A3 | merged | session branch tip `9825b3c` | Lane A: routing, Claude CLI proposal_only adapter, `run`, `review run`, env allowlist, hardened git, `verify_candidate` on shared gate_runner. Independent review (Opus): no blocking after repair 1. |
-| B1-B4 | merged | same | Lane B: serialized `integrate`. Review 1: 2 blocking → repair 1 (Sonnet) → re-review: still blocking (same class) → **escalated to Opus** repair 3 (namespace isolation, tamper detection, lease fencing, safe materialisation) → review 3: NO_BLOCKING_FINDINGS. |
-| FULL SUITE | verified by coordinator from main checkout | `9825b3c` | 391 tests OK, 1 skipped (opt-in live test); `docs verify` ok. |
-| DEMO | running | | operator worker, delivery clone `/home/user/delivery`, evidence branch `claude/demo-evidence` |
-| FIXTURE-PIN | done, merged | edc6fdc | fixes G0-04 and the baseline error; suite 232 OK; G0-01..11 pass dry |
-| A2 | blocked on A1 | | |
-| REVIEW-A1, REVIEW-B1 | blocked | | |
-| DEMO | blocked | | |
-| G0-CLASSIFY | pending | | |
+| ID | State | Evidence |
+|---|---|---|
+| Preflight + plan | done | commit `3a1457c`; independent plan review APPROVE_WITH_CHANGES, all 6 blockers adopted |
+| FIXTURE-PIN (G0-04 / baseline error) | done, merged | `edc6fdc`; dry G0-01..11 pass |
+| Lane A routing/provider/run/review run (+ env allowlist, hardened git, `verify_candidate` on gate_runner) | done, merged | reports lane-a-1..3; independent review: no blocking |
+| Lane B `integrate` | done, merged | reports lane-b-1..4; review 1: 2 blocking → repair 1 → re-review still blocking → escalated to Opus repair 3 → review 3: no blocking |
+| DEMO cycle 1 | recorded, incomplete | `reports/demo-1.md`: reviewer caught a real defect in DEMO-001's candidate; DEMO-002 rejected at integration (my contract used git-dependent checks) |
+| DEMO cycle 2 (DEMO-101/102 replans) | done | `reports/demo-2.md`; integration merge `dccdf89`; merged into the session branch by coordinator `git merge` at `881264f` (**outside the control plane**; commits unchanged) |
+| Final architecture audit (fresh Opus) | done | `reports/final-audit-review-input.md` — AUDIT_PASS_WITH_NONBLOCKING; **review input, not a G0-12 artifact** |
+| HARDENING-1 (audit F1a/F1b/F3) | in progress | branch `claude/verify-hardening` |
+| Draft PR | pending | after HARDENING-1 |
 
-## Open non-blocking findings (from independent reviews; not fixed)
+Suite at last coordinator check (tip `182e4f1`): 404 tests OK, 1 skipped (opt-in live test); `docs verify` ok.
 
-- Tamper defences: several surfaces (`info/attributes`, `objects/info/alternates`, included config, replace refs) lack a test that fails when the defence is removed (review B3 #1).
-- Tamper check hashes `.git` metadata only; a gate that edits the control plane's own working-copy files or the event store is NOT detected (review B3 #2; residual of the `unsandboxed_tools` class). No OS sandbox is claimed.
-- `_finalize` fencing compares the store with itself; reconcile adopts a crashed run's live lease (review B3 #3).
-- `RLIMIT_NPROC` only soft-set on the fallback path; whole blobs read when building the gate tree (B3 #4/#5).
-- Gate isolation depends on `unshare --user --pid`; without it F1(a) is open for a root integrator (`gate_isolation: "none"` is recorded).
-- Open design items for the owner: reviewer-floor registry bindings; two new state-machine rows requested by Lane B (rejected candidates are parked by artifact); `repair_required` has no authorize path; infrastructure failures consume attempts; `handle_schema_error` with correction budget > 0 leaves the task running.
+## Deviations to know
+
+- DEMO-101 fixes `approve.py` (risk `medium`, routed as `standard_implementation`), not the "low-risk
+  synthetic" change AUTOMATION_DELIVERY Task 3 asks for. DEMO-102 is risk `low`.
+- The delivery clone used a labeled registry profile (`complex_implementation` → `claude-opus-5-5`).
+  With the real registry every `standard_implementation` task is `reviewer_unavailable`.
+- Integration gates in the demo were each candidate's own new test file; existing suites were dropped
+  because they need `git` (verify/integrate environment mismatch). The full suite on the integration
+  head passed (404) only in a clean-clone rerun after a Lane B test-fixture isolation problem produced
+  23 failures in the first attempt.
+
+## Open findings (none fixed unless stated)
+
+- Candidate/gate code runs at the control-plane uid, before review, with network access; the tamper
+  check covers `.git` metadata only; the event store is not protected from gates (audit F1).
+  HARDENING-1 adds: verify drops sensitive env, empty check lists fail, high/critical risk refused.
+  Still open: separate uid/network namespace; cross-checking store rows against the event chain.
+- Verify (with `.git` link) vs integrate (`.git`-less) environments differ (audit F2).
+- Superseded tasks re-enter the integration queue; `repair_required` has no authorize path (audit F4).
+- Tamper-defence test gaps; `_finalize` fencing self-comparison; soft `RLIMIT_NPROC`; blob memory (review B3).
+- `ingest_audit` accepts self-declared `fresh_session`/`distinct` flags (audit §4); dry-run `gate_result` label
+  says `passed` while evaluating only 11 of 14 criteria.
+- Lane B asked for two new state-machine rows (pinned 24-row table, design §14.1): not added.
+
+## Blockers needing the owner (cannot be done from the cloud)
+
+1. Decide HERO_SCENARIO: include in level 1 + scope statement, or reclassify (changes the hash to approve).
+2. Approve `governance-change-set-v2` (before-hashes still match) and accept ADR-0005 — typed approvals
+   need the owner's Mac key/TTY.
+3. Provide the G0-12 architecture audit through the control plane (the `architectural_authority` class is
+   bound to a provider with no adapter), then G0-13 scope and G0-14 phase approvals, then `agentctl gate G0`.
+4. Decide the reviewer-floor registry bindings and the state-machine items above.
 
 ## Budget
 
-Platform-enforced ceiling: $90 (parent + children). Exact platform spend is not observable from
-inside the session; provider-reported `total_cost_usd` of every live call the automation makes is
-recorded in its run record. Preflight probes cost about $0.05 in total.
-
-## Blockers
-
-- Reviewer floor with the real registry (`complex_implementation`→openai): runnable `standard_implementation` tasks are `reviewer_unavailable`. Demo uses a labeled delivery-repo registry profile; real fix is an owner decision.
-- Lane B asked for two new state-machine transitions (pinned 24-row table, design §14.1): not added; rejected candidates are parked by artifact. Owner decision.
-- `repair_required` has no authorize path; infrastructure failures consume attempts.
+Platform-enforced ceiling $90; exact platform spend is not observable here. Provider-reported cost of all
+live automation calls: about $2.66 (demo cycles) plus about $0.03 of probes and lane smoke tests.
+Agent-session spend is not reported to this session.
 
 ## Next executable step
 
-Demo operator reports; then integrate demo outcome, final architecture audit (fresh session), README/status update, draft PR.
+Merge HARDENING-1 after an independent review, rerun the suite, push, open the draft PR.
