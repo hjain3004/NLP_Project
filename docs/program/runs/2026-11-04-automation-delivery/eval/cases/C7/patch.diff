@@ -1,0 +1,222 @@
+diff --git a/tools/agentctl/agentctl/context.py b/tools/agentctl/agentctl/context.py
+index fb40818dc1d58c3228fc4305ce8418154aaf4455..ace37709edcf523eeeea60a8a370ff8dd901e1d4 100644
+--- a/tools/agentctl/agentctl/context.py
++++ b/tools/agentctl/agentctl/context.py
+@@ -1,26 +1,27 @@
+ """Minimal, reproducible context-pack compilation and stale-context rebuilds."""
+ 
+ from __future__ import annotations
+ 
+ import datetime as dt
+ import json
++import os
+ import sqlite3
+ import uuid
+ from collections.abc import Mapping, Sequence
+ from pathlib import Path, PurePosixPath
+ from typing import Any
+ 
+ from .config import repo_root as resolve_repo_root
+ from .errors import ContractStale, PlanningError
+ from .events import make_event
+ from .hashing import sha256_of_file, sha256_of_json_excluding
+ from .interfaces import current_interface_binding
+ from .store import EventStore
+ 
+ __all__ = [
+     "CONTEXT_INPUTS",
+     "EXCLUDED_BY_POLICY",
+     "ContextCompiler",
+     "assert_context_hash",
+ ]
+ 
+@@ -315,41 +316,52 @@ class ContextCompiler:
+                 )
+             connection.execute(
+                 "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+                 "content_hash, path, integrable, payload_json) "
+                 "VALUES (?, 'context-manifest', ?, ?, ?, '', 1, ?)",
+                 (
+                     artifact_id,
+                     task_id,
+                     attempt_id,
+                     new_hash,
+                     json.dumps(manifest, sort_keys=True, separators=(",", ":")),
+                 ),
+             )
+             return manifest
+ 
+         return dict(
+             self.store.execute(f"context-rebuild:{task_id}:{new_hash}", event, mutation)
+         )
+ 
+     def _find_task_contract(self, task_id: str) -> tuple[str, dict[str, Any]]:
+-        for path in sorted((self.root / "agent-system").glob("**/*.json")):
++        agent_system_root = self.root / "agent-system"
++        excluded_runtime_root = (agent_system_root / "runtime").resolve()
++        candidates: list[Path] = []
++        for dirpath, dirnames, filenames in os.walk(agent_system_root):
++            current = Path(dirpath)
++            dirnames[:] = [
++                name for name in dirnames if (current / name) != excluded_runtime_root
++            ]
++            candidates.extend(
++                current / filename for filename in filenames if filename.endswith(".json")
++            )
++        for path in sorted(candidates):
+             try:
+                 document = json.loads(path.read_text(encoding="utf-8"))
+             except (OSError, json.JSONDecodeError):
+                 continue
+             if (
+                 isinstance(document, dict)
+                 and document.get("artifact_type") == "task-contract"
+                 and document.get("identity", {}).get("task_id") == task_id
+             ):
+                 return path.relative_to(self.root).as_posix(), document
+         raise PlanningError("task contract file was not found", task_id=task_id)
+ 
+ 
+ def assert_context_hash(expected: str, artifact: Mapping[str, Any]) -> None:
+     """Reject output returned against any context other than the dispatched one."""
+     if artifact.get("context_hash") != expected:
+         raise ContractStale(
+             "artifact context hash does not match the dispatched context",
+             expected=expected,
+             actual=artifact.get("context_hash"),
+diff --git a/tools/agentctl/tests/test_context_runtime_exclusion.py b/tools/agentctl/tests/test_context_runtime_exclusion.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d9a455d384bdff51efae947891120bc7615be2b4
+--- /dev/null
++++ b/tools/agentctl/tests/test_context_runtime_exclusion.py
+@@ -0,0 +1,130 @@
++"""ContextCompiler task-contract discovery must ignore agent-system/runtime/."""
++
++from __future__ import annotations
++
++import json
++import pathlib
++import tempfile
++import unittest
++from unittest import mock
++
++from agentctl.context import ContextCompiler
++from agentctl.errors import PlanningError
++
++_BOUNDARY_POLICY = {
++    "enforcement": {
++        "allowed_context_roots": ["agent-system/**", "AGENTS.md", "docs/**"],
++        "excluded_by_default": [],
++    }
++}
++
++
++def _write_json(path: pathlib.Path, document: dict) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    path.write_text(json.dumps(document), encoding="utf-8")
++
++
++def _task_contract(task_id: str) -> dict:
++    return {
++        "artifact_type": "task-contract",
++        "identity": {"task_id": task_id},
++    }
++
++
++def _make_repo(root: pathlib.Path) -> None:
++    _write_json(root / "agent-system/policies/product-data-boundary.json", _BOUNDARY_POLICY)
++
++
++class RuntimeExclusionTests(unittest.TestCase):
++    def test_discovery_ignores_runtime_even_when_it_has_a_matching_contract(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            root = pathlib.Path(temp_dir)
++            _make_repo(root)
++            real_path = root / "agent-system/work/DEMO/tasks/DEMO-900.json"
++            _write_json(real_path, _task_contract("DEMO-900"))
++            runtime_path = (
++                root
++                / "agent-system/runtime/worktrees/attempt-1/agent-system/work/DEMO/tasks/DEMO-900.json"
++            )
++            _write_json(runtime_path, _task_contract("DEMO-900"))
++
++            compiler = ContextCompiler(root)
++            found_path, document = compiler._find_task_contract("DEMO-900")
++
++            self.assertEqual(found_path, "agent-system/work/DEMO/tasks/DEMO-900.json")
++            self.assertEqual(document["identity"]["task_id"], "DEMO-900")
++
++    def test_real_contract_wins_regardless_of_path_sort_order(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            root = pathlib.Path(temp_dir)
++            _make_repo(root)
++            real_path = root / "agent-system/work/zz-demo/tasks/DEMO-901.json"
++            runtime_path = root / "agent-system/runtime/aa-worktree/DEMO-901.json"
++            _write_json(real_path, _task_contract("DEMO-901"))
++            _write_json(runtime_path, _task_contract("DEMO-901"))
++            self.assertLess(
++                runtime_path.relative_to(root).as_posix(),
++                real_path.relative_to(root).as_posix(),
++            )
++
++            compiler = ContextCompiler(root)
++            found_path, _document = compiler._find_task_contract("DEMO-901")
++
++            self.assertEqual(found_path, "agent-system/work/zz-demo/tasks/DEMO-901.json")
++
++    def test_discovery_identical_when_no_runtime_directory_exists(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            root = pathlib.Path(temp_dir)
++            _make_repo(root)
++            real_path = root / "agent-system/work/DEMO/tasks/DEMO-902.json"
++            _write_json(real_path, _task_contract("DEMO-902"))
++            self.assertFalse((root / "agent-system/runtime").exists())
++
++            compiler = ContextCompiler(root)
++            found_path, document = compiler._find_task_contract("DEMO-902")
++
++            self.assertEqual(found_path, "agent-system/work/DEMO/tasks/DEMO-902.json")
++            self.assertEqual(document["identity"]["task_id"], "DEMO-902")
++
++    def test_no_contract_outside_runtime_raises_planning_error(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            root = pathlib.Path(temp_dir)
++            _make_repo(root)
++            runtime_only_path = root / "agent-system/runtime/worktrees/attempt-1/DEMO-903.json"
++            _write_json(runtime_only_path, _task_contract("DEMO-903"))
++
++            compiler = ContextCompiler(root)
++            with self.assertRaises(PlanningError) as raised:
++                compiler._find_task_contract("DEMO-903")
++
++            self.assertIn("task contract file was not found", str(raised.exception))
++
++    def test_discovery_never_opens_files_under_runtime(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            root = pathlib.Path(temp_dir)
++            _make_repo(root)
++            real_path = root / "agent-system/work/DEMO/tasks/DEMO-904.json"
++            _write_json(real_path, _task_contract("DEMO-904"))
++            runtime_path = root / "agent-system/runtime/worktrees/attempt-1/DEMO-904.json"
++            _write_json(runtime_path, _task_contract("DEMO-904"))
++
++            compiler = ContextCompiler(root)
++
++            opened: list[str] = []
++            original_read_text = pathlib.Path.read_text
++
++            def _tracking_read_text(self: pathlib.Path, *args: object, **kwargs: object) -> str:
++                opened.append(self.as_posix())
++                return original_read_text(self, *args, **kwargs)
++
++            with mock.patch.object(pathlib.Path, "read_text", _tracking_read_text):
++                found_path, _document = compiler._find_task_contract("DEMO-904")
++
++            self.assertEqual(found_path, "agent-system/work/DEMO/tasks/DEMO-904.json")
++            self.assertFalse(
++                any("agent-system/runtime" in opened_path for opened_path in opened)
++            )
++
++
++if __name__ == "__main__":
++    unittest.main()

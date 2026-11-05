@@ -1,0 +1,253 @@
+diff --git a/tools/agentctl/agentctl/commands/approve.py b/tools/agentctl/agentctl/commands/approve.py
+index 5668307995930da58308f6dcd9659f9495d499a9..b9cb4134ab24b01d2c97edd63c48c82b35463021 100644
+--- a/tools/agentctl/agentctl/commands/approve.py
++++ b/tools/agentctl/agentctl/commands/approve.py
+@@ -227,56 +227,64 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
+     if args.target_type == "governance-change-set":
+         target = resolve_approval_target(
+             args.target_type, args.target_id, repository_root=root
+         )
+         if target.target_hash != args.target_hash:
+             raise ApprovalRejected(
+                 "approval_wrong_target_hash", "governance proposal hash is stale"
+             )
+     if args.out:
+         if approval_id is None:
+             _legacy_destination(root, args.out)
+         else:
+             _contained_destination(root, args.out)
+     result = {"method": method, "scope": scope}
+     if approval_id is not None:
+         result["approval_id"] = approval_id
+     return result
+ 
+ 
+ def _contained_destination(root: Path, value: str) -> Path:
+-    """Return a lexical contained destination without following its final link."""
++    """Return a contained destination resolved the way run() consumes it.
++
++    Comparing the destination lexically against ``root`` wrongly rejects an
++    alias path (a symlinked ancestor directory, or macOS /var versus
++    /private/var) whose parent genuinely resolves inside the repository.
++    The final path component is never resolved here, so a destination whose
++    final component is itself a symlink is still rejected below rather than
++    silently followed.
++    """
+     candidate = Path(value).expanduser()
+     if not candidate.is_absolute():
+         candidate = root / candidate
+     destination = candidate.absolute()
+     try:
+-        destination.relative_to(root)
+-        destination.parent.resolve(strict=False).relative_to(root.resolve())
++        resolved_parent = destination.parent.resolve(strict=False)
++        resolved_parent.relative_to(root.resolve())
+     except ValueError as exc:
+         raise ApprovalRejected(
+             "approval_output_outside_repository",
+             "approval artifact output must be in the repository",
+         ) from exc
+     if destination.is_symlink():
+         raise ApprovalRejected("approval_output_invalid", "approval output cannot be a symlink")
+-    return destination
++    return resolved_parent / destination.name
+ 
+ 
+ def _legacy_destination(root: Path, value: str) -> Path:
+     """Resolve a no-ID output exactly as the legacy command did."""
+     destination = Path(value).expanduser().resolve()
+     try:
+         destination.relative_to(root)
+     except ValueError as exc:
+         raise ApprovalRejected(
+             "approval_output_outside_repository",
+             "approval artifact output must be in the repository",
+         ) from exc
+     return destination
+ 
+ 
+ def _write_exclusive_json(destination: Path, record: dict) -> None:
+     """Create one approval mirror without following or replacing an output path."""
+     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+     flags |= getattr(os, "O_NOFOLLOW", 0)
+     descriptor = os.open(destination, flags, 0o600)
+diff --git a/tools/agentctl/tests/test_approve_output_containment.py b/tools/agentctl/tests/test_approve_output_containment.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..843a3138eff18e218148498dd2c994d36577154b
+--- /dev/null
++++ b/tools/agentctl/tests/test_approve_output_containment.py
+@@ -0,0 +1,174 @@
++"""Caller-level coverage for alias-path output containment in approve.py.
++
++Exercises _contained_destination both directly and through run(argv), using
++real filesystem symlinks (no git, no mocked Path) so the alias behavior and
++the caller's destination.relative_to(root) usage are both proven.
++"""
++
++from __future__ import annotations
++
++import io
++import json
++import pathlib
++import tempfile
++import unittest
++import uuid
++from contextlib import redirect_stdout
++from unittest import mock
++
++from agentctl.approval import ApprovalRejected
++from agentctl.commands import approve as approve_command
++from agentctl.config import Config
++
++
++def _repo_root() -> pathlib.Path:
++    """Locate the repository purely via pathlib; never invokes git."""
++    return pathlib.Path(__file__).resolve().parents[3]
++
++
++def _make_fake_repo(base: pathlib.Path) -> pathlib.Path:
++    """Build a minimal repository root with the real approval policy files."""
++    root = base / "real-repo"
++    policies = root / "agent-system" / "policies"
++    policies.mkdir(parents=True)
++    real_root = _repo_root()
++    for name in ("approval-policy.json", "approval-principals.json"):
++        (policies / name).write_text(
++            (real_root / "agent-system" / "policies" / name).read_text(encoding="utf-8"),
++            encoding="utf-8",
++        )
++    return root
++
++
++class ApproveOutputContainmentTests(unittest.TestCase):
++    def test_preflight_accepts_alias_path_reaching_repo_through_ancestor_symlink(self) -> None:
++        """Returning the destination unresolved would crash run() on relative_to."""
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            alias = base / "alias-base"
++            alias.symlink_to(base, target_is_directory=True)
++            aliased_root = alias / root.name
++            out_path = aliased_root / "sub" / "out.json"
++            config = Config(
++                repo_root=root.resolve(),
++                runtime_dir=root / "runtime",
++                seal_key_path=base / "never-read.key",
++            )
++            argv = [
++                "phase_authorization", "--target-type", "phase-gate", "--target-id", "GATE",
++                "--target-hash", "a" * 64, "--reason", "synthetic", "--approval-id",
++                str(uuid.uuid4()), "--preflight", "--out", str(out_path),
++            ]
++            with mock.patch.object(approve_command, "load_config", return_value=config):
++                with redirect_stdout(io.StringIO()) as captured:
++                    self.assertEqual(approve_command.run(argv), 0)
++            self.assertEqual(json.loads(captured.getvalue())["status"], "ok")
++
++    def test_contained_destination_returns_destination_relative_to_root_for_alias(self) -> None:
++        """run() applies destination.relative_to(root); the helper's return must support it."""
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            alias = base / "alias-base"
++            alias.symlink_to(base, target_is_directory=True)
++            aliased_root = alias / root.name
++            out_path = aliased_root / "sub" / "out.json"
++            root_resolved = root.resolve()
++            destination = approve_command._contained_destination(root_resolved, str(out_path))
++            relative = destination.relative_to(root_resolved)
++            self.assertEqual(relative.as_posix(), "sub/out.json")
++
++    def test_contained_destination_rejects_truly_outside_path(self) -> None:
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            outside = base / "outside.json"
++            with self.assertRaises(ApprovalRejected) as raised:
++                approve_command._contained_destination(root.resolve(), str(outside))
++            self.assertEqual(raised.exception.code, "approval_output_outside_repository")
++
++    def test_preflight_rejects_plain_outside_path(self) -> None:
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            outside = base / "outside.json"
++            config = Config(
++                repo_root=root.resolve(),
++                runtime_dir=root / "runtime",
++                seal_key_path=base / "never-read.key",
++            )
++            argv = [
++                "phase_authorization", "--target-type", "phase-gate", "--target-id", "GATE",
++                "--target-hash", "a" * 64, "--reason", "synthetic", "--approval-id",
++                str(uuid.uuid4()), "--preflight", "--out", str(outside),
++            ]
++            with mock.patch.object(approve_command, "load_config", return_value=config):
++                with self.assertRaises(ApprovalRejected) as raised:
++                    approve_command.run(argv)
++            self.assertEqual(raised.exception.code, "approval_output_outside_repository")
++
++    def test_contained_destination_rejects_symlink_inside_pointing_outside(self) -> None:
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            outside_dir = base / "outside-dir"
++            outside_dir.mkdir()
++            link = root / "escape-link"
++            link.symlink_to(outside_dir, target_is_directory=True)
++            destination_path = link / "out.json"
++            with self.assertRaises(ApprovalRejected) as raised:
++                approve_command._contained_destination(root.resolve(), str(destination_path))
++            self.assertEqual(raised.exception.code, "approval_output_outside_repository")
++
++    def test_preflight_rejects_symlink_inside_pointing_outside(self) -> None:
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            outside_dir = base / "outside-dir"
++            outside_dir.mkdir()
++            link = root / "escape-link"
++            link.symlink_to(outside_dir, target_is_directory=True)
++            destination_path = link / "out.json"
++            config = Config(
++                repo_root=root.resolve(),
++                runtime_dir=root / "runtime",
++                seal_key_path=base / "never-read.key",
++            )
++            argv = [
++                "phase_authorization", "--target-type", "phase-gate", "--target-id", "GATE",
++                "--target-hash", "a" * 64, "--reason", "synthetic", "--approval-id",
++                str(uuid.uuid4()), "--preflight", "--out", str(destination_path),
++            ]
++            with mock.patch.object(approve_command, "load_config", return_value=config):
++                with self.assertRaises(ApprovalRejected) as raised:
++                    approve_command.run(argv)
++            self.assertEqual(raised.exception.code, "approval_output_outside_repository")
++
++    def test_contained_destination_rejects_final_component_symlink(self) -> None:
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            target = root / "target.json"
++            target.write_text("{}", encoding="utf-8")
++            link = root / "out-link.json"
++            link.symlink_to(target)
++            with self.assertRaises(ApprovalRejected) as raised:
++                approve_command._contained_destination(root.resolve(), str(link))
++            self.assertEqual(raised.exception.code, "approval_output_invalid")
++
++    def test_contained_destination_accepts_relative_path_inside_repo(self) -> None:
++        with tempfile.TemporaryDirectory() as directory:
++            base = pathlib.Path(directory)
++            root = _make_fake_repo(base)
++            root_resolved = root.resolve()
++            destination = approve_command._contained_destination(
++                root_resolved, "sub/relative-out.json"
++            )
++            self.assertEqual(
++                destination.relative_to(root_resolved).as_posix(), "sub/relative-out.json"
++            )
++
++
++if __name__ == "__main__":
++    unittest.main()

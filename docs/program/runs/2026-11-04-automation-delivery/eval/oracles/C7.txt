@@ -1,0 +1,1 @@
+scope_check violations: ['tools/agentctl/tests/test_context_runtime_exclusion.py']
