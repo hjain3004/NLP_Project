@@ -1,0 +1,26 @@
+{
+  "artifact_type": "work-package",
+  "work_package_id": "DELIVERY-OPS",
+  "schema_version": 1,
+  "phase_id": "P0",
+  "title": "Automation operational-readiness acceptance run",
+  "objective": "Exercise the ordinary agentctl run, verify, review run, integrate and lifecycle cycle against the real routing registry on two real backlog items (an integrator role wording defect and a materialiser memory bound), recording what the enforced policies allow",
+  "deliverables": [
+    "One verified, independently reviewed candidate per task",
+    "Recorded run, review, integration-attempt and lifecycle evidence"
+  ],
+  "depends_on": [],
+  "initial_capability_class": "standard_implementation",
+  "owning_planner_role": "work_package_planning",
+  "semantic_locks": [],
+  "acceptance_summary": [
+    "Both tasks are ready together",
+    "Both run concurrently through a live provider under the real registry with an explicit candidate-binding opt-in",
+    "Every deterministic check runs in the sandboxed check environment",
+    "Integration is attempted through the ordinary command and its policy outcome is recorded"
+  ],
+  "status": "in_progress",
+  "bootstrap_phase": false,
+  "created_at": "2026-11-04T09:00:00Z",
+  "plan_hash": "eb2b78ff34194ea9c0bb24a9e7c52bdc997a95e8613311e5f3fb8bc04e7b5b67"
+}

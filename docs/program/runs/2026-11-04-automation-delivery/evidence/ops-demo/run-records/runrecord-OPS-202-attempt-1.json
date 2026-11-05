@@ -1,0 +1,83 @@
+{
+  "attempt_id": "OPS-202-attempt-1",
+  "base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+  "branch": "agentctl/OPS-202/attempt-1",
+  "candidate_bindings": {
+    "bindings": {
+      "reviewer": {
+        "binding_type": "candidate",
+        "capability_class": "complex_implementation",
+        "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+        "model_id": "claude-opus-5-5",
+        "provider": "anthropic"
+      }
+    },
+    "roles": [
+      "reviewer"
+    ],
+    "statement": "The reviewer model binding is an unevaluated candidate (binding_type candidate, champion-challenger-v1), selected by explicit operator opt-in because the champion binding has no runnable adapter. It inherits no historical trust; promotion to champion is an owner decision."
+  },
+  "context_hash": "bd9328be27bc08abdb2542f4b88ce09598df0af3301ccd12bb8adbf728b5f4e1",
+  "contract_hash": "0c0c0127780b29def4d15c038f3a0e2fedb3c717749eceb7e94d06c4b6c22888",
+  "elapsed_ms": 260194,
+  "finished_at": "2026-11-05T00:04:37.000614Z",
+  "identity": {
+    "minted_session_id": "9f8e0d7e-bdaf-4f3f-a42d-4080c05752db",
+    "provider_run_id": "c6038342-09b8-4e3b-b0d5-125a7a249841"
+  },
+  "kind": "author_run",
+  "lease_epoch": 1,
+  "lease_id": "9cab22b3-1fd0-4e72-a19a-346d4382b06d",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "failure_class": "KeyboardInterrupt",
+    "message": "",
+    "status": "failed"
+  },
+  "prompt": {
+    "bytes": 81643,
+    "sha256": "4da73c50c65e75c33ea3d2533b4adb065d8f47efd0ac879f1d01388f65828c1c"
+  },
+  "record_version": 1,
+  "route": {
+    "candidate_roles": [
+      "reviewer"
+    ],
+    "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+    "reviewer": {
+      "adapter": "claude_cli",
+      "binding_type": "candidate",
+      "candidate_offered": null,
+      "capability_class": "complex_implementation",
+      "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+      "executable": "/opt/node22/bin/claude",
+      "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli [selected as an unevaluated candidate binding under champion-challenger-v1, by operator opt-in, because champion openai/gpt-5.6-terra is unsupported_provider; it inherits no trust and is not a promoted champion.]",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    },
+    "status": "available",
+    "task_id": "OPS-202",
+    "worker": {
+      "adapter": "claude_cli",
+      "binding_type": "initial_prior",
+      "candidate_offered": null,
+      "capability_class": "standard_implementation",
+      "champion_unavailable_reason": null,
+      "executable": "/opt/node22/bin/claude",
+      "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+      "model_id": "claude-sonnet-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    }
+  },
+  "started_at": "2026-11-05T00:00:16.806461Z",
+  "task_id": "OPS-202",
+  "worktree_path": "agent-system/runtime/worktrees/OPS-202/attempt-1"
+}

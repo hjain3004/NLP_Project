@@ -1,0 +1,43 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/user/delivery2/tools/agentctl/agentctl/__main__.py", line 10, in <module>
+    sys.exit(main(sys.argv[1:]))
+             ~~~~^^^^^^^^^^^^^^
+  File "/home/user/delivery2/tools/agentctl/agentctl/cli.py", line 70, in main
+    return int(run(rest))
+               ~~~^^^^^^
+  File "/home/user/delivery2/tools/agentctl/agentctl/commands/run.py", line 42, in run
+    payload = run_task(
+        options.task_id,
+    ...<3 lines>...
+        allow_candidate_bindings=options.allow_candidate_bindings,
+    )
+  File "/home/user/delivery2/tools/agentctl/agentctl/execute.py", line 885, in run_task
+    outcome = _attempt(
+        store, scheduler, root, spec, lease, route, record,
+        timeout_seconds=timeout_seconds, max_budget_usd=max_budget_usd,
+    )
+  File "/home/user/delivery2/tools/agentctl/agentctl/execute.py", line 964, in _attempt
+    result = adapter.invoke(
+        prompt,
+    ...<8 lines>...
+        },
+    )
+  File "/home/user/delivery2/tools/agentctl/agentctl/adapters/claude_cli.py", line 770, in invoke
+    process = run_bounded(
+        argv, stdin=prompt.encode("utf-8"), timeout=float(timeout), env=env, cwd=neutral_cwd
+    )
+  File "/home/user/delivery2/tools/agentctl/agentctl/adapters/claude_cli.py", line 341, in run_bounded
+    proc.wait(timeout=timeout)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/subprocess.py", line 1281, in wait
+    return self._wait(timeout=timeout)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/subprocess.py", line 2080, in _wait
+    time.sleep(delay)
+    ~~~~~~~~~~^^^^^^^
+  File "/home/user/delivery2/tools/agentctl/agentctl/commands/run.py", line 33, in _terminate
+    raise KeyboardInterrupt  # unwinds through run_task's cleanup (kills the provider group)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

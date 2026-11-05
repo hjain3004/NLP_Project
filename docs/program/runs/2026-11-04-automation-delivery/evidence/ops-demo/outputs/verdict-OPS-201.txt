@@ -1,0 +1,42 @@
+{
+ "artifact_type": "review-verdict",
+ "attempt_id": "OPS-201-attempt-1",
+ "context_hash": "9d4161755aa91393b1432f9f28c1c058bc00eb186d0a4d3a9f1cf13841276cf5",
+ "contract_hash": "916a4f15785505baf9735e4ff8e4c00d39bc7954a83e1c0686d80ba56cc7b862",
+ "declared_base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+ "diff_hash": "c1db37b9306041651ed31c5f8bb8d7890acb9efcb23fd65f0dd39e9817ef5375",
+ "fencing_token": "8eba85611399f7c692eab7c34c4082dbf375e9a21a9594de0fd1643849885bcc",
+ "independence_attestation": {
+  "author_run_id": "d6b81448-f3e3-4061-bb22-86eed7b78a45",
+  "author_session_id": "4aceff97-b79d-41be-9910-f4c65277c017",
+  "distinct": true
+ },
+ "lease_epoch": 1,
+ "lease_id": "5f565084-74ff-4c8f-85d8-52815349c2ef",
+ "review_id": "OPS-201-attempt-1-review-1",
+ "reviewed_result_commit": "0663c4c4ee126f30dfcfda8ee083696120957040",
+ "reviewer_model": "claude-opus-5-5",
+ "reviewer_provider": "anthropic",
+ "reviewer_role": "complex_implementation",
+ "reviewer_run_id": "5ae2973b-b806-4cc6-9ee1-e91b3b3cf8bd",
+ "reviewer_session_id": "974ac7c1-426f-45d6-aa24-58cb4d76319c",
+ "task_id": "OPS-201",
+ "tree_hash": "e2e43dcc3777f37ac320baebcea1394a006aa37b",
+ "verdict": "no_blocking_findings",
+ "verification_evidence_hash": "20612c7ac38506722ddc07ef20b6dab60191dedbd19229f2b37b9fb3297f8c62"
+}
+[
+ {
+  "blocking": false,
+  "file": "agent-system/routing/capability-registry.json",
+  "finding_id": "CP-CANDIDATE-BINDING-1",
+  "location": "entries[binding_type=candidate]",
+  "observed_behavior": "[control-plane note, not a reviewer finding] The reviewer model binding is an unevaluated candidate (binding_type candidate, champion-challenger-v1), selected by explicit operator opt-in because the champion binding has no runnable adapter. It inherits no historical trust; promotion to champion is an owner decision.",
+  "reproducible_evidence": "route decision: complex_implementation -> anthropic/claude-opus-5-5, binding_type candidate; champion openai/gpt-5.6-terra is unsupported_provider",
+  "required_behavior": "Rely on this verdict as sole approval only after the owner promotes the binding or accepts this reviewer for this task.",
+  "required_outcome": "Owner decision on the candidate binding (promote, evaluate, or bind elsewhere).",
+  "reviewer_confidence": "high",
+  "severity": "important",
+  "violated_criterion": "champion-challenger-v1: the reviewer binding is an unevaluated candidate"
+ }
+]

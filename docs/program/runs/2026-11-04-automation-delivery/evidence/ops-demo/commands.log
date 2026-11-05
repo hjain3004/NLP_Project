@@ -1,0 +1,21 @@
+# commands.log -- acceptance run DELIVERY-OPS. Times are `date +%s.%N` epoch seconds. Working dir /home/user/delivery2, BASE c5ed8f7a783242167657d4a9d7343c55f9c721a6
+# SETUP (not interventions): clone/branch/remote removal (1793836624.43), cmp registry, sandbox probe, BASE prechecks of candidate checks via run_candidate_checks, contracts generation, validate x3, commit 84c7fca, plan validate (1793836796.58 exit 0)
+[1793836804.846485081 -> 1793836805.355489186] exit=3 :: PYTHONPATH=tools/agentctl python3 -m agentctl run OPS-201 --max-budget-usd 1.5 --export /home/user/opsdemo-scratch/out/negctl-export.json
+[1793836809.116601486 -> 1793836809.248442437] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl ready --json
+[1793836809.254987345 -> 1793836809.385316703] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl status
+[1793836816.259066832 -> 1793836845.693547103] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl run OPS-201 --allow-candidate-bindings --max-budget-usd 1.5 --export /home/user/opsdemo-scratch/out/run-record-OPS-201.json
+# INFRASTRUCTURE EVENT: container restarted during the concurrent author runs (OPS-201 had completed at 1793836845.69; OPS-202's run, started 1793836816.26, was killed by SIGTERM -> KeyboardInterrupt after elapsed_ms 260194, finished_at 2026-11-05T00:04:37Z; run record outcome failed/KeyboardInterrupt; lease expired via the lease_expired path; OPS-202 back to ready, attempts_remaining 1). Coordinator-directed single re-run of OPS-202 follows. Authors therefore did NOT overlap past ~29 s (OPS-201 finished inside OPS-202's first window, but OPS-202's first window did not complete).
+[1793837135.361303677 -> 1793837735.902308812] exit=1 :: PYTHONPATH=tools/agentctl python3 -m agentctl run OPS-202 --allow-candidate-bindings --max-budget-usd 1.5 --export /home/user/opsdemo-scratch/out/run-record-OPS-202.json
+# OPS-202 re-run (attempt 2) timed out at 600 s with no provider output (failure_class timeout, usage null, exit -9). This is NOT a diagnosed infrastructure failure; attempts for OPS-202 are exhausted (maximum_attempts 2). STOPPING automation for OPS-202; no third run. Continuing steps c-h for OPS-201 only (coordinator: stop at the expected gate).
+[1793837780.411708239 -> 1793837781.728580194] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl verify OPS-201
+[1793837796.581175633 -> 1793837802.852144539] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl review run OPS-201 --allow-candidate-bindings --max-budget-usd 1.5
+[1793837812.696779202 -> 1793837812.822538438] exit=3 :: PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+[1793837812.828362415 -> 1793837812.956359784] exit=1 :: PYTHONPATH=tools/agentctl python3 -m agentctl integrate OPS-201
+[1793837819.352269389 -> 1793837819.466553185] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl status
+[1793837819.469908255 -> 1793837819.582317791] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl task status-chain OPS-202
+# OPERATOR ACTION (labeled): cancel OPS-202 -- failed twice (restart kill, then 600s timeout); demonstrates the lifecycle exit
+[1793837819.588804848 -> 1793837819.727746976] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl task cancel OPS-202 --reason acceptance: demonstrate queue exit
+[1793837825.169995027 -> 1793837825.346179155] exit=3 :: PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+[1793837825.350952631 -> 1793837825.466974102] exit=0 :: PYTHONPATH=tools/agentctl python3 -m agentctl status
+[1793837825.490193625 -> 1793837825.627861303] exit=1 :: PYTHONPATH=tools/agentctl python3 -m agentctl integrate OPS-202
+# DIAGNOSTIC (operator, read-only, outside the gate, in a scratch clone with full history): agentctl docs verify on candidate 0663c4c

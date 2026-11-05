@@ -1,0 +1,135 @@
+{
+  "attempt_id": "OPS-202-attempt-2",
+  "base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+  "branch": "agentctl/OPS-202/attempt-2",
+  "candidate_bindings": {
+    "bindings": {
+      "reviewer": {
+        "binding_type": "candidate",
+        "capability_class": "complex_implementation",
+        "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+        "model_id": "claude-opus-5-5",
+        "provider": "anthropic"
+      }
+    },
+    "roles": [
+      "reviewer"
+    ],
+    "statement": "The reviewer model binding is an unevaluated candidate (binding_type candidate, champion-challenger-v1), selected by explicit operator opt-in because the champion binding has no runnable adapter. It inherits no historical trust; promotion to champion is an owner decision."
+  },
+  "context_hash": "bd9328be27bc08abdb2542f4b88ce09598df0af3301ccd12bb8adbf728b5f4e1",
+  "contract_hash": "0c0c0127780b29def4d15c038f3a0e2fedb3c717749eceb7e94d06c4b6c22888",
+  "elapsed_ms": 600097,
+  "finished_at": "2026-11-05T00:15:35.875729Z",
+  "identity": {
+    "minted_session_id": "81a12092-8ada-47e8-babc-c4f1d0324703",
+    "provider_run_id": "f32a2e53-5ecd-471a-aa61-1cb2a4e7db79"
+  },
+  "kind": "author_run",
+  "lease_epoch": 2,
+  "lease_id": "6e525698-eb66-47d3-b841-ec0a794c0b45",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "failure_class": "timeout",
+    "message": "the wall-clock limit was reached and the process group was killed; raise --timeout if justified. no output before the limit",
+    "status": "failed"
+  },
+  "prompt": {
+    "bytes": 81643,
+    "sha256": "4da73c50c65e75c33ea3d2533b4adb065d8f47efd0ac879f1d01388f65828c1c"
+  },
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-sonnet-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "81a12092-8ada-47e8-babc-c4f1d0324703",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"acceptance_criteria_addressed\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"assumptions\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"files\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"action\":{\"enum\":[\"write\",\"delete\"],\"type\":\"string\"},\"content\":{\"type\":\"string\"},\"path\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"path\",\"action\",\"content\"],\"type\":\"object\"},\"minItems\":1,\"type\":\"array\"},\"summary\":{\"type\":\"string\"},\"unresolved_risks\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"summary\",\"files\",\"acceptance_criteria_addressed\",\"assumptions\",\"unresolved_risks\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": -9,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": "timeout",
+    "failure_detail": "the wall-clock limit was reached and the process group was killed; raise --timeout if justified. no output before the limit",
+    "is_error": null,
+    "output_excerpt": "",
+    "requested_model": "claude-sonnet-5",
+    "result_uuid": null,
+    "served_model": null,
+    "served_model_canonical": null,
+    "session_id": null,
+    "status": "failed",
+    "stderr_excerpt": "",
+    "subtype": null,
+    "terminal_reason": null,
+    "termination_reason": "error",
+    "timed_out": true,
+    "usage_normalized": {
+      "cost_usd": null,
+      "input_tokens": null,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": null,
+      "output_tokens": null
+    },
+    "usage_raw": null,
+    "wall_ms": 600029
+  },
+  "record_version": 1,
+  "route": {
+    "candidate_roles": [
+      "reviewer"
+    ],
+    "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+    "reviewer": {
+      "adapter": "claude_cli",
+      "binding_type": "candidate",
+      "candidate_offered": null,
+      "capability_class": "complex_implementation",
+      "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+      "executable": "/opt/node22/bin/claude",
+      "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli [selected as an unevaluated candidate binding under champion-challenger-v1, by operator opt-in, because champion openai/gpt-5.6-terra is unsupported_provider; it inherits no trust and is not a promoted champion.]",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    },
+    "status": "available",
+    "task_id": "OPS-202",
+    "worker": {
+      "adapter": "claude_cli",
+      "binding_type": "initial_prior",
+      "candidate_offered": null,
+      "capability_class": "standard_implementation",
+      "champion_unavailable_reason": null,
+      "executable": "/opt/node22/bin/claude",
+      "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+      "model_id": "claude-sonnet-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    }
+  },
+  "started_at": "2026-11-05T00:05:35.778175Z",
+  "task_id": "OPS-202",
+  "worktree_path": "agent-system/runtime/worktrees/OPS-202/attempt-2"
+}

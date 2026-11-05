@@ -1,0 +1,17 @@
+diff --git a/agent-system/roles/integrator.md b/agent-system/roles/integrator.md
+index 04b83cd..92dd962 100644
+--- a/agent-system/roles/integrator.md
++++ b/agent-system/roles/integrator.md
+@@ -4,9 +4,11 @@
+ 
+ Serializes fan-in. One logical queue, topological order, and no alteration to a reviewed patch.
+ 
++The deterministic integration queue selects the next candidate, not a model and not the integrator; the integrator consumes the head of that queue.
++
+ ## Owns
+ 
+-- selecting the next topologically valid candidate
++- consuming the head of the deterministic integration queue
+ - confirming evidence and review bind to the exact result commit, tree hash, diff hash, contract hash, and verification-evidence hash
+ - checking current dependency and interface hashes
+ - a conflict-free merge that preserves the reviewed candidate commit unchanged

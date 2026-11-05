@@ -1,0 +1,22 @@
+{
+  "tasks": [
+    {
+      "attempt": null,
+      "events": 1,
+      "lease_epoch": 0,
+      "locks": [],
+      "orphan_evidence_count": 0,
+      "state": "ready",
+      "task_id": "OPS-201"
+    },
+    {
+      "attempt": null,
+      "events": 1,
+      "lease_epoch": 0,
+      "locks": [],
+      "orphan_evidence_count": 0,
+      "state": "ready",
+      "task_id": "OPS-202"
+    }
+  ]
+}
