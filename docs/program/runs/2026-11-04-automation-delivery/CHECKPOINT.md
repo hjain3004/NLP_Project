@@ -74,21 +74,34 @@ Owner: see 'Blockers needing the owner'. Engineering: next work is owner-gated d
 
 ---
 
-# Operational-readiness repair (continuation of PR #1)
+# Operational-readiness repair (continuation of PR #1) — final state
 
-**Preflight (verified 2026-11-04):** branch clean; local tip == PR head `81063b1`; no force-push.
-Host isolation inventory: no bubblewrap/nsjail/firejail; `docker` CLI present but **no daemon**; `unshare`
-works; **`runc` 1.5.2 runs daemon-free OCI bundles as root** — prototype saw only `bin dev etc lib lib64 proc tmp usr`,
-uid 65534, no `/root`/`/home`, outbound connect failed. This is the enforcement mechanism for Task 1.
+**Branch tip:** see `git log` (final commit is the one that last touched this file). Full suite on the merged code
+(`c5ed8f7`, run by the coordinator): **551 tests OK, 1 skipped** (opt-in live test), 0 failures; `docs verify` ok.
 
-| Lane | Branch / worktree | Exclusive files | Tasks |
-|---|---|---|---|
-| A isolation + consistent checks | `claude/ops-isolation` `/home/user/wt/iso` | `sandbox.py`, `check_environment.py`, `gate_runner.py`, `scheduler.py` (verify section), `integrate.py`, `commands/{verify,integrate}.py`, integrate/verify/gate tests, `helpers_lane_b.py`, `docs/architecture/CHECK_ENVIRONMENT.md` | 1, 2 (+ fencing self-comparison fix) |
-| B registry + lifecycle | `claude/ops-lifecycle` `/home/user/wt/life` | `routing.py`, `execute.py`, `lifecycle.py`, `commands/{task,run,review}.py`, `integration_queue.py`, `capability-registry.json`, routing/execute/lifecycle tests, `helpers_lane_a.py` | 3, 4 |
-| Coordinator | session branch | this file, PR text, G0 package | 5 + G0 |
+| Task | State | Evidence |
+|---|---|---|
+| 1 Enforced candidate-check boundary | **implemented + independently reviewed; demonstrated on this host only** | `sandbox.py` (runc: new pid/net/ipc/uts/mount ns, read-only host runtime subset, uid 65534, no caps, seccomp, cgroup limits), `docs/architecture/CHECK_ENVIRONMENT.md`; reports `ops-lane-a-1/2`. Review 1 found AF_VSOCK escape + cross-check tree mutation → fixed (also `io_uring`); final fresh Opus review: NO_BLOCKING_FINDINGS, closures verified empirically incl. 32-bit/x32 ABI. Fails closed (`sandbox_unavailable`); only escape hatch is explicit `AGENTCTL_CHECK_ISOLATION=legacy-unsafe` (recorded; refused for risky tasks). |
+| 2 One check environment for verify and integrate | implemented; live evidence partial | `check_environment.py`: same materialised tree, env, shell, limits, private synthetic Git repo, fresh tree per check. Git-dependent checks pass in both stages in tests (`OneContractTests`, real runc). Live: OPS-201 verified under it (`git_mode: synthetic-repository`). **Not live:** a git-dependent suite through both stages — OPS-202 never produced a candidate. |
+| 3 Real registry usable | usable only with explicit opt-in; **integration blocked by policy** | candidate `claude-opus-5-5` for `complex_implementation` (unevaluated; champion entries byte-identical). Live on the unmodified registry: refusal without opt-in; with `--allow-candidate-bindings` author (Sonnet) and reviewer (Opus) both route. Tasks with a candidate author/reviewer are parked `challenger_not_merge_eligible` (champion-challenger-v1); no waiver flag exists. Owner decision: `reports/registry-owner-decision.md`. |
+| 4 Repair / cancellation lifecycle | implemented on existing transitions; tested with a fake provider, one live cancel | `lifecycle.py`, `agentctl task repair|supersede|cancel|status-chain`; races fixed (`authorize_repair` replay). No new state-machine rows. |
+| 5 Live acceptance on the real registry | **partial** | `reports/ops-demo-1.md`, `evidence/ops-demo/` (commit `e26681a`): OPS-201 run→sandboxed verify→fresh Opus review→parked at the policy gate, no integration branch. OPS-202 failed twice at authoring (container restart; then an undiagnosed 600 s provider timeout) and was canceled. No concurrent pair this round (earlier delivery demo had ~146 s overlap on the special profile). |
+| Final independent review (fresh Opus, merged code) | done | NO_BLOCKING_FINDINGS; open low items below |
+| G0 package | prepared | `g0-package/` (README, two validated HERO_SCENARIO patches) |
 
-No shared interface between lanes (B uses public store/transition APIs only; the 24-row transition table is frozen).
-Governance stance for Task 3: champion entries unchanged; a disclosed `candidate` binding (unevaluated, no inherited
-trust, §29) selectable only with an explicit recorded opt-in; promotion is an owner decision.
-Budget: this continuation has no new allowance; prior-session spend is not observable from here; Sonnet implementers,
-one Opus reviewer, one final full suite per change.
+## Not demonstrated / still open
+- **Integration success on the real registry** — blocked until the owner promotes (or rebinds) the `complex_implementation` reviewer.
+- Two concurrent disjoint tasks through review/integration on the real registry; live repair lifecycle; live interrupted-integration recovery.
+- OPS-202's author timeout is undiagnosed (candidate suspects: large file in the prompt, provider latency). An infrastructure kill consumes one of two attempts.
+- `docs verify` cannot be a sandboxed contract check (synthetic repo has one commit); checks can pass vacuously by skipping (e.g. 20/23 skipped).
+- Probe skips socket checks if `python3` is absent in the sandbox `/usr` (review, low). `review run` prints `findings: 0` although the stored verdict carries the control-plane finding. Cancel chain records event names for steps that did not literally happen.
+- Residuals of the boundary (documented): runc runs as root with no user namespace; host `/usr` readable; `/proc/self/mountinfo` shows host paths; seccomp is allow-by-default; kernel/runc escapes; cgroup v1 and x86_64 only tested; docker backend not implemented. High/critical-risk tasks are refused until a further review and an owner decision.
+- Operator identity for `task repair|cancel` is an unauthenticated string, not a human approval.
+
+## G0 exact status
+Nothing is recorded. Dry evaluation (`gate G0 --replay-dry-run … --dry-run-only`, writes no state) covers **11 of 14** criteria
+(G0-01…G0-11), all pass; its `gate_result: "passed"` label is misleading. G0-12 (audit through the control plane), G0-13, G0-14
+are unmet. See `g0-package/README.md` for the ordered owner actions and target hashes.
+
+## Next executable step
+Owner decides the `complex_implementation` reviewer binding (`registry-owner-decision.md`) and HERO_SCENARIO option (`g0-package/`).
