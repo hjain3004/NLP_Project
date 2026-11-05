@@ -72,8 +72,9 @@ What they do **not** establish:
   `metrics.json` baselines are `null`.
 - Any comparison with a champion. The champion reviewer has never run (no adapter), so there is nothing to
   compare against. Review quality, false-negative rate and escaped defects are unknown.
-- Fitness for high or critical risk, or for security- and financial-sensitive tasks. Gates already refuse
-  those risks unsandboxed; the reviewer's competence for them is untested.
+- Fitness for high or critical risk, or for security- and financial-sensitive tasks. Verification and
+  integration now refuse those risks under every isolation mode (until the sandbox has had a further
+  independent review and an owner decision); the reviewer's competence for them is untested.
 - That the candidate model is unpinned (`model_version: unpinned`): a later provider-side change to what
   `claude-opus-5-5` serves would not be visible in the registry.
 
