@@ -59,3 +59,19 @@ Apply the chosen patch with `git apply`, commit, then recompute the targets belo
 See `reports/registry-owner-decision.md` (promote / evaluate / rebind the `complex_implementation`
 reviewer; candidate-bound reviews are **not merge-eligible** until promoted), plus the open design items
 in `CHECKPOINT.md`.
+
+## Continued closeout preparation — 2026-11-06
+
+- `option-b-reclassify.patch` is prepared for application and passes `git apply --check`; it
+  changes only HERO_SCENARIO's status and leaves the scope target at
+  `897ab364e170ba0298584fb074cd3eed8a8fdba3c73e7fcf0b28addf1b047cb7`.
+- `governance-change-set-v2.json` was revalidated against the current tree: all ten declared
+  before-byte hashes match, the proposal is non-authoritative, and its canonical digest is
+  `188264877cb5648faf7e710ccbbbbdad622af3b0f7ea28640c05bbeecdbb00b1`.
+- `adr-0005-acceptance-followup.md` records the fixed ADR target mapping and independent-review
+  write set. It does not register the mapping, change ADR-0005's status, or issue approval.
+- `architecture-audit-dispatch.md` records the existing ManualProposalAdapter dispatch and
+  `agentctl audit ingest` path. It does not fabricate an architectural authority, session,
+  run, or audit result.
+- `owner-action-package.md` is the single ordered command package. Typed approval is claimed
+  only where AGENTS.md §10, the ADR index, or G0 criteria explicitly require it.

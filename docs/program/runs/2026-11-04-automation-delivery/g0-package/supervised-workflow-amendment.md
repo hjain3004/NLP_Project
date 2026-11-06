@@ -49,9 +49,11 @@ The supervised interim path above is limited to manually returned, hash-bound ar
 it is not evidence of unattended provider integration.
 ```
 
-It is deliberately not applied in this closeout because the active program map is governed
-content and the owner has not supplied the typed approval required for a program-priority
-commitment.
+It is deliberately not applied in this closeout because the user requested preparation only.
+No separate typed approval is claimed for this wording-only summary amendment. The roadmap
+itself states that `ACTIVE_SCOPE.md` and `DOCUMENT_AUTHORITY.md` govern if its summary is
+incomplete; any actual scope, schema, invariant, ADR, or phase-gate change remains subject
+to its own governing approval requirement.
 
 The change set does not modify:
 

@@ -142,3 +142,13 @@ The proposal-only supervised-workflow amendment is in `g0-package/`. It reuses t
 commands. It does not change active scope, criteria, schemas, policy, routing, or product
 code. No architecture audit or typed approval was fabricated. Unattended automation remains
 deferred after the recorded authentication refusal.
+
+## Continued G0 preparation — 2026-11-06
+
+Option B is prepared but unapplied. Governance v2 revalidation returned `status=ok` with all
+ten current-tree before hashes matching and digest
+`188264877cb5648faf7e710ccbbbbdad622af3b0f7ea28640c05bbeecdbb00b1`. The package now includes
+the ADR-0005 fixed-target follow-up, the existing manual architecture-audit dispatch/ingestion
+path, and one ordered owner-action package. The supervised-workflow note was narrowed: it
+claims no extra typed approval for wording-only documentation, while preserving the explicit
+approval requirements for schema commitments, ADR acceptance, and G0 closure.
