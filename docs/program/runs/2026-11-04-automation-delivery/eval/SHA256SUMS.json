@@ -40,9 +40,10 @@
   "oracles/C6.txt": "206f2181bb621d0295a8b2e39202812d518e32aee436c6b4ad9c4a33b2246660",
   "oracles/C7.txt": "93f4200d37d7007954aaea8d9c81466fa02f6725220fda951c6b2f12ea1f9d0a",
   "oracles/C8.txt": "7a8ea76b851daa3ada795ad836894071c7d7f362a8a47c3ef82e4501d5ff70c2",
-  "protocol.md": "322a5973699372e0ca4ee728c363f218d2409af97b48a588742fd5db68a0aa4b",
+  "protocol.md": "422efecf2bb7eb6934f81697cbac62f7f61525193bb8bfac6bfe0c0f7239401c",
   "tools/build_cases.py": "2c793e25bcb434a0d67dd12d15c3eb646e258f8130c333c1b0d9c3793504a8b1",
-  "tools/run_shadow.py": "3c34b719af14d778f9ae2bd860d4e38b76b57d5a6978567b553e5ca5ac632b29",
-  "tools/score.py": "b7e50d7eb6f1d18a63878179c48465b8f0ab48a45d2bf4b74b0a93f038921907",
-  "tools/test_score.py": "a331dcce730469ae862cd46b45d4361d0fbc208144d03ab62ae7a98caf074398"
+  "tools/prompt_evidence.py": "107aafe30e48bd75d1e6308a3db6d46e9944859259666224fb46715b0abbb026",
+  "tools/run_shadow.py": "6e51e815e4ab9d044194c39678a7383e5f1b6e6f6451a9273ad94b55b252bfd7",
+  "tools/score.py": "a3e54bc847ee960262eb6fc8f2737df5ff326e9da2d0d4c8376618c9cf634342",
+  "tools/test_score.py": "814b97e00b153b9766af9e4b9dc59dba506bb30b0cab1dcd736508a95b1dbf0d"
 }
