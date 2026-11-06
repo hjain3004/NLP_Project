@@ -29,6 +29,9 @@
     "capability_class": "mechanical_execution",
     "complexity": "low",
     "risk": "low",
+    "required_skills": [],
+    "preferred_worker": "fixture-worker",
+    "required_provider_diversity": false,
     "minimum_reviewer_class": "standard_implementation"
   },
   "permissions": {

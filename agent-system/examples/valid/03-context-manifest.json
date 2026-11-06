@@ -1,6 +1,6 @@
 {
   "artifact_type": "context-manifest",
-  "context_hash": "c4f0cb5aa423cb0811150add4768dfe6313ad687bbebd5f2b622c1e1e75e9e13",
+  "context_hash": "843864af3523409fd182f7ca0f0e180bb424fdd13fa980021b639b875cbd5544",
   "task_id": "EX-DOC-001",
   "attempt_id": "EX-DOC-001-A1",
   "compiled_at": "2026-09-01T00:05:00Z",
@@ -17,7 +17,7 @@
     "failure_lessons": [],
     "base_commit_summary": {"path": "agent-system/work/P0/evidence/migration.json", "sha256": "9934b82d17491e8ccca3c3e100a262e2ba3283d0f6da0cc9f28ff804654feada", "bytes": 663},
     "permissions": {"path": "agent-system/policies/permissions.json", "sha256": "eaca781d3baea7a0547711924aafd9a19f59ece7698c48993eab6f3cc08043d0", "bytes": 3674},
-    "budgets_and_output_schema": {"path": "agent-system/schemas/implementation-manifest.schema.json", "sha256": "8a849e370a72f7a18d2a09ff41ba4a5f0b44d310c616baf9b325295b668832aa", "bytes": 4344}
+    "budgets_and_output_schema": {"path": "agent-system/schemas/implementation-manifest.schema.json", "sha256": "7cd00d80f967e714067a2bf0f849ddcfb5ec9f88666cba7ef58c24cece267d3e", "bytes": 2743}
   },
   "excluded_by_policy": [
     "prd",

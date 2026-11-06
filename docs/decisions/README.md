@@ -17,6 +17,11 @@ An ADR that changes an invariant, a schema commitment, or anything with a
 `release_or_public_claim` consequence requires human approval, recorded as a typed approval
 artifact and referenced under `Required approvals`.
 
+An ADR acceptance that is consequential uses the typed `consequential_adr_acceptance` action.
+That action is bound to the exact ADR bytes and requires the strong authentication tier
+declared in `agent-system/policies/approval-policy.json`; an ADR remains `proposed` until
+the declared authority's sealed approval is accepted.
+
 ## Required headings
 
 Every ADR uses exactly these, in this order:

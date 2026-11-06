@@ -4,17 +4,17 @@
   "schema_version": 1,
   "approver_principal": "synthetic-fixture-principal",
   "machine_identity": "synthetic-fixture-machine",
-  "authentication_method": "interactive_tty_with_key_unlock",
+  "authentication_method": "local_authentication",
   "authenticated_at": "2026-09-01T00:22:00Z",
-  "authorized_action": "phase_authorization",
-  "target_type": "phase-gate",
-  "target_id": "EX-GATE-001",
-  "target_hash": "834625540822aac70d819972077cb28ca2614d3ab12951cf7b6298185198876a",
-  "scope": "Synthetic acceptance fixture only",
+  "authorized_action": "consequential_adr_acceptance",
+  "target_type": "adr",
+  "target_id": "ADR-0005",
+  "target_hash": "672940b94ea9becca0aeb9d1fa92ff2405054f367bf2bccb2052f9e8d11a09bd",
+  "scope": "Accept ADR-0005 exactly as hashed; no other ADR or policy change",
   "conditions": [
     "Never accepted as a real phase authorization"
   ],
-  "reason": "Exercise the positive approval-validation path with a public synthetic fixture key",
+  "reason": "Exercise the positive consequential ADR approval-validation path with a public synthetic fixture key",
   "issued_at": "2026-09-01T00:22:00Z",
   "expires_at": "2099-09-01T00:22:00Z",
   "single_use": true,
@@ -22,5 +22,5 @@
   "revoked_at": null,
   "revocation_reason": null,
   "nonce": "0123456789abcdef0123456789abcdef",
-  "control_plane_seal": "632af7431b7c50132d5923f5b2bf0a43dcf017f4bfc0b23081c5b311b0d2c0fa"
+  "control_plane_seal": "49063433b0fa9a1f4faf78fc4e6dd644ddce96e7dbfdf4c2adc098ffcf4ecb55"
 }

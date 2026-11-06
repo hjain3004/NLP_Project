@@ -48,7 +48,10 @@ class InvalidArtifactTests(unittest.TestCase):
 
     def test_static_must_fail_fixtures_have_their_intended_distinct_codes(self) -> None:
         expected = {
-            "01-task-contract-missing-required-field.json": "missing_required_field",
+            "01-task-contract-missing-required-field.json": "schema_validation_failed",
+            "09-task-contract-missing-preferred-worker.json": "schema_validation_failed",
+            "10-task-contract-missing-required-skills.json": "schema_validation_failed",
+            "11-task-contract-missing-provider-diversity.json": "schema_validation_failed",
             "02-task-contract-overlapping-write-prohibit.json": "overlapping_write_prohibit",
             "03-task-contract-path-traversal.json": "path_traversal",
             "04-task-contract-secret-access-true.json": "secret_access_true",
