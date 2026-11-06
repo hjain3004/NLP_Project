@@ -18,6 +18,7 @@ import unittest
 from unittest import mock
 
 from agentctl.errors import PermissionViolation
+from agentctl.review import ReviewManager
 from agentctl.integration_queue import (
     CANDIDATE_AUTHOR_MARKER,
     CHALLENGER_NOT_MERGE_ELIGIBLE,
@@ -628,16 +629,31 @@ class ReviewRunTests(RunTestCase):
             ["completed", "nonzero_exit"],
         )
 
-    def test_same_actor_role_as_the_author_is_rejected_before_any_reviewer_runs(self) -> None:
-        """Protects: independence is enforced by the existing five-dimension check; complex_implementation cannot review its own class (no model call is made)."""
+    def test_same_capability_class_is_allowed_for_distinct_reviewer_identity(self) -> None:
+        """Protects: routing class equality is allowed when all five operational identity bindings are distinct."""
         repo = self.repo(capability_class="complex_implementation")
-        self.authored(repo)
-        with self.assertRaises(PermissionViolation) as raised:
-            self.review(repo)
-        self.assertEqual(raised.exception.context["dimension"], "actor_role")
-        self.assertEqual(len(self.fake.calls()), 1)  # only the author ever ran
-        self.assertEqual(repo.state(), "independent_review")
-        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 0)
+        author = self.authored(repo)
+        result = self.review(repo)
+
+        self.assertEqual((result["verdict"], result["state"]), ("no_blocking_findings", "integration_ready"))
+        assignment = json.loads(repo.store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = 'review-assignment'"
+        )[0]["payload_json"])
+        author_identity = ReviewManager(repo.store).author_identity(repo.TASK_ID)
+        reviewer_identity = {
+            "task_id": assignment["reviewer_task_id"],
+            "attempt_id": assignment["reviewer_attempt_id"],
+            "provider_run_id": assignment["reviewer_run_id"],
+            "model_session_id": assignment["reviewer_session_id"],
+            "actor_role": assignment["reviewer_operational_role"],
+        }
+        self.assertEqual(assignment["reviewer_capability_class"], "complex_implementation")
+        self.assertEqual(assignment["reviewer_role"], author_identity.capability_class)
+        for dimension, reviewer_value in reviewer_identity.items():
+            with self.subTest(dimension=dimension):
+                self.assertNotEqual(getattr(author_identity, dimension), reviewer_value)
+        self.assertNotEqual(author["session_id"], result["reviewer_session_id"])
+        self.assertEqual(repo.store.scalar("SELECT COUNT(*) FROM reviews"), 1)
 
     def test_unroutable_reviewer_class_refuses_without_a_model_call(self) -> None:
         """Protects: if the reviewer binding becomes unsupported (real openai entry), review is refused, never substituted."""
