@@ -12,8 +12,8 @@ for this audit.
 Current trusted audit candidate (after the applied governance and follow-ups):
 
 ```text
-commit: 41bbf85b6c4c55ad94dff1f4d2b0efd067cdec8f
-tree:   b592e6df5658759b491a0b314e987f5186c8ef90
+commit: 0c447c51cfa8429bf679f2bfcba9bf17b58e79bb
+tree:   8b17ee4d1c21e35e9c1addd1d982000d99e39243
 ```
 
 If the independent review requires a repair, discard these two values and recompute them

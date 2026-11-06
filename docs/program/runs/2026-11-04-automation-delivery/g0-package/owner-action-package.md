@@ -74,10 +74,10 @@ operation paths and requires its own independent review/integration. Acceptance 
 
 ## 4. Obtain and ingest G0-12
 
-Use `architecture-audit-dispatch.md`. The current reviewed-follow-up candidate is commit
-`41bbf85b6c4c55ad94dff1f4d2b0efd067cdec8f`, tree
-`b592e6df5658759b491a0b314e987f5186c8ef90`; after independent review, replace these with
-the final trusted head and recompute its tree hash. The authority
+Use `architecture-audit-dispatch.md`. The current independently reviewed follow-up candidate
+is commit `0c447c51cfa8429bf679f2bfcba9bf17b58e79bb`, tree
+`8b17ee4d1c21e35e9c1addd1d982000d99e39243`. If the audit requires a repair, replace these
+with the final trusted head and recompute its tree hash. The authority
 must be independent and use the existing manual protocol or an already authorized provider
 path—never a fabricated artifact or a new adapter.
 
