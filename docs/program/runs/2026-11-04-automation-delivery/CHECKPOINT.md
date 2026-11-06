@@ -71,6 +71,30 @@ Agent-session spend is not reported to this session.
 
 Owner: see 'Blockers needing the owner'. Engineering: next work is owner-gated design (reviewer-floor bindings, state-machine rows, gate sandbox uid/network namespace).
 
+## Interrupted-session recovery — 2026-11-05
+
+The published continuation at `f7b3a6e` was recovered. Worker A's unpublished sandbox-history
+patch was inspected but not integrated: `runc` is unavailable here, and its required one-commit
+test contract conflicts with preserving the Git history needed by `docs verify`. Worker B's
+identity repair and its ordinary-test reconciliation were independently reviewed and integrated
+as coordinator Git commits `121fd71` and `7354c6e`; no protected tests were modified.
+
+The frozen shadow package was independently reviewed, repaired, and re-reviewed. The integrated
+tree is `c288b23`; its linear ancestry includes the identity repair, evaluator hardening, and the
+hash-bound freeze marker. The final review verified 47 package hashes, unchanged case packs,
+oracles, and answer key, 6/6 evaluator tests, 12 relevant identity/review tests, and zero calls
+before the marker. No candidate call has produced a result.
+
+The authorized runner was invoked once with one-call-per-case, no-retry settings and the existing
+$1 per-call cap. It refused before the first case because the candidate `claude` CLI is not
+authenticated; the champion `openai/gpt-5.6-terra` remains unsupported. This is an external
+authentication blocker, not an evaluation result. No credentials were read or passed, and no
+retry, promotion, registry change, or G0 action occurred.
+
+The exact Worker C completion branch/commits were not recoverable from local refs or the published
+branch; the published lifecycle evidence still records the misleading cancellation chain and its
+state-machine amendment remains unactivated.
+
 
 ---
 
