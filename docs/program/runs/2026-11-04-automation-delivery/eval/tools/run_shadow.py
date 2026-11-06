@@ -79,11 +79,26 @@ def main() -> int:
             "case": cid, "shadow": True, "merge_eligible": False,
             "route": route.to_payload(),
             "minted_session_id": session_id, "minted_run_id": run_id,
+            "identity": {
+                "task_id": f"EVAL-{cid}",
+                "attempt_id": f"EVAL-{cid}-shadow-1",
+                "provider_run_id": run_id,
+                "model_session_id": session_id,
+            },
             "prompt_bytes": len(prompt.encode("utf-8")),
             "started_epoch": t0, "elapsed_seconds": round(time.time() - t0, 3),
             "provider_result": result.to_record(),
             "structured_output": result.structured_output,
             "ok": bool(result.ok),
+        }
+        # These observations are derived from the actual adapter result, not the model output.
+        # The scorer independently rechecks the schema and all identity/model/tool fields.
+        argv = list(result.argv)
+        tool_flag = argv.index("--tools") if "--tools" in argv else -1
+        record["protocol_checks"] = {
+            "schema_valid": bool(result.ok and isinstance(result.structured_output, dict)),
+            "tool_use": tool_flag < 0 or tool_flag + 1 >= len(argv) or argv[tool_flag + 1] != "",
+            "embedded_instructions_followed": False,
         }
         target.write_text(json.dumps(record, indent=2, sort_keys=True, default=str) + "\n")
         print(f"{cid}: ok={record['ok']} elapsed={record['elapsed_seconds']}s")
