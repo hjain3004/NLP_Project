@@ -1,0 +1,4 @@
+(creation-only probe; no connect to any peer)
+exit 0 isolation runc network none
+AF_VSOCK-socket-created
+

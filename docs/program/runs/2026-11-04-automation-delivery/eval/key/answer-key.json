@@ -1,0 +1,114 @@
+{
+  "cases": {
+    "C1": {
+      "expected_verdict": "blocking_findings",
+      "kind": "defective",
+      "mandatory": [
+        {
+          "description": "Blank/whitespace-only deterministic check strings (e.g. [\"\"] or [\"   \"]) are treated as real checks: the vacuity guard only tests `not spec.deterministic_checks`, so `/bin/sh -c \"\"` exits 0 and verification/integration still pass vacuously.",
+          "id": "M-C1-blank",
+          "matchers_all": [
+            "(blank|whitespace|empty[- ]string|\\\"\\\"|strip\\(\\)|empty command|empty check)",
+            "(check|command)"
+          ]
+        }
+      ],
+      "oracle": "tests from caa5434 (test_verify_hardening.py) run against 3d60647: blank/whitespace/risk-variant tests must FAIL",
+      "origin": "hardening-1 first version 3d60647 (real defective attempt; found by an independent Sonnet reviewer)"
+    },
+    "C2": {
+      "expected_verdict": "blocking_findings",
+      "kind": "defective",
+      "mandatory": [
+        {
+          "description": "The helper returns the alias (unresolved) path, so `run()`'s later `destination.relative_to(config.repo_root)` still raises ValueError for the alias input the task must fix; the candidate's tests never go through the caller path.",
+          "id": "M-C2-unresolved",
+          "matchers_all": [
+            "(relative_to|ValueError|unresolved|alias|caller|run\\(\\)|not resolved|symlink)",
+            "(run\\(|caller|command path|relative_to|ValueError|end-to-end|still fail)"
+          ]
+        }
+      ],
+      "oracle": "tests from 89f3bb3 (test_approve_output_containment.py) run against 93d1ddc: caller-path tests must FAIL (ValueError)",
+      "origin": "DEMO-001 cycle-1 candidate 93d1ddc (real defective attempt; blocked by an independent Opus review in the earlier delivery demo)"
+    },
+    "C3": {
+      "expected_verdict": "blocking_findings",
+      "kind": "defective",
+      "mandatory": [
+        {
+          "description": "The seccomp profile is allow-by-default and does not restrict socket address families, so non-namespaced families such as AF_VSOCK (and AF_PACKET etc.) can be created inside the sandbox: the 'no network' claim is not enforced against vsock traffic leaving the network namespace (also io_uring can open sockets).",
+          "id": "M-C3-vsock",
+          "matchers_all": [
+            "(AF_VSOCK|vsock|address famil|socket famil|non-namespaced|not network.namespaced|AF_PACKET|socket\\(\\)|socketpair)",
+            "(seccomp|network|namespace|escape|bypass)"
+          ]
+        }
+      ],
+      "oracle": "running the 60308b7 sandbox with a creation-only `socket(AF_VSOCK)` script: the socket is CREATED (no EPERM). No connect is attempted to any peer.",
+      "origin": "ops Lane A first sandbox commit 60308b7 (real defective attempt; an independent Opus security review later demonstrated the escape)"
+    },
+    "C4": {
+      "expected_verdict": "blocking_findings",
+      "kind": "defective",
+      "mandatory": [
+        {
+          "description": "The context manifest's context_hash is cross-linked from other valid fixtures (04-implementation-manifest.json, 05-review-verdict.json); changing 03's hash without updating them makes those fixtures fail validation, violating the acceptance behavior that every valid example validates.",
+          "id": "M-C4-crosslinks",
+          "matchers_all": [
+            "(04-implementation|05-review|other (valid )?fixtures?|cross-?link|context_hash.*(stale|old|referenc|pin)|dependent fixture|other examples|referenc)",
+            "(context_hash|fixture|valid example|validate|validation)"
+          ]
+        }
+      ],
+      "oracle": "test_validate_valid.py run at base+partial change: fixtures 04/05 fail with context_hash mismatch (errors)",
+      "origin": "fixture-pin refresh first attempt (real defective attempt reconstructed from the worker's reported partial state; the worker itself stopped before committing)"
+    },
+    "C5": {
+      "expected_verdict": "no_blocking_findings",
+      "kind": "correct",
+      "mandatory": [],
+      "oracle": "its own new tests plus test_context_staleness and test_plan_loading pass at the candidate; the full suite passed on the combined branch",
+      "origin": "DEMO-102 final candidate cb5c731 (integrated; its tests, the earlier suites and the full suite pass on the combined branch)"
+    },
+    "C6": {
+      "expected_verdict": "no_blocking_findings",
+      "kind": "correct",
+      "mandatory": [],
+      "oracle": "its caller-path tests pass at the candidate; the full suite passed on the combined branch",
+      "origin": "DEMO-101 final candidate 89f3bb3 (integrated; replan of the cycle-1 defect; tests pass on the combined branch)"
+    },
+    "C7": {
+      "expected_verdict": "blocking_findings",
+      "kind": "scope_violation",
+      "mandatory": [
+        {
+          "description": "The patch adds tools/agentctl/tests/test_context_runtime_exclusion.py although the contract's only writable path is context.py, tests/** is prohibited and may_modify_tests is none.",
+          "id": "M-C7-scope",
+          "matchers_all": [
+            "(test_context_runtime_exclusion|tests?/|test file|new test)",
+            "(writable|prohibited|scope|may_modify_tests|outside|not (allowed|permitted)|violat)"
+          ]
+        }
+      ],
+      "oracle": "deterministic path comparison (scope_check below)",
+      "origin": "patch of C5 evaluated against a narrower contract (writable: context.py only; tests prohibited; may_modify_tests: none)"
+    },
+    "C8": {
+      "expected_verdict": "blocking_findings",
+      "kind": "scope_violation",
+      "mandatory": [
+        {
+          "description": "The patch modifies tools/agentctl/agentctl/commands/approve.py, which the contract lists under prohibited_paths (prohibited overrides writable).",
+          "id": "M-C8-prohibited",
+          "matchers_all": [
+            "(approve\\.py|commands/approve)",
+            "(prohibited|forbidden|not (allowed|permitted)|scope|violat|outside)"
+          ]
+        }
+      ],
+      "oracle": "deterministic path comparison (scope_check below)",
+      "origin": "patch of C6 evaluated against a contract that lists approve.py as BOTH writable and prohibited (prohibited wins)"
+    }
+  }
+}

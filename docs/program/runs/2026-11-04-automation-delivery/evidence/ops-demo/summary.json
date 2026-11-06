@@ -1,0 +1,105 @@
+{
+ "author_overlap_note": "OPS-201's whole run window lies inside OPS-202's first (later killed) window; this is real concurrency of two live provider calls but only one completed. The re-run of OPS-202 did not overlap anything.",
+ "author_overlap_seconds_attempt1_windows": 29.434,
+ "base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+ "cost_usd_provider_reported": {
+  "OPS-201_author_sonnet_5": 0.122338,
+  "OPS-201_review_opus_5_5": 0.162244,
+  "OPS-202_attempt1": null,
+  "OPS-202_attempt2": null,
+  "known_total": 0.284582,
+  "note": "the two failed OPS-202 runs reported no usage (killed / timed out); their true spend is unknown, not zero; each was capped at --max-budget-usd 1.5",
+  "upper_bound_by_per_call_cap": 3.284582
+ },
+ "delivery_ops_head": "84c7fca64ae1707ca10d16885fdd7bac9c2cd4e9",
+ "events": {
+  "OPS-202_after_cancel": 12,
+  "OPS-202_before_cancel": 8,
+  "monotonic": true,
+  "total_before_cancel": 21,
+  "total_final": 25
+ },
+ "first_run_start_to_last_command_end_seconds": 1009.369,
+ "first_run_start_to_last_review_end_seconds": 986.593,
+ "ids": {
+  "author_run": "d6b81448-f3e3-4061-bb22-86eed7b78a45",
+  "author_session": "4aceff97-b79d-41be-9910-f4c65277c017",
+  "result_commit": "0663c4c4ee126f30dfcfda8ee083696120957040",
+  "review_id": "OPS-201-attempt-1-review-1",
+  "reviewer_run": "5ae2973b-b806-4cc6-9ee1-e91b3b3cf8bd",
+  "reviewer_session": "974ac7c1-426f-45d6-aa24-58cb4d76319c",
+  "verification_evidence_hash": "20612c7ac38506722ddc07ef20b6dab60191dedbd19229f2b37b9fb3297f8c62"
+ },
+ "infrastructure_events": [
+  "container restart killed OPS-202 attempt 1 at ~260 s (KeyboardInterrupt via SIGTERM)"
+ ],
+ "manual_interventions": {
+  "coordinator_directed": [
+   "single re-run of OPS-202 after the restart"
+  ],
+  "count_in_flow": 0,
+  "diagnostics_read_only": [
+   "docs verify on candidate in scratch clone",
+   "sqlite reads of the store",
+   "extra explicit integrate OPS-202 after cancel (refused, no state change)"
+  ],
+  "labeled_operator_actions": [
+   "task cancel OPS-202 (requested by brief step f)"
+  ]
+ },
+ "models": {
+  "author": "claude-sonnet-5 (initial_prior)",
+  "reviewer": "claude-opus-5-5 (binding_type candidate, CP-CANDIDATE-BINDING-1 recorded)"
+ },
+ "outcome": {
+  "OPS-201": "integration_ready; parked challenger_not_merge_eligible; not integrated (expected policy gate)",
+  "OPS-202": "two author attempts failed (attempt 1 killed by container restart; attempt 2 provider timeout 600 s, no output); canceled by operator after that",
+  "integration_branch_created": false,
+  "integration_success_demonstrated": false
+ },
+ "registry_unchanged": true,
+ "review_overlap_note": "only one review ran",
+ "review_overlap_seconds": null,
+ "runc_list_empty_at_end": true,
+ "sandbox_available": true,
+ "usage": {
+  "OPS-201_author": {
+   "input_tokens": 22918,
+   "latency_ms": 26979,
+   "output_tokens": 3067
+  },
+  "OPS-201_review": {
+   "input_tokens": 19549,
+   "latency_ms": 4584,
+   "output_tokens": 293
+  }
+ },
+ "windows_epoch_seconds": {
+  "review_run_OPS-201": {
+   "elapsed": 6.271,
+   "end": 1793837802.8521445,
+   "start": 1793837796.5811756
+  },
+  "run_OPS-201": {
+   "elapsed": 29.434,
+   "end": 1793836845.693547,
+   "start": 1793836816.2590668
+  },
+  "run_OPS-202_attempt1_killed": {
+   "elapsed_ms_run_record": 260194,
+   "end_from_run_record": 1793837076.454,
+   "start": 1793836816.2599812
+  },
+  "run_OPS-202_attempt2_timeout": {
+   "elapsed": 600.541,
+   "end": 1793837735.9023087,
+   "start": 1793837135.3613036
+  },
+  "verify_OPS-201": {
+   "elapsed": 1.317,
+   "end": 1793837781.7285802,
+   "start": 1793837780.4117084
+  }
+ },
+ "work_package": "DELIVERY-OPS"
+}

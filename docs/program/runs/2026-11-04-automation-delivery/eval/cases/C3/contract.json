@@ -1,0 +1,35 @@
+{
+  "artifact_type": "task-contract",
+  "intent": {
+    "acceptance_behavior": [
+      "a new sandbox module runs one shell command for a check inside a runc container with a read-only host runtime subset, an unprivileged uid with no capabilities, and a seccomp filter",
+      "the container has no network: a check cannot reach a host listener or an external address",
+      "a probe proves the boundary (non-root, host canary invisible, no network) and fails closed",
+      "timeouts kill the whole container and clean up; resource limits apply",
+      "tests exercise the real runc boundary"
+    ],
+    "objective": "Candidate-controlled checks currently run at the control-plane uid with absolute-path reach (event store, credentials, other worktrees, the shared .git) and network access; environment filtering and PID namespaces are not a boundary. Implement an enforced boundary on `runc`: no network, no access to the control-plane DB, credentials, other worktrees or the shared .git, only the candidate tree visible, bounded runtime; fail closed when the boundary cannot be enforced."
+  },
+  "permissions": {
+    "enforcement_class": "proposal_only",
+    "may_modify_tests": "task_owned_only"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "risk": "low"
+  },
+  "scope": {
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**",
+      "tools/agentctl/agentctl/scheduler.py",
+      "tools/agentctl/agentctl/integrate.py"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/sandbox.py",
+      "tools/agentctl/tests/test_sandbox.py"
+    ]
+  }
+}

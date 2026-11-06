@@ -1,6 +1,6 @@
 # CashBooks Hero Scenario
 
-**Status:** Level 1 authority.
+**Status:** Level 3 — active architecture document (not part of the approved level-1 scope set).
 **Written:** P0 Task 5, 2026-09-01.
 
 One story. If the engine satisfies this end to end, on synthetic fixtures, with evidence, the

@@ -481,7 +481,7 @@ class ApprovalTests(unittest.TestCase):
             mock.patch.object(approve_command, "doctor") as doctor,
             mock.patch.object(approve_command.getpass, "getpass") as getpass,
         ):
-            for target_hash, expected_code in (("not-a-hash", "approval_wrong_target_hash"), ("0" * 64, "approval_wrong_target_hash")):
+            for target_hash, expected_code in (("not-a-hash", "approval_wrong_target_hash"), ("0" * 64, "approval_target_stale")):
                 with self.subTest(target_hash=target_hash):
                     args = [
                         "schema_commitment",

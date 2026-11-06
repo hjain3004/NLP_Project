@@ -1,0 +1,56 @@
+{
+ "candidate_binding": {
+  "attempt_id": "DEMO-002-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "context_hash": "62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53",
+  "contract_hash": "c3bc6006ab0ca27d34701868eb7f1e906b1290ad4e45c48e135d7e29caf92ee4",
+  "diff_hash": "ad03077452869c03fd921ece1b793b5dae71511fc40ae16377b65459f1f19183",
+  "files_changed": [
+   {
+    "change_type": "modified",
+    "path": "tools/agentctl/agentctl/context.py"
+   },
+   {
+    "change_type": "added",
+    "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+   }
+  ],
+  "result_commit": "6a682e461f75eebd733ccf5937bf2f85da9d31c8",
+  "task_id": "DEMO-002",
+  "tree_hash": "144bc6a177751b1e39be891ba30e6c49dad56220",
+  "worktree_path": "agent-system/runtime/worktrees/DEMO-002/attempt-1"
+ },
+ "checks": [
+  {
+   "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+   "duration_ms": 170,
+   "exit_code": 0,
+   "gate_isolation": "user_pid_namespace",
+   "left_processes": 0,
+   "reason": null,
+   "stderr_hash": "41cee9cc70f8e2902ff4277cf9577cbdf05c130cf7652490990fd48efa2e4859",
+   "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py",
+   "duration_ms": 272,
+   "exit_code": 0,
+   "gate_isolation": "user_pid_namespace",
+   "left_processes": 0,
+   "reason": null,
+   "stderr_hash": "6340868bcb6fdb67e5f34c1b3013c8762c3a51faa85adab5e9daf2e9eb1b45ff",
+   "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py",
+   "duration_ms": 471,
+   "exit_code": 0,
+   "gate_isolation": "user_pid_namespace",
+   "left_processes": 0,
+   "reason": null,
+   "stderr_hash": "f27f65e98d5892c66abe6aa66dfe0d8aeb11e7bc9b73d5aa7d7dd360cd1f4770",
+   "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+ ],
+ "passed": true
+}

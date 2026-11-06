@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import stat
@@ -28,7 +29,7 @@ from .config import load as load_config
 from .config import validate_seal_key_location
 from .errors import ConfigError, HumanGate
 from .events import make_event
-from .hashing import canonical_json, sha256_of_json
+from .hashing import canonical_json, sha256_of_file, sha256_of_json
 from .jsonschema_subset import validate as validate_schema
 from .store import EventStore
 
@@ -81,6 +82,13 @@ _APPROVAL_TARGETS = {
             "proposal_id",
         ),
     },
+    "adr": {
+        "ADR-0005": (
+            "docs/decisions/ADR-0005-symmetric-approval-seal.md",
+            "adr",
+            "ADR-0005",
+        ),
+    },
 }
 
 
@@ -129,6 +137,24 @@ def resolve_approval_target(
             "approval_target_unreadable",
             "approval target cannot be read",
             path=relative_path,
+        )
+    if expected_artifact_type == "adr":
+        raw = path.read_bytes()
+        text = raw.decode("utf-8")
+        if not text.startswith("# ADR-0005 ") or not re.search(
+            r"^status:\s*proposed\s*$", text, re.I | re.M
+        ):
+            raise ApprovalRejected(
+                "approval_target_stale",
+                "ADR target is no longer the proposed ADR-0005 record",
+                path=relative_path,
+            )
+        return ApprovalTarget(
+            target_type=target_type,
+            target_id=target_id,
+            path=path,
+            payload={"artifact_type": "adr", "adr_id": target_id, "status": "proposed"},
+            target_hash=sha256_of_file(path),
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))

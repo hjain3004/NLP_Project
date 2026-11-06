@@ -1,0 +1,33 @@
+{
+  "artifact_type": "task-contract",
+  "intent": {
+    "acceptance_behavior": [
+      "the valid example validates",
+      "every valid example under agent-system/examples/valid still validates and every static must-fail fixture is still rejected",
+      "the full test suite shows no new errors",
+      "only fixture data changes; no schema, test or AGENTS.md edits"
+    ],
+    "objective": "`agent-system/examples/valid/03-context-manifest.json` pins a stale AGENTS.md SHA-256 and byte count, so the valid example fails validation (G0-04 criterion failure and one baseline test error). Refresh the pin and recompute the manifest's own context_hash."
+  },
+  "permissions": {
+    "enforcement_class": "proposal_only",
+    "may_modify_tests": "none"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "risk": "low"
+  },
+  "scope": {
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**",
+      "AGENTS.md",
+      "tools/agentctl/**"
+    ],
+    "writable_paths": [
+      "agent-system/examples/valid/03-context-manifest.json"
+    ]
+  }
+}

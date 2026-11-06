@@ -1,0 +1,5 @@
+start (before any run, 1793836624): cmp agent-system/routing/capability-registry.json /home/user/NLP_Project/... -> identical (REG_SAME_START)
+re-checked after container restart (before OPS-202 re-run): identical
+end (after all commands): identical (REG_SAME_END)
+git diff --stat c5ed8f7 HEAD -- agent-system/routing agent-system/policies in delivery-ops: empty (the package commit touches agent-system/work only)
+Note: /home/user/NLP_Project HEAD advanced to cff7abd (docs-only) during the run; the comparison file is the same at both heads (docs commit only).

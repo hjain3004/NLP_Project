@@ -1,0 +1,27 @@
+{
+  "artifact_type": "work-package",
+  "work_package_id": "DELIVERY-DEMO-2",
+  "schema_version": 1,
+  "phase_id": "P0",
+  "title": "Automation delivery demonstration, cycle 2 (replan)",
+  "objective": "Replan DEMO-001 (blocked by a real review finding) and DEMO-002 (checks that cannot pass in the integration copy) as new tasks DEMO-101 and DEMO-102 and exercise the ordinary run, verify, review run and integrate cycle again",
+  "deliverables": [
+    "One verified, independently reviewed candidate per task",
+    "Both candidates integrated unchanged",
+    "Recorded run, review and integration evidence"
+  ],
+  "depends_on": [],
+  "initial_capability_class": "standard_implementation",
+  "owning_planner_role": "work_package_planning",
+  "semantic_locks": [],
+  "acceptance_summary": [
+    "Both tasks are ready together",
+    "Both run concurrently through a live provider",
+    "Every deterministic check passes in a .git-less copy",
+    "The integration branch contains both unchanged candidates"
+  ],
+  "status": "in_progress",
+  "bootstrap_phase": false,
+  "created_at": "2026-11-04T07:20:00Z",
+  "plan_hash": "5df647f6799b2c80883db66968e8bc4cf7a7097136c2656e082310234faaecfc"
+}

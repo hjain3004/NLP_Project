@@ -1,0 +1,315 @@
+{
+ "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+ "cost_usd_provider_reported": {
+  "author_runs": 0.746821,
+  "review_runs": 0.485704,
+  "total": 1.232525
+ },
+ "delivery_commits": {
+  "registry_profile": "d24f481",
+  "work_package": "5cba2e8"
+ },
+ "delivery_head_before_runs": "5cba2e88328756a965708b48b92a4a4f23341de3",
+ "diagnostics_not_integration": {
+  "base_full_suite_per_coordinator": {
+   "result": "OK",
+   "skipped": 1,
+   "tests": 391
+  },
+  "candidate_full_suite_sequential": {
+   "DEMO-001": {
+    "result": "OK",
+    "seconds": 179,
+    "skipped": 1,
+    "tests": 395
+   },
+   "DEMO-002": {
+    "result": "OK",
+    "seconds": 183,
+    "skipped": 1,
+    "tests": 394
+   }
+  },
+  "note": "Run on the candidate commits in detached worktrees with a .git present; NOT on an integration head (none exists). A first concurrent run of both suites failed 2 gate_runner timing tests on each (contention); both pass alone."
+ },
+ "event_count": 26,
+ "failed_at_step": "e (integrate) for DEMO-002; d (review) for DEMO-001",
+ "final_task_states": {
+  "DEMO-001": "repair_required",
+  "DEMO-002": "integration_ready"
+ },
+ "integration": {
+  "attempts": [
+   {
+    "command": "agentctl integrate",
+    "exit_code": 1,
+    "gates": [
+     {
+      "exit_code": null,
+      "gate": "integration:candidate-commit-preserved",
+      "result": "pass"
+     },
+     {
+      "exit_code": 0,
+      "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+      "result": "pass"
+     },
+     {
+      "exit_code": 1,
+      "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py",
+      "result": "fail"
+     },
+     {
+      "exit_code": 1,
+      "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py",
+      "result": "fail"
+     }
+    ],
+    "outcome": "rejected",
+    "reason_code": "affected_check_failed",
+    "rejection_artifact": "integration-rejection:DEMO-002:ae554851-5c6f-46a2-9002-11e680ba7829",
+    "task": "DEMO-002"
+   },
+   {
+    "command": "agentctl integrate",
+    "exit_code": 3,
+    "outcome": "queue_empty",
+    "parked_without_new_evidence": {
+     "DEMO-002": "affected_check_failed"
+    }
+   }
+  ],
+  "candidates_integrated": 0,
+  "integration_branch_exists": false
+ },
+ "integration_failure_diagnosis": "The contract checks test_context_staleness.py and test_plan_loading.py (DEMO-002) and test_approval*.py (DEMO-001) call 'git rev-parse --show-toplevel'; the integrator runs gates in a .git-less copy, where they error on the BASE tree too. verify (leased worktree, .git present) passed the same commands.",
+ "manual_interventions": "see report; 0 interventions in the run flow (setup steps excluded); operator diagnostics were read-only",
+ "manual_interventions_detail": {
+  "in_run_flow": 0,
+  "read_only_diagnostics_after_failure": [
+   "D1",
+   "D2",
+   "D3 (see commands.log)"
+  ],
+  "removed_diagnostic_worktrees": true,
+  "setup": [
+   "clone",
+   "registry demo profile commit d24f481",
+   "work package + contracts commit 5cba2e8",
+   "evidence worktree"
+  ]
+ },
+ "outcome": "PARTIAL: both candidates produced and verified; DEMO-002 reviewed clean but integration REJECTED (affected_check_failed); DEMO-001 independent review returned a blocking finding. Nothing integrated.",
+ "project_completion_date": "none",
+ "result_commits_integrated": [],
+ "run": "2026-11-04-automation-delivery demo (DEMO operator)",
+ "speedup_claim": "none",
+ "tasks": {
+  "DEMO-001": {
+   "author": {
+    "attempt_id": "DEMO-001-attempt-1",
+    "branch": "agentctl/DEMO-001/attempt-1",
+    "cli_result_uuid": "20e09065-cd21-452a-a546-d50c21886b3e",
+    "elapsed_ms": 181030,
+    "exit_code": 0,
+    "files_changed": [
+     {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/commands/approve.py"
+     },
+     {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_approve_output_containment.py"
+     }
+    ],
+    "finished_at": "2026-11-04T06:47:52.342672Z",
+    "lease_epoch": 1,
+    "lease_id": "f98e6033-2a79-4eca-946f-d40effc6d058",
+    "provider": "anthropic",
+    "provider_run_id": "24a2741d-defd-44c4-9a48-a0105aada1c6",
+    "requested_model": "claude-sonnet-5",
+    "result_commit": "93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2",
+    "served_model": "claude-sonnet-5",
+    "session_id": "542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f",
+    "started_at": "2026-11-04T06:44:51.311806Z",
+    "usage": {
+     "cost_usd": 0.38181,
+     "input_tokens": 41076,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 179564,
+     "output_tokens": 21751
+    },
+    "wall_window_epoch": [
+     1793774690.7848475,
+     1793774872.3667052
+    ]
+   },
+   "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+   "context_hash": "84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6",
+   "contract_hash": "df44a08a51438d3404022c947751271d03185324e61d91e067f95c5d82a40ef6",
+   "review": {
+    "exit_code": 0,
+    "findings": [
+     {
+      "blocking": true,
+      "id": "F1",
+      "severity": "important"
+     },
+     {
+      "blocking": false,
+      "id": "F2",
+      "severity": "minor"
+     }
+    ],
+    "independence_distinct": true,
+    "review_id": "DEMO-001-attempt-1-review-1",
+    "reviewer_model": "claude-opus-5-5",
+    "reviewer_provider": "anthropic",
+    "reviewer_role": "complex_implementation",
+    "reviewer_run_id": "f356e2ee-6873-4d74-b247-527bc5277f9d",
+    "reviewer_session_id": "0797b363-5503-44b9-9d87-9c8c2889d8d0",
+    "usage": {
+     "cost_usd": 0.248248,
+     "input_tokens": 25572,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 23118,
+     "output_tokens": 2184
+    },
+    "verdict": "blocking_findings",
+    "wall_window_epoch": [
+     1793774898.4401639,
+     1793774922.8760474
+    ]
+   },
+   "verification": {
+    "checks": [
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py",
+      "duration_ms": 120,
+      "exit_code": 0
+     },
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p 'test_approval*.py'",
+      "duration_ms": 771,
+      "exit_code": 0
+     }
+    ],
+    "passed": true
+   }
+  },
+  "DEMO-002": {
+   "author": {
+    "attempt_id": "DEMO-002-attempt-1",
+    "branch": "agentctl/DEMO-002/attempt-1",
+    "cli_result_uuid": "1db267a1-0ac5-4366-ba2f-2229c1e52c56",
+    "elapsed_ms": 132628,
+    "exit_code": 0,
+    "files_changed": [
+     {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/context.py"
+     },
+     {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+     }
+    ],
+    "finished_at": "2026-11-04T06:47:03.910541Z",
+    "lease_epoch": 1,
+    "lease_id": "14f4d681-5800-498e-81e8-e72124efd32c",
+    "provider": "anthropic",
+    "provider_run_id": "23f9f58c-fb7d-4443-b239-e79f98987de2",
+    "requested_model": "claude-sonnet-5",
+    "result_commit": "6a682e461f75eebd733ccf5937bf2f85da9d31c8",
+    "served_model": "claude-sonnet-5",
+    "session_id": "4a40799b-877c-40b4-9ab1-994e499b0968",
+    "started_at": "2026-11-04T06:44:51.282440Z",
+    "usage": {
+     "cost_usd": 0.3650108,
+     "input_tokens": 69855,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 131258,
+     "output_tokens": 19665
+    },
+    "wall_window_epoch": [
+     1793774690.7851038,
+     1793774823.9355583
+    ]
+   },
+   "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+   "context_hash": "62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53",
+   "contract_hash": "c3bc6006ab0ca27d34701868eb7f1e906b1290ad4e45c48e135d7e29caf92ee4",
+   "review": {
+    "exit_code": 0,
+    "findings": [
+     {
+      "blocking": false,
+      "id": "DEMO-002-R1",
+      "severity": "nit"
+     },
+     {
+      "blocking": false,
+      "id": "DEMO-002-R2",
+      "severity": "nit"
+     }
+    ],
+    "independence_distinct": true,
+    "review_id": "DEMO-002-attempt-1-review-1",
+    "reviewer_model": "claude-opus-5-5",
+    "reviewer_provider": "anthropic",
+    "reviewer_role": "complex_implementation",
+    "reviewer_run_id": "932538c4-c5e7-4751-a842-6a20486dfed3",
+    "reviewer_session_id": "a55f420c-0f56-4eb6-b1bd-0be6f8a7985d",
+    "usage": {
+     "cost_usd": 0.237456,
+     "input_tokens": 25908,
+     "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+     "latency_ms": 15631,
+     "output_tokens": 1510
+    },
+    "verdict": "no_blocking_findings",
+    "wall_window_epoch": [
+     1793774898.4390914,
+     1793774915.5767434
+    ]
+   },
+   "verification": {
+    "checks": [
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+      "duration_ms": 170,
+      "exit_code": 0
+     },
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py",
+      "duration_ms": 272,
+      "exit_code": 0
+     },
+     {
+      "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py",
+      "duration_ms": 471,
+      "exit_code": 0
+     }
+    ],
+    "passed": true
+   }
+  }
+ },
+ "timings": {
+  "first_run_start_to_integrate_2_end_seconds": 282.723,
+  "first_run_start_to_last_review_end_seconds": 232.091,
+  "review_overlap_seconds": 17.137,
+  "run_overlap_seconds": 133.15,
+  "run_windows_epoch": {
+   "run-DEMO-001": [
+    1793774690.7848475,
+    1793774872.3667052
+   ],
+   "run-DEMO-002": [
+    1793774690.7851038,
+    1793774823.9355583
+   ]
+  }
+ },
+ "work_package_plan_hash_basis": "sha256 of docs/program/AUTOMATION_DELIVERY.md (raw bytes)"
+}

@@ -1,0 +1,291 @@
+make: Entering directory '/home/user/NLP_Project/tools/agentctl'
+test_auth_method_flag_cannot_select_a_weaker_method (tests.test_approval.ApprovalTests.test_auth_method_flag_cannot_select_a_weaker_method) ... ok
+test_cancelled_local_authentication_fails_closed (tests.test_approval.ApprovalTests.test_cancelled_local_authentication_fails_closed) ... ok
+test_committed_valid_fixture_is_cryptographically_accepted (tests.test_approval.ApprovalTests.test_committed_valid_fixture_is_cryptographically_accepted) ... ok
+test_concurrent_double_consume_allows_exactly_one_success (tests.test_approval.ApprovalTests.test_concurrent_double_consume_allows_exactly_one_success) ... ok
+test_local_authentication_adapter_receives_exact_target_hash (tests.test_approval.ApprovalTests.test_local_authentication_adapter_receives_exact_target_hash) ... ok
+test_local_authentication_reads_seal_key_only_after_success (tests.test_approval.ApprovalTests.test_local_authentication_reads_seal_key_only_after_success) ... ok
+test_local_authentication_rejects_non_sha256_target_before_adapter (tests.test_approval.ApprovalTests.test_local_authentication_rejects_non_sha256_target_before_adapter) ... ok
+test_macos_adapter_maps_helper_success_without_exposing_output (tests.test_approval.ApprovalTests.test_macos_adapter_maps_helper_success_without_exposing_output) ... ok
+test_malformed_helper_output_is_not_authentication (tests.test_approval.ApprovalTests.test_malformed_helper_output_is_not_authentication) ... ok
+test_one_changed_target_hash_byte_is_rejected (tests.test_approval.ApprovalTests.test_one_changed_target_hash_byte_is_rejected) ... ok
+test_ordinary_tty_issuance_remains_unchanged (tests.test_approval.ApprovalTests.test_ordinary_tty_issuance_remains_unchanged) ... ok
+test_preflight_rejects_malformed_and_stale_targets_without_prompts (tests.test_approval.ApprovalTests.test_preflight_rejects_malformed_and_stale_targets_without_prompts) ... ok
+test_principal_method_permission_is_required_when_policy_is_supplied (tests.test_approval.ApprovalTests.test_principal_method_permission_is_required_when_policy_is_supplied) ... ok
+test_production_cli_auth_failure_emits_no_record (tests.test_approval.ApprovalTests.test_production_cli_auth_failure_emits_no_record) ... ok
+test_production_cli_uses_policy_and_registers_strong_record (tests.test_approval.ApprovalTests.test_production_cli_uses_policy_and_registers_strong_record) ... strong-approval.json
+ordinary-approval.json
+ok
+test_reusable_approval_is_rejected_even_when_seal_is_valid (tests.test_approval.ApprovalTests.test_reusable_approval_is_rejected_even_when_seal_is_valid) ... ok
+test_six_rejection_modes_have_distinct_codes (tests.test_approval.ApprovalTests.test_six_rejection_modes_have_distinct_codes) ... ok
+test_strong_issuance_authenticates_binding_before_seal (tests.test_approval.ApprovalTests.test_strong_issuance_authenticates_binding_before_seal) ... ok
+test_strong_issuance_cancellation_produces_no_sealed_record (tests.test_approval.ApprovalTests.test_strong_issuance_cancellation_produces_no_sealed_record) ... ok
+test_unavailable_local_authentication_fails_closed_without_secrets (tests.test_approval.ApprovalTests.test_unavailable_local_authentication_fails_closed_without_secrets) ... ok
+test_unregistered_principal_is_rejected (tests.test_approval.ApprovalTests.test_unregistered_principal_is_rejected) ... ok
+test_unsupported_strong_method_is_hard_refused (tests.test_approval.ApprovalTests.test_unsupported_strong_method_is_hard_refused) ... ok
+test_verifier_rejects_every_bound_field_mutation (tests.test_approval.ApprovalTests.test_verifier_rejects_every_bound_field_mutation) ... ok
+test_key_inside_worktree_is_rejected (tests.test_approval.DoctorTests.test_key_inside_worktree_is_rejected) ... ok
+test_key_newer_than_first_approval_commit_is_rejected (tests.test_approval.DoctorTests.test_key_newer_than_first_approval_commit_is_rejected) ... ok
+test_mode_wider_than_0600_is_rejected (tests.test_approval.DoctorTests.test_mode_wider_than_0600_is_rejected) ... ok
+test_unrecorded_fingerprint_is_rejected (tests.test_approval.DoctorTests.test_unrecorded_fingerprint_is_rejected) ... ok
+test_valid_external_mode_0600_recorded_key_passes (tests.test_approval.DoctorTests.test_valid_external_mode_0600_recorded_key_passes) ... ok
+test_distinct_payloads_with_one_id_reach_transaction_and_collision (tests.test_approval_prebind.ApprovalPrebindTests.test_distinct_payloads_with_one_id_reach_transaction_and_collision)
+Using only an ID in the outer key could cache a different payload as success. ... ok
+test_exclusive_write_removes_its_partial_file_after_write_failure (tests.test_approval_prebind.ApprovalPrebindTests.test_exclusive_write_removes_its_partial_file_after_write_failure)
+A failed prebind write must not leave a partial recovery destination. ... ok
+test_invalid_id_preflight_fails_before_authentication_or_store_open (tests.test_approval_prebind.ApprovalPrebindTests.test_invalid_id_preflight_fails_before_authentication_or_store_open)
+Removing ID validation would allow malformed authority into issuance. ... ok
+test_legacy_id_only_registration_replay_preserves_authority_and_rejects_collision (tests.test_approval_prebind.ApprovalPrebindTests.test_legacy_id_only_registration_replay_preserves_authority_and_rejects_collision)
+Removing legacy-event recovery would make an old sealed registration raise IntegrityError. ... ok
+test_legacy_no_id_external_outputs_have_no_filesystem_effects (tests.test_approval_prebind.ApprovalPrebindTests.test_legacy_no_id_external_outputs_have_no_filesystem_effects)
+Checking containment after writing could create or overwrite external files. ... ok
+test_legacy_no_id_outputs_keep_parent_overwrite_and_relative_behavior (tests.test_approval_prebind.ApprovalPrebindTests.test_legacy_no_id_outputs_keep_parent_overwrite_and_relative_behavior)
+Prebinding must not alter the original no-ID command's output contract. ... agent-system/work/P0/approvals/LEGACY-phase-approval.json
+agent-system/work/P0/approvals/LEGACY-phase-approval.json
+nested/relative.json
+ok
+test_output_failure_preserves_registered_authority_for_recovery (tests.test_approval_prebind.ApprovalPrebindTests.test_output_failure_preserves_registered_authority_for_recovery)
+Writing output before registration would lose a recoverable approved record. ... ok
+test_recover_output_copies_only_verified_registered_record (tests.test_approval_prebind.ApprovalPrebindTests.test_recover_output_copies_only_verified_registered_record)
+Skipping registered-record verification could export untrusted authority. ... ok
+test_recovery_command_uses_resolved_default_destination (tests.test_approval_prebind.ApprovalPrebindTests.test_recovery_command_uses_resolved_default_destination)
+A default prebind output must never generate ``--out None``. ... ok
+test_recovery_rejects_authentication_method (tests.test_approval_prebind.ApprovalPrebindTests.test_recovery_rejects_authentication_method)
+Accepting --auth-method during recovery would blur issuance and recovery. ... ok
+test_recovery_rejects_registered_tamper_and_eligibility_failures (tests.test_approval_prebind.ApprovalPrebindTests.test_recovery_rejects_registered_tamper_and_eligibility_failures)
+Bypassing verified registered bytes could recover invalid single-use authority. ... ok
+test_requested_uuid_is_canonical_and_bound_before_authentication (tests.test_approval_prebind.ApprovalPrebindTests.test_requested_uuid_is_canonical_and_bound_before_authentication)
+Removing the requested ID binding would leave authentication unbound. ... ok
+test_valid_id_preflight_does_not_construct_event_store (tests.test_approval_prebind.ApprovalPrebindTests.test_valid_id_preflight_does_not_construct_event_store)
+Preflight validates an ID binding without opening runtime state. ... ok
+test_real_cli_preflight_resolves_governance_proposal_without_prompt (tests.test_approval_target_resolution.ApprovalTargetResolutionTests.test_real_cli_preflight_resolves_governance_proposal_without_prompt) ... ok
+test_resolver_rejects_unknown_wrong_and_missing_targets (tests.test_approval_target_resolution.ApprovalTargetResolutionTests.test_resolver_rejects_unknown_wrong_and_missing_targets) ... ok
+test_synthetic_governance_approval_verifies_against_current_payload (tests.test_approval_target_resolution.ApprovalTargetResolutionTests.test_synthetic_governance_approval_verifies_against_current_payload) ... ok
+test_compiler_rejects_explicitly_excluded_and_disallowed_paths (tests.test_context_staleness.ContextCompilationTests.test_compiler_rejects_explicitly_excluded_and_disallowed_paths) ... ok
+test_interface_bump_stales_consumer_and_rebuild_changes_hash (tests.test_context_staleness.ContextCompilationTests.test_interface_bump_stales_consumer_and_rebuild_changes_hash) ... ok
+test_manifest_has_exactly_ten_ordered_inputs_and_eight_exclusions (tests.test_context_staleness.ContextCompilationTests.test_manifest_has_exactly_ten_ordered_inputs_and_eight_exclusions) ... ok
+test_rebuild_refuses_an_interface_version_outside_the_contract_pin (tests.test_context_staleness.ContextCompilationTests.test_rebuild_refuses_an_interface_version_outside_the_contract_pin) ... ok
+test_returned_artifact_must_echo_the_compiled_context_hash (tests.test_context_staleness.ContextCompilationTests.test_returned_artifact_must_echo_the_compiled_context_hash) ... ok
+test_cycle_detection_returns_only_the_offending_cycle_nodes (tests.test_dag.DependencyGraphTests.test_cycle_detection_returns_only_the_offending_cycle_nodes) ... ok
+test_descendants_cover_the_full_transitive_closure (tests.test_dag.DependencyGraphTests.test_descendants_cover_the_full_transitive_closure) ... ok
+test_interface_hash_change_invalidates_consumers_and_all_descendants (tests.test_dag.DependencyGraphTests.test_interface_hash_change_invalidates_consumers_and_all_descendants) ... ok
+test_topological_order_is_dependency_first_and_deterministic (tests.test_dag.DependencyGraphTests.test_topological_order_is_dependency_first_and_deterministic) ... ok
+test_unknown_dependency_is_still_a_graph_node (tests.test_dag.DependencyGraphTests.test_unknown_dependency_is_still_a_graph_node) ... ok
+test_challenger_scope_uses_task_contract_risk_vocabulary (tests.test_docscheck.DocumentationCheckTests.test_challenger_scope_uses_task_contract_risk_vocabulary) ... ok
+test_current_repository_documentation_passes (tests.test_docscheck.DocumentationCheckTests.test_current_repository_documentation_passes) ... ok
+test_generated_gate_document_matches_machine_source (tests.test_docscheck.DocumentationCheckTests.test_generated_gate_document_matches_machine_source) ... ok
+test_integrator_summary_preserves_reviewed_candidate_immutability (tests.test_docscheck.DocumentationCheckTests.test_integrator_summary_preserves_reviewed_candidate_immutability) ... ok
+test_invariant_statement_tampering_is_rejected_even_when_ids_match (tests.test_docscheck.DocumentationCheckTests.test_invariant_statement_tampering_is_rejected_even_when_ids_match) ... ok
+test_operational_roles_are_not_labelled_capability_classes (tests.test_docscheck.DocumentationCheckTests.test_operational_roles_are_not_labelled_capability_classes) ... ok
+test_proposed_consequential_adr_is_non_authoritative (tests.test_docscheck.DocumentationCheckTests.test_proposed_consequential_adr_is_non_authoritative) ... ok
+test_provider_adapters_do_not_duplicate_registry_bindings (tests.test_docscheck.DocumentationCheckTests.test_provider_adapters_do_not_duplicate_registry_bindings) ... ok
+test_unclassified_root_runbook_is_rejected (tests.test_docscheck.DocumentationCheckTests.test_unclassified_root_runbook_is_rejected) ... ok
+test_unsubstantiated_consequential_adr_acceptance_is_rejected (tests.test_docscheck.DocumentationCheckTests.test_unsubstantiated_consequential_adr_acceptance_is_rejected) ... ok
+test_denylisted_key_is_rejected_at_any_depth (tests.test_events.EventValidationTests.test_denylisted_key_is_rejected_at_any_depth) ... ok
+test_invalid_event_writes_zero_rows (tests.test_events.EventValidationTests.test_invalid_event_writes_zero_rows) ... ok
+test_schema_failure_is_invalid_event (tests.test_events.EventValidationTests.test_schema_failure_is_invalid_event) ... ok
+test_stateful_document_text_fixture_is_rejected (tests.test_events.EventValidationTests.test_stateful_document_text_fixture_is_rejected) ... ok
+test_string_limit_counts_utf8_bytes (tests.test_events.EventValidationTests.test_string_limit_counts_utf8_bytes) ... ok
+test_valid_minimal_event_is_accepted (tests.test_events.EventValidationTests.test_valid_minimal_event_is_accepted) ... ok
+test_committed_dry_run_has_valid_transition_semantics (tests.test_evidence_export.EvidenceExportTests.test_committed_dry_run_has_valid_transition_semantics) ... ok
+test_export_is_filtered_and_tampering_is_rejected (tests.test_evidence_export.EvidenceExportTests.test_export_is_filtered_and_tampering_is_rejected) ... ok
+test_construction_author_identity_is_rejected (tests.test_gate.AuditTests.test_construction_author_identity_is_rejected) ... ok
+test_empty_audit_scope_is_rejected (tests.test_gate.AuditTests.test_empty_audit_scope_is_rejected) ... ok
+test_fresh_auditor_is_persisted (tests.test_gate.AuditTests.test_fresh_auditor_is_persisted) ... ok
+test_nonindependent_or_contradictory_audit_is_rejected (tests.test_gate.AuditTests.test_nonindependent_or_contradictory_audit_is_rejected) ... ok
+test_stale_audit_binding_is_rejected (tests.test_gate.AuditTests.test_stale_audit_binding_is_rejected) ... ok
+test_any_prior_passed_g0_blocks_changed_criteria_closure (tests.test_gate.GateTests.test_any_prior_passed_g0_blocks_changed_criteria_closure) ... ok
+test_architecture_audit_gate_rejects_untrusted_or_blocking_evidence (tests.test_gate.GateTests.test_architecture_audit_gate_rejects_untrusted_or_blocking_evidence) ... ok
+test_architecture_audit_remains_current_after_evidence_only_commit (tests.test_gate.GateTests.test_architecture_audit_remains_current_after_evidence_only_commit) ... ok
+test_claimed_pass_is_discarded_and_failing_command_is_reexecuted (tests.test_gate.GateTests.test_claimed_pass_is_discarded_and_failing_command_is_reexecuted) ... ok
+test_clean_checkout_criterion_ignores_dirty_worktree_content (tests.test_gate.GateTests.test_clean_checkout_criterion_ignores_dirty_worktree_content) ... ok
+test_exit_code_and_output_hash_are_recomputed (tests.test_gate.GateTests.test_exit_code_and_output_hash_are_recomputed) ... ok
+test_filtered_criteria_cannot_satisfy_post_commit_replay (tests.test_gate.GateTests.test_filtered_criteria_cannot_satisfy_post_commit_replay) ... ok
+test_gate_approval_consumption_and_authoritative_result_are_one_transaction (tests.test_gate.GateTests.test_gate_approval_consumption_and_authoritative_result_are_one_transaction) ... ok
+test_gate_binds_and_atomically_consumes_phase_approval (tests.test_gate.GateTests.test_gate_binds_and_atomically_consumes_phase_approval) ... ok
+test_gate_result_view_is_recoverable_after_post_commit_write_failure (tests.test_gate.GateTests.test_gate_result_view_is_recoverable_after_post_commit_write_failure) ... ok
+test_legacy_descendant_replay_without_approval_ids_fails_closed (tests.test_gate.GateTests.test_legacy_descendant_replay_without_approval_ids_fails_closed) ... ok
+test_legacy_non_g0_same_head_closure_preserves_event_identity (tests.test_gate.GateTests.test_legacy_non_g0_same_head_closure_preserves_event_identity) ... ok
+test_legacy_same_head_closure_is_idempotent_after_event_schema_upgrade (tests.test_gate.GateTests.test_legacy_same_head_closure_is_idempotent_after_event_schema_upgrade) ... ok
+test_nested_git_criterion_rejects_file_markers_anywhere (tests.test_gate.GateTests.test_nested_git_criterion_rejects_file_markers_anywhere) ... ok
+test_open_manual_criterion_keeps_gate_open (tests.test_gate.GateTests.test_open_manual_criterion_keeps_gate_open) ... ok
+test_post_commit_closure_evidence_replay_does_not_reconsume_approval (tests.test_gate.GateTests.test_post_commit_closure_evidence_replay_does_not_reconsume_approval) ... ok
+test_post_commit_replay_rejects_invalid_replay_proofs (tests.test_gate.GateTests.test_post_commit_replay_rejects_invalid_replay_proofs) ... ok
+test_replay_must_match_approval_ids_consumed_by_original_closure (tests.test_gate.GateTests.test_replay_must_match_approval_ids_consumed_by_original_closure) ... ok
+test_replay_rechecks_changed_architecture_audit_content (tests.test_gate.GateTests.test_replay_rechecks_changed_architecture_audit_content) ... ok
+test_replay_supports_approval_files_first_committed_with_closure (tests.test_gate.GateTests.test_replay_supports_approval_files_first_committed_with_closure) ... ok
+test_repository_root_check_accepts_a_logical_symlink_pwd (tests.test_gate.GateTests.test_repository_root_check_accepts_a_logical_symlink_pwd) ... ok
+test_repository_worktree_gitfile_is_not_a_nested_repository (tests.test_gate.GateTests.test_repository_worktree_gitfile_is_not_a_nested_repository) ... ok
+test_expired_approval_rejects_without_change (tests.test_governance.GovernanceApplyTests.test_expired_approval_rejects_without_change) ... ok
+test_expired_exact_historical_replay_is_read_only (tests.test_governance.GovernanceApplyTests.test_expired_exact_historical_replay_is_read_only) ... ok
+test_failure_after_staging_restores_before_tree_and_approval (tests.test_governance.GovernanceApplyTests.test_failure_after_staging_restores_before_tree_and_approval) ... ok
+test_failure_mid_rename_restores_before_tree_and_approval (tests.test_governance.GovernanceApplyTests.test_failure_mid_rename_restores_before_tree_and_approval) ... ok
+test_genuine_crash_leaves_recoverable_journal_and_rolls_back (tests.test_governance.GovernanceApplyTests.test_genuine_crash_leaves_recoverable_journal_and_rolls_back) ... ok
+test_historical_replay_rejects_canonical_tree_drift (tests.test_governance.GovernanceApplyTests.test_historical_replay_rejects_canonical_tree_drift) ... ok
+test_historical_replay_rejects_same_id_tampered_approval (tests.test_governance.GovernanceApplyTests.test_historical_replay_rejects_same_id_tampered_approval) ... ok
+test_malformed_journal_is_rejected_before_any_restore (tests.test_governance.GovernanceApplyTests.test_malformed_journal_is_rejected_before_any_restore) ... ok
+test_postcommit_output_failure_is_recoverable_and_idempotent (tests.test_governance.GovernanceApplyTests.test_postcommit_output_failure_is_recoverable_and_idempotent) ... ok
+test_preflight_is_exact_ten_and_non_mutating (tests.test_governance.GovernanceApplyTests.test_preflight_is_exact_ten_and_non_mutating) ... ok
+test_replay_is_idempotent_after_canonical_tree_is_after (tests.test_governance.GovernanceApplyTests.test_replay_is_idempotent_after_canonical_tree_is_after) ... ok
+test_success_applies_exact_payload_and_consumes_once (tests.test_governance.GovernanceApplyTests.test_success_applies_exact_payload_and_consumes_once) ... ok
+test_target_symlink_is_rejected_without_outside_write (tests.test_governance.GovernanceApplyTests.test_target_symlink_is_rejected_without_outside_write) ... ok
+test_key_order_does_not_change_the_hash (tests.test_hashing.CanonicalJsonTests.test_key_order_does_not_change_the_hash) ... ok
+test_non_ascii_is_preserved_as_utf8_text (tests.test_hashing.CanonicalJsonTests.test_non_ascii_is_preserved_as_utf8_text) ... ok
+test_pinned_json_hash (tests.test_hashing.CanonicalJsonTests.test_pinned_json_hash) ... ok
+test_excluding_a_present_key_matches_hashing_without_it (tests.test_hashing.ExclusionTests.test_excluding_a_present_key_matches_hashing_without_it) ... ok
+test_excluding_an_absent_key_is_a_no_op (tests.test_hashing.ExclusionTests.test_excluding_an_absent_key_is_a_no_op) ... ok
+test_non_mapping_is_rejected (tests.test_hashing.ExclusionTests.test_non_mapping_is_rejected) ... ok
+test_digest_only_json_output_is_safe_for_shell_substitution (tests.test_hashing.FileAndTreeTests.test_digest_only_json_output_is_safe_for_shell_substitution) ... ok
+test_documented_approval_hash_commands_emit_exact_canonical_digests (tests.test_hashing.FileAndTreeTests.test_documented_approval_hash_commands_emit_exact_canonical_digests) ... ok
+test_file_hash_is_streaming_sha256 (tests.test_hashing.FileAndTreeTests.test_file_hash_is_streaming_sha256) ... ok
+test_tree_hash_is_order_independent_of_walk (tests.test_hashing.FileAndTreeTests.test_tree_hash_is_order_independent_of_walk) ... ok
+test_tree_hash_matches_independent_recompute_and_pin (tests.test_hashing.FileAndTreeTests.test_tree_hash_matches_independent_recompute_and_pin) ... ok
+test_tree_hash_rejects_a_file_path (tests.test_hashing.FileAndTreeTests.test_tree_hash_rejects_a_file_path) ... ok
+test_every_committed_schema_traverses_without_unsupported_keyword (tests.test_jsonschema_subset.CorpusStaysInSubsetTests.test_every_committed_schema_traverses_without_unsupported_keyword) ... ok
+test_additional_properties (tests.test_jsonschema_subset.KeywordMatrixTests.test_additional_properties) ... ok
+test_const (tests.test_jsonschema_subset.KeywordMatrixTests.test_const) ... ok
+test_enum (tests.test_jsonschema_subset.KeywordMatrixTests.test_enum) ... ok
+test_format_date_time (tests.test_jsonschema_subset.KeywordMatrixTests.test_format_date_time) ... ok
+test_items (tests.test_jsonschema_subset.KeywordMatrixTests.test_items) ... ok
+test_maximum (tests.test_jsonschema_subset.KeywordMatrixTests.test_maximum) ... ok
+test_min_items (tests.test_jsonschema_subset.KeywordMatrixTests.test_min_items) ... ok
+test_min_length (tests.test_jsonschema_subset.KeywordMatrixTests.test_min_length) ... ok
+test_one_of (tests.test_jsonschema_subset.KeywordMatrixTests.test_one_of) ... ok
+test_pattern (tests.test_jsonschema_subset.KeywordMatrixTests.test_pattern) ... ok
+test_properties (tests.test_jsonschema_subset.KeywordMatrixTests.test_properties) ... ok
+test_required (tests.test_jsonschema_subset.KeywordMatrixTests.test_required) ... ok
+test_type (tests.test_jsonschema_subset.KeywordMatrixTests.test_type) ... ok
+test_accepts_valid (tests.test_jsonschema_subset.PlanSnippetTests.test_accepts_valid) ... ok
+test_rejects_wrong_type_with_exact_tuple (tests.test_jsonschema_subset.PlanSnippetTests.test_rejects_wrong_type_with_exact_tuple) ... ok
+test_external_ref_is_unsupported (tests.test_jsonschema_subset.RefTests.test_external_ref_is_unsupported) ... ok
+test_single_file_ref_resolves (tests.test_jsonschema_subset.RefTests.test_single_file_ref_resolves) ... ok
+test_multiple_of_raises (tests.test_jsonschema_subset.UnsupportedKeywordTests.test_multiple_of_raises) ... ok
+test_supported_set_includes_declared_conditionals (tests.test_jsonschema_subset.UnsupportedKeywordTests.test_supported_set_includes_declared_conditionals) ... ok
+test_bound_approval_is_consumed_in_the_lease_transaction (tests.test_leases.LeaseTests.test_bound_approval_is_consumed_in_the_lease_transaction) ... ok
+test_committed_stale_fencing_fixture_is_rejected_with_seeded_store (tests.test_leases.LeaseTests.test_committed_stale_fencing_fixture_is_rejected_with_seeded_store) ... ok
+test_each_integrity_mismatch_revokes_lease_and_emits_permission_violation (tests.test_leases.LeaseTests.test_each_integrity_mismatch_revokes_lease_and_emits_permission_violation) ... ok
+test_epoch_strictly_increases_across_three_dispatches (tests.test_leases.LeaseTests.test_epoch_strictly_increases_across_three_dispatches) ... ok
+test_expiry_releases_locks_but_preserves_attempt_and_worktree (tests.test_leases.LeaseTests.test_expiry_releases_locks_but_preserves_attempt_and_worktree) ... ok
+test_first_schema_error_uses_correction_not_attempt_or_lease_time (tests.test_leases.LeaseTests.test_first_schema_error_uses_correction_not_attempt_or_lease_time) ... ok
+test_late_submission_is_orphan_evidence_without_state_advancement (tests.test_leases.LeaseTests.test_late_submission_is_orphan_evidence_without_state_advancement) ... ok
+test_privileged_task_cannot_lease_without_registered_bound_approval (tests.test_leases.LeaseTests.test_privileged_task_cannot_lease_without_registered_bound_approval) ... ok
+test_wrong_approval_binding_never_issues_a_lease (tests.test_leases.LeaseTests.test_wrong_approval_binding_never_issues_a_lease) ... ok
+test_disjoint_paths_do_not_conflict (tests.test_locks.PathLockTests.test_disjoint_paths_do_not_conflict) ... ok
+test_double_star_matches_zero_or_many_segments (tests.test_locks.PathLockTests.test_double_star_matches_zero_or_many_segments) ... ok
+test_glob_containment_conflicts (tests.test_locks.PathLockTests.test_glob_containment_conflicts) ... ok
+test_identical_literal_paths_conflict (tests.test_locks.PathLockTests.test_identical_literal_paths_conflict) ... ok
+test_two_globs_conflict_only_when_they_have_a_common_match (tests.test_locks.PathLockTests.test_two_globs_conflict_only_when_they_have_a_common_match) ... ok
+test_unsafe_or_unnormalized_pattern_is_rejected (tests.test_locks.PathLockTests.test_unsafe_or_unnormalized_pattern_is_rejected) ... ok
+test_write_sets_conflict_when_any_pair_overlaps (tests.test_locks.PathLockTests.test_write_sets_conflict_when_any_pair_overlaps) ... ok
+test_exclusive_lock_rejects_a_second_owner (tests.test_locks.SemanticLockTests.test_exclusive_lock_rejects_a_second_owner) ... ok
+test_pinned_lock_requires_a_contract_hash (tests.test_locks.SemanticLockTests.test_pinned_lock_requires_a_contract_hash) ... ok
+test_same_owner_cannot_silently_change_a_pinned_hash (tests.test_locks.SemanticLockTests.test_same_owner_cannot_silently_change_a_pinned_hash) ... ok
+test_same_owner_same_hash_is_idempotent_and_release_frees_lock (tests.test_locks.SemanticLockTests.test_same_owner_same_hash_is_idempotent_and_release_frees_lock) ... ok
+test_unknown_lock_is_a_planning_error (tests.test_locks.SemanticLockTests.test_unknown_lock_is_a_planning_error) ... ok
+test_unpinned_policy_lock_does_not_require_hash (tests.test_locks.SemanticLockTests.test_unpinned_policy_lock_does_not_require_hash) ... ok
+test_each_model_is_frozen_and_round_trips (tests.test_models.ArtifactModelTests.test_each_model_is_frozen_and_round_trips) ... ok
+test_every_schema_stem_has_a_model (tests.test_models.ArtifactModelTests.test_every_schema_stem_has_a_model) ... ok
+test_from_mapping_rejects_missing_field (tests.test_models.ArtifactModelTests.test_from_mapping_rejects_missing_field) ... ok
+test_from_mapping_rejects_wrong_artifact_type (tests.test_models.ArtifactModelTests.test_from_mapping_rejects_wrong_artifact_type) ... ok
+test_synthetic_fixtures_are_json_serialisable (tests.test_models.ArtifactModelTests.test_synthetic_fixtures_are_json_serialisable) ... ok
+test_exceptional_states (tests.test_models.TaskStateTests.test_exceptional_states) ... ok
+test_linear_and_exceptional_members_present (tests.test_models.TaskStateTests.test_linear_and_exceptional_members_present) ... ok
+test_string_enum_compares_to_raw_value (tests.test_models.TaskStateTests.test_string_enum_compares_to_raw_value) ... ok
+test_terminal_states (tests.test_models.TaskStateTests.test_terminal_states) ... ok
+test_completed_bootstrap_record_validates_without_forward_tasks (tests.test_plan_loading.PlanLoadingTests.test_completed_bootstrap_record_validates_without_forward_tasks) ... ok
+test_dispatch_rejects_a_changed_pinned_semantic_lock_source (tests.test_plan_loading.PlanLoadingTests.test_dispatch_rejects_a_changed_pinned_semantic_lock_source) ... ok
+test_plan_validation_is_idempotent_and_context_hashes_are_reproducible (tests.test_plan_loading.PlanLoadingTests.test_plan_validation_is_idempotent_and_context_hashes_are_reproducible) ... ok
+test_task_contract_maps_to_scheduler_spec_without_losing_locks (tests.test_plan_loading.PlanLoadingTests.test_task_contract_maps_to_scheduler_spec_without_losing_locks) ... ok
+test_p3_supporting_tracks_cross_lane_edges_and_fan_in_are_exact_and_acyclic (tests.test_program_dag.ProgramDagTests.test_p3_supporting_tracks_cross_lane_edges_and_fan_in_are_exact_and_acyclic) ... ok
+test_g0_candidate_has_corrected_bindings_without_replacing_canonical (tests.test_proposals.ProposalValidationTests.test_g0_candidate_has_corrected_bindings_without_replacing_canonical) ... ok
+test_governance_change_set_is_non_authoritative_and_binds_current_bytes (tests.test_proposals.ProposalValidationTests.test_governance_change_set_is_non_authoritative_and_binds_current_bytes) ... ok
+test_artifact_cannot_override_registered_reviewer_identity (tests.test_review_independence.ReviewIndependenceTests.test_artifact_cannot_override_registered_reviewer_identity) ... ok
+test_committed_false_attestation_fixture_is_rejected_against_seeded_identity (tests.test_review_independence.ReviewIndependenceTests.test_committed_false_attestation_fixture_is_rejected_against_seeded_identity) ... ok
+test_each_of_five_identity_dimensions_independently_rejects_self_review (tests.test_review_independence.ReviewIndependenceTests.test_each_of_five_identity_dimensions_independently_rejects_self_review) ... ok
+test_first_pass_pack_omits_persuasive_author_summary (tests.test_review_independence.ReviewIndependenceTests.test_first_pass_pack_omits_persuasive_author_summary) ... ok
+test_independent_verdict_advances_to_integration_ready (tests.test_review_independence.ReviewIndependenceTests.test_independent_verdict_advances_to_integration_ready) ... ok
+test_ingest_fails_closed_without_a_registered_reviewer_assignment (tests.test_review_independence.ReviewIndependenceTests.test_ingest_fails_closed_without_a_registered_reviewer_assignment) ... ok
+test_all_conditions_true_is_admitted (tests.test_scheduler.AdmissionTests.test_all_conditions_true_is_admitted) ... ok
+test_all_ten_admission_conditions_are_named_in_order (tests.test_scheduler.AdmissionTests.test_all_ten_admission_conditions_are_named_in_order) ... ok
+test_each_failed_condition_has_its_own_reason_code (tests.test_scheduler.AdmissionTests.test_each_failed_condition_has_its_own_reason_code) ... ok
+test_absent_state_event_pair_raises (tests.test_scheduler.TransitionTableTests.test_absent_state_event_pair_raises) ... ok
+test_multi_outcome_authority_rows_require_an_allowed_decision (tests.test_scheduler.TransitionTableTests.test_multi_outcome_authority_rows_require_an_allowed_decision) ... ok
+test_normal_path_transitions (tests.test_scheduler.TransitionTableTests.test_normal_path_transitions) ... ok
+test_transition_rules_match_the_twenty_four_documented_rows (tests.test_scheduler.TransitionTableTests.test_transition_rules_match_the_twenty_four_documented_rows) ... ok
+test_wildcard_nonterminal_transition_never_changes_terminal_state (tests.test_scheduler.TransitionTableTests.test_wildcard_nonterminal_transition_never_changes_terminal_state) ... ok
+test_candidate_ingest_rejects_nonexistent_result_commit (tests.test_security_hardening.TrustedCandidateTests.test_candidate_ingest_rejects_nonexistent_result_commit) ... ok
+test_candidate_ingest_requires_acknowledged_running_lease (tests.test_security_hardening.TrustedCandidateTests.test_candidate_ingest_requires_acknowledged_running_lease) ... ok
+test_review_rejects_altered_trusted_binding_and_expired_assignment (tests.test_security_hardening.TrustedCandidateTests.test_review_rejects_altered_trusted_binding_and_expired_assignment) ... ok
+test_trusted_candidate_binding_drives_verification_and_review (tests.test_security_hardening.TrustedCandidateTests.test_trusted_candidate_binding_drives_verification_and_review) ... ok
+test_all_twelve_tables_are_created_and_wal_is_enabled (tests.test_store.EventStoreTests.test_all_twelve_tables_are_created_and_wal_is_enabled) ... ok
+test_exception_between_state_change_and_event_rolls_back_both (tests.test_store.EventStoreTests.test_exception_between_state_change_and_event_rolls_back_both) ... ok
+test_idempotency_replay_returns_original_result_without_second_mutation (tests.test_store.EventStoreTests.test_idempotency_replay_returns_original_result_without_second_mutation) ... ok
+test_read_api_cannot_bypass_the_event_bearing_writer (tests.test_store.EventStoreTests.test_read_api_cannot_bypass_the_event_bearing_writer) ... ok
+test_second_process_writer_is_serialized (tests.test_store.EventStoreTests.test_second_process_writer_is_serialized) ... ok
+test_status_snapshot_has_the_normative_json_shape (tests.test_store.EventStoreTests.test_status_snapshot_has_the_normative_json_shape) ... ok
+test_python_surfaces_raise_not_implemented_at_level_1 (tests.test_stubs.StubTests.test_python_surfaces_raise_not_implemented_at_level_1) ... ok
+test_verify_and_integrate_commands_exit_nonzero_with_named_error (tests.test_stubs.StubTests.test_verify_and_integrate_commands_exit_nonzero_with_named_error) ... ok
+test_verify_is_a_real_control_plane_transition (tests.test_stubs.StubTests.test_verify_is_a_real_control_plane_transition) ... ok
+test_cli_names_schema_undeterminable_error_class (tests.test_validate_invalid.InvalidArtifactTests.test_cli_names_schema_undeterminable_error_class) ... ok
+test_context_exclusions_are_the_exact_policy_set (tests.test_validate_invalid.InvalidArtifactTests.test_context_exclusions_are_the_exact_policy_set) ... ok
+test_critical_task_cannot_use_unsandboxed_tools (tests.test_validate_invalid.InvalidArtifactTests.test_critical_task_cannot_use_unsandboxed_tools) ... ok
+test_cross_artifact_hash_link_tampering_is_rejected (tests.test_validate_invalid.InvalidArtifactTests.test_cross_artifact_hash_link_tampering_is_rejected) ... ok
+test_destructive_task_requires_matching_human_approval_binding (tests.test_validate_invalid.InvalidArtifactTests.test_destructive_task_requires_matching_human_approval_binding) ... ok
+test_findings_require_file_location_and_reviewer_confidence (tests.test_validate_invalid.InvalidArtifactTests.test_findings_require_file_location_and_reviewer_confidence) ... ok
+test_ids_and_versions_are_nonempty_and_positive (tests.test_validate_invalid.InvalidArtifactTests.test_ids_and_versions_are_nonempty_and_positive) ... ok
+test_leased_review_and_integration_artifacts_require_fencing_bindings (tests.test_validate_invalid.InvalidArtifactTests.test_leased_review_and_integration_artifacts_require_fencing_bindings) ... ok
+test_missing_or_unknown_artifact_type_is_schema_undeterminable (tests.test_validate_invalid.InvalidArtifactTests.test_missing_or_unknown_artifact_type_is_schema_undeterminable) ... ok
+test_path_rules_reject_broad_absolute_traversal_and_unnormalized_paths (tests.test_validate_invalid.InvalidArtifactTests.test_path_rules_reject_broad_absolute_traversal_and_unnormalized_paths) ... ok
+test_protected_test_task_requires_matching_human_approval_binding (tests.test_validate_invalid.InvalidArtifactTests.test_protected_test_task_requires_matching_human_approval_binding) ... ok
+test_required_acceptance_evidence_must_not_be_empty (tests.test_validate_invalid.InvalidArtifactTests.test_required_acceptance_evidence_must_not_be_empty) ... ok
+test_self_hash_mismatch_is_rejected_last (tests.test_validate_invalid.InvalidArtifactTests.test_self_hash_mismatch_is_rejected_last) ... ok
+test_static_must_fail_fixtures_have_their_intended_distinct_codes (tests.test_validate_invalid.InvalidArtifactTests.test_static_must_fail_fixtures_have_their_intended_distinct_codes) ... ok
+test_task_contract_mandatory_identity_intent_and_dependency_fields (tests.test_validate_invalid.InvalidArtifactTests.test_task_contract_mandatory_identity_intent_and_dependency_fields) ... ok
+test_task_dependency_must_resolve (tests.test_validate_invalid.InvalidArtifactTests.test_task_dependency_must_resolve) ... ok
+test_unbound_base_is_only_permitted_for_proposed_contract (tests.test_validate_invalid.InvalidArtifactTests.test_unbound_base_is_only_permitted_for_proposed_contract) ... ok
+test_work_package_requires_bootstrap_and_plan_bindings (tests.test_validate_invalid.InvalidArtifactTests.test_work_package_requires_bootstrap_and_plan_bindings) ... ok
+test_changed_task_contract_with_recomputed_hash_is_accepted (tests.test_validate_valid.ValidArtifactTests.test_changed_task_contract_with_recomputed_hash_is_accepted) ... ok
+test_every_committed_valid_fixture_is_accepted (tests.test_validate_valid.ValidArtifactTests.test_every_committed_valid_fixture_is_accepted) ... 
+  test_every_committed_valid_fixture_is_accepted (tests.test_validate_valid.ValidArtifactTests.test_every_committed_valid_fixture_is_accepted) (path='03-context-manifest.json') ... ERROR
+test_implementation_review_and_integration_fixtures_bind_one_exact_git_diff (tests.test_validate_valid.ValidArtifactTests.test_implementation_review_and_integration_fixtures_bind_one_exact_git_diff) ... ok
+test_retry_manifest_may_reuse_an_identical_compiled_context (tests.test_validate_valid.ValidArtifactTests.test_retry_manifest_may_reuse_an_identical_compiled_context) ... ok
+test_task_contract_budget_lower_bounds_are_enforced_outside_schema (tests.test_validate_valid.ValidArtifactTests.test_task_contract_budget_lower_bounds_are_enforced_outside_schema) ... ok
+test_task_contract_references_its_work_package (tests.test_validate_valid.ValidArtifactTests.test_task_contract_references_its_work_package) ... ok
+test_task_contract_rejects_unregistered_semantic_lock (tests.test_validate_valid.ValidArtifactTests.test_task_contract_rejects_unregistered_semantic_lock) ... ok
+
+======================================================================
+ERROR: test_every_committed_valid_fixture_is_accepted (tests.test_validate_valid.ValidArtifactTests.test_every_committed_valid_fixture_is_accepted) (path='03-context-manifest.json')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/NLP_Project/tools/agentctl/tests/test_validate_valid.py", line 45, in test_every_committed_valid_fixture_is_accepted
+    result = validate_artifact(path, repository_root=self.root)
+  File "/home/user/NLP_Project/tools/agentctl/agentctl/validate.py", line 633, in validate_artifact
+    _validate_hashes(artifact_type, document, root)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/NLP_Project/tools/agentctl/agentctl/validate.py", line 450, in _validate_hashes
+    _validate_context_inputs(document, root)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/user/NLP_Project/tools/agentctl/agentctl/validate.py", line 418, in _validate_context_inputs
+    _fail(
+    ~~~~~^
+        "artifact_hash_mismatch",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+        actual_bytes=actual_bytes,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/user/NLP_Project/tools/agentctl/agentctl/validate.py", line 35, in _fail
+    raise ArtifactValidationError(code, message, **context)
+agentctl.validate.ArtifactValidationError: context input hash or byte count does not match (actual_bytes=16639, actual_hash='a7e449125ce93abe56195e93fafd514bb65674394dcf47fa0526c6723601e7c2', expected_bytes=14437, expected_hash='4ece66211ea6b2fa6c9c8e2a22e4979bccfac3c5d7417082fb0f9222d69f4b25', path='AGENTS.md')
+
+----------------------------------------------------------------------
+Ran 234 tests in 10.612s
+
+FAILED (errors=1)
+make: *** [Makefile:5: test] Error 1
+make: Leaving directory '/home/user/NLP_Project/tools/agentctl'
+
+real	0m10.978s
+user	0m5.431s
+sys	0m3.038s

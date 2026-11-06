@@ -1,0 +1,53 @@
+{
+  "acceptance_criteria_addressed": [
+    "An --out path reaching the repository through a symlinked alias of an ancestor directory is now accepted because containment is decided solely by resolving destination.parent and comparing it against the resolved repository root, instead of first rejecting on an unresolved lexical comparison.",
+    "A path whose parent truly resolves outside the repository, including via a symlink that lives inside the repo but points outside, is still rejected with approval_output_outside_repository (the resolved-parent containment check is unchanged in that regard).",
+    "A destination whose own final path component is a symlink is still rejected with approval_output_invalid via the unchanged destination.is_symlink() check.",
+    "A relative --out path is still joined onto the repository root before the parent-resolution check, so it resolves against the repository root and is accepted when inside it."
+  ],
+  "artifact_type": "implementation-manifest",
+  "assumptions": [
+    "config.repo_root (the `root` argument) is always an absolute directory path; it may itself be given through a symlinked alias, which is why both sides of the containment comparison are resolved rather than only one.",
+    "Path.resolve(strict=False) is available and behaves consistently (resolves existing ancestor symlinks, leaves nonexistent trailing components literal) on the Python versions agentctl targets.",
+    "The sandbox running the new tests supports creating real symlinks on its filesystem (true for Linux CI/dev containers).",
+    "_legacy_destination and all other functions/behavior in approve.py are intentionally left untouched per the non-goals."
+  ],
+  "attempt_id": "DEMO-001-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "commands_executed": [],
+  "context_hash": "84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6",
+  "contract_hash": "df44a08a51438d3404022c947751271d03185324e61d91e067f95c5d82a40ef6",
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "fencing_token": "ki89wJr97yQzJkuS9kCi2gp5aFmsi5Yht9Q-Mx8lD0g",
+  "files_changed": [
+    {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/commands/approve.py"
+    },
+    {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_approve_output_containment.py"
+    }
+  ],
+  "lease_epoch": 1,
+  "lease_id": "f98e6033-2a79-4eca-946f-d40effc6d058",
+  "model": "claude-sonnet-5",
+  "model_version": "claude-sonnet-5",
+  "provider": "anthropic",
+  "result_commit": "93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2",
+  "task_id": "DEMO-001",
+  "termination_reason": "completed",
+  "unresolved_risks": [
+    "A TOCTOU window remains between the resolve()-based validation in _contained_destination and the later O_EXCL|O_NOFOLLOW write in _write_exclusive_json: a symlink swapped in after validation but before the write could still redirect the open() target. This risk predates this change and is only partially mitigated downstream by O_NOFOLLOW; it was not in scope to alter per the task's non-goals.",
+    "Removing the lexical pre-check means containment now depends entirely on filesystem resolution at validation time; on a filesystem where symlink resolution behaves unexpectedly (e.g., broken intermediate links during strict=False resolution) the error surfaced could change from approval_output_outside_repository to an OSError bubbling out of resolve(), though no such case was found in the existing protected tests."
+  ],
+  "usage": {
+    "cost_usd": 0.38181,
+    "input_tokens": 41076,
+    "latency_ms": 179564,
+    "output_tokens": 21751
+  },
+  "worker_role": "standard_implementation"
+}

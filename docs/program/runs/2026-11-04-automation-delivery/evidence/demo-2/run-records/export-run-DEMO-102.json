@@ -1,0 +1,174 @@
+{
+  "attempt_id": "DEMO-102-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "branch": "agentctl/DEMO-102/attempt-1",
+  "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+  "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+  "elapsed_ms": 145563,
+  "finished_at": "2026-11-04T07:06:48.383651Z",
+  "git": {
+    "files_changed": [
+      {
+        "change_type": "modified",
+        "path": "tools/agentctl/agentctl/context.py"
+      },
+      {
+        "change_type": "added",
+        "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+      }
+    ],
+    "result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58"
+  },
+  "identity": {
+    "minted_session_id": "a1cdf7ef-9d40-4846-bd9a-b00c2e564639",
+    "provider_run_id": "8026bde1-7fa1-4e7b-b68c-f2873e8fcf7a"
+  },
+  "kind": "author_run",
+  "lease_epoch": 1,
+  "lease_id": "8384b479-6266-442c-9e43-79df929f5b37",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+    "status": "candidate"
+  },
+  "prompt": {
+    "bytes": 56775,
+    "sha256": "cd9c528c986ed26979f28bedf817163eda097eadc846c706115b6933010c6f15"
+  },
+  "proposal_summary": "Changed ContextCompiler._find_task_contract in context.py to walk agent-system/ with os.walk, pruning the agent-system/runtime directory out of dirnames in place so it is never descended into, listed, or opened, then examines the remaining *.json files in sorted path order exactly as before. Added a new test module, test_context_runtime_exclusion.py, covering: a matching contract under runtime being ignored in favor of the real one; the real contract winning even when the runtime copy's path would sort first; identical behavior when no runtime directory exists; the existing PlanningError with the required message when the only copy is under runtime; and a read_text-patching test proving runtime files are never opened. No existing test or any file outside the two permitted paths was modified.",
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-sonnet-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "a1cdf7ef-9d40-4846-bd9a-b00c2e564639",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"acceptance_criteria_addressed\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"assumptions\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"files\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"action\":{\"enum\":[\"write\",\"delete\"],\"type\":\"string\"},\"content\":{\"type\":\"string\"},\"path\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"path\",\"action\",\"content\"],\"type\":\"object\"},\"minItems\":1,\"type\":\"array\"},\"summary\":{\"type\":\"string\"},\"unresolved_risks\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"summary\",\"files\",\"acceptance_criteria_addressed\",\"assumptions\",\"unresolved_risks\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": 0,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": null,
+    "failure_detail": "",
+    "is_error": false,
+    "output_excerpt": "{\"acceptance_criteria_addressed\": [\"Discovery ignores every file under agent-system/runtime/ (worktrees, attempts, integration copies) even when a runtime file is a valid task-contract with the requested task id, and still returns the one real contract and its repository-relative path\", \"When the same task id exists both as the real contract and as a copy under agent-system/runtime/worktrees/, the real contract is returned regardless of path sort order\", \"Discovery behaves identically when no agent-system/runtime directory exists\", \"When no contract exists for the task id outside agent-system/runtime/ (including when the only copy is under runtime), discovery raises the existing PlanningError whose message contains 'task contract file was not found'\", \"Discovery does not list or open files under agent-system/runtime/ before filtering (prune the directory while walking with os.walk and in-place pruning of dirnames), while still examining the remaining JSON files in sorted path order\"], \"assumptions\": [\"The product-data-boundary.json schema only requires the two keys enforcement.allowed_context_roots and enforcement.excluded_by_default for ContextCompiler.__init__ to succeed, as stated in the contract's behavioral requirements.\", \"Path sort order for candidate JSON files can be preserved by collecting pathlib.Path objects during the pruned os.walk and calling sorted() on them, matching the ordering previously produced by Path.glob('**/*.json').\", \"A test that patches pathlib.Path.read_text to record every path actually opened is an acceptable black-box way to demonstrate that files under agent-system/runtime/ are never opened, since os.walk's dirnames pruning itself is only observable via its effect on which files get read.\", \"The _find_task_contract method is intended to remain testable directly (as a non-public but stable discovery primitive) rather than only indirectly through default_inputs.\"], \"files\": [{\"action\": \"write\", \"content\": \"\\\"\\\"\\\"Minimal, reproducible context-pack compilation and stale-context rebuilds.\\\"\\\"\\\"\\n\\nfrom __future__ import annotations\\n\\nimport datetime as dt\\nimport json\\nimport os\\nimport sqlite3\\nimport uuid\\nfrom collections.abc import Mapping, Sequence\\nfrom pathlib import Path, PurePosixPath\\nfrom typing import Any\\n\\nfrom .config import repo_root as resolve_repo_root\\nfrom .errors import ContractStale, PlanningError\\nfrom .events import make_event\\nfrom .hashing import sha256_of_file, sha256_of_json_excluding\\nfrom .interfaces import current_interface_binding\\nfrom .store import EventStore\\n\\n__all__ = [\\n    \\\"CONTEXT_INPUTS\\\",\\n    \\\"EXCLUDED_BY_POLICY\\\",\\n    \\\"ContextCompiler\\\",\\n    \\\"assert_context_hash\\\",\\n]\\n\\n\\nCONTEXT_INPUTS: tuple[str, ...] = (\\n    \\\"authority_excerpt\\\",\\n    \\\"role_contract\\\",\\n    \\\"task_contract\\\",\\n    \\\"decisions\\\",\\n    \\\"consumed_interfaces\\\",\\n    \\\"dependency_manifests\\\",\\n    \\\"failure_lessons\\\",\\n    \\\"base_commit_summary\\\",\\n    \\\"permissions\\\",\\n    \\\"budgets_and_output_schema\\\",\\n)\\n\\nEXCLUDED_BY_POLICY: tuple[str, ...] = (\\n    \\\"prd\\\",\\n    \\\"conversation_history\\\",\\n    \\\"research_documents\\\",\\n    \\\"other_worker_reasoning\\\",\\n    \\\"secrets\\\",\\n    \\\"customer_documents\\\",\\n    \\\"obsolete_plans\\\",\\n    \\\"raw_logs\\\",\\n)\\n\\n_LIST_INPUTS = frozenset(\\n    {\\\"decisions\\\", \\\"consumed_interfaces\\\", \\\"dependency_manifests\\\", \\\"failure_lessons\\\"}\\n)\\n\\n_ROLE_FILES = {\\n    \\\"architectural_authority\\\": \\\"architect.md\\\",\\n    \\\"work_package_planning\\\": \\\"planner.md\\\",\\n    \\\"complex_implementation\\\": \\\"complex-implementer.md\\\",\\n    \\\"standard_implementation\\\": \\\"standard-implementer.md\\\",\\n    \\\"mechanical_execution\\\": \\\"mechanical-executor.md\\\",\\n    \\\"verifier\\\": \\\"verifier.md\\\",\\n    \\\"integrator\\\": \\\"integrator.md\\\",\\n}\\n\\n\\ndef _timestamp() -> str:\\n    return (\\n        dt.datetime.now(dt.timezone.utc)\\n        .isoformat(timespec=\\\"microseconds\\\")\\n        .replace(\\\"+00:00\\\", \\\"Z\\\")\\n    )\\n\\n\\nclass ContextCompiler:\\n    def __init__(\\n        self,\\...[truncated 21120 chars]",
+    "requested_model": "claude-sonnet-5",
+    "result_uuid": "7ed78c6d-2a47-4e9a-a9ea-689db919d7ca",
+    "served_model": "claude-sonnet-5",
+    "served_model_canonical": "claude-sonnet-5",
+    "session_id": "a1cdf7ef-9d40-4846-bd9a-b00c2e564639",
+    "status": "completed",
+    "stderr_excerpt": "",
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "termination_reason": "completed",
+    "timed_out": false,
+    "usage_normalized": {
+      "cost_usd": 0.28863859999999997,
+      "input_tokens": 29918,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": 144644,
+      "output_tokens": 18479
+    },
+    "usage_raw": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 25753,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 25753,
+      "cache_read_input_tokens": 4163,
+      "fallback_credit": null,
+      "inference_geo": "global",
+      "input_tokens": 2,
+      "iterations": [
+        {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 25753,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 25753,
+          "cache_read_input_tokens": 4163,
+          "input_tokens": 2,
+          "output_tokens": 18479,
+          "type": "message"
+        }
+      ],
+      "output_tokens": 18479,
+      "output_tokens_details": {
+        "thinking_tokens": 8745
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "wall_ms": 145402
+  },
+  "record_version": 1,
+  "route": {
+    "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+    "reviewer": {
+      "adapter": "claude_cli",
+      "binding_type": "demo_environment_profile",
+      "capability_class": "complex_implementation",
+      "executable": "/opt/node22/bin/claude",
+      "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    },
+    "status": "available",
+    "task_id": "DEMO-102",
+    "worker": {
+      "adapter": "claude_cli",
+      "binding_type": "initial_prior",
+      "capability_class": "standard_implementation",
+      "executable": "/opt/node22/bin/claude",
+      "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+      "model_id": "claude-sonnet-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    }
+  },
+  "scope_audit": {
+    "accepted": true,
+    "changes": [
+      {
+        "action": "write",
+        "bytes": 15083,
+        "path": "tools/agentctl/agentctl/context.py"
+      },
+      {
+        "action": "write",
+        "bytes": 5308,
+        "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+      }
+    ]
+  },
+  "started_at": "2026-11-04T07:04:22.820565Z",
+  "task_id": "DEMO-102",
+  "worktree_path": "agent-system/runtime/worktrees/DEMO-102/attempt-1"
+}

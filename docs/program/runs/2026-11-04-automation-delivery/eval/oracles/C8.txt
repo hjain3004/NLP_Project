@@ -1,0 +1,1 @@
+scope_check violations: ['tools/agentctl/agentctl/commands/approve.py']

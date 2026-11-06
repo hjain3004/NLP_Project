@@ -1,0 +1,294 @@
+..............strong-approval.json
+ordinary-approval.json
+...................agent-system/work/P0/approvals/LEGACY-phase-approval.json
+agent-system/work/P0/approvals/LEGACY-phase-approval.json
+nested/relative.json
+........................................s..................................................................................................................................................F..FFFFFFFFFFFFFFF.F........FFFF....F..F...................................................................................................................................................
+======================================================================
+FAIL: test_hanging_check_is_a_recorded_failure_not_a_hang (tests.test_integrate.ConflictAndGateTests.test_hanging_check_is_a_recorded_failure_not_a_hang)
+Protects liveness: a gate that hangs on the integration tree times out and fails.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 396, in test_hanging_check_is_a_recorded_failure_not_a_hang
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_candidate_amended_after_review_is_rejected_and_the_branch_is_untouched (tests.test_integrate.RejectionTests.test_candidate_amended_after_review_is_rejected_and_the_branch_is_untouched)
+Protects the reviewed-patch invariant: an amended candidate invalidates the review.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 191, in test_candidate_amended_after_review_is_rejected_and_the_branch_is_untouched
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_candidate_replaced_with_different_content_after_review_is_rejected (tests.test_integrate.RejectionTests.test_candidate_replaced_with_different_content_after_review_is_rejected)
+Protects against a swapped candidate: new content on the same worktree is never integrated.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 205, in test_candidate_replaced_with_different_content_after_review_is_rejected
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_candidate_that_is_not_integration_ready_is_refused (tests.test_integrate.RejectionTests.test_candidate_that_is_not_integration_ready_is_refused)
+Protects the review gate: a candidate still awaiting review cannot be integrated.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 166, in test_candidate_that_is_not_integration_ready_is_refused
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_dependency_that_is_not_completed_is_rejected (tests.test_integrate.RejectionTests.test_dependency_that_is_not_completed_is_rejected)
+Protects topological order: a candidate cannot land before its required dependency.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 289, in test_dependency_that_is_not_completed_is_rejected
+    self.assert_untouched("A-main", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_integrator_identity_equal_to_author_or_reviewer_is_refused (tests.test_integrate.RejectionTests.test_integrator_identity_equal_to_author_or_reviewer_is_refused) (identity='author-session-T1')
+Protects separation of duty: the integrator may not be the author or the reviewer.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 271, in test_integrator_identity_equal_to_author_or_reviewer_is_refused
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_integrator_identity_equal_to_author_or_reviewer_is_refused (tests.test_integrate.RejectionTests.test_integrator_identity_equal_to_author_or_reviewer_is_refused) (identity='author-run-T1')
+Protects separation of duty: the integrator may not be the author or the reviewer.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 271, in test_integrator_identity_equal_to_author_or_reviewer_is_refused
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_integrator_identity_equal_to_author_or_reviewer_is_refused (tests.test_integrate.RejectionTests.test_integrator_identity_equal_to_author_or_reviewer_is_refused) (identity='reviewer-session-T1')
+Protects separation of duty: the integrator may not be the author or the reviewer.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 271, in test_integrator_identity_equal_to_author_or_reviewer_is_refused
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_integrator_identity_equal_to_author_or_reviewer_is_refused (tests.test_integrate.RejectionTests.test_integrator_identity_equal_to_author_or_reviewer_is_refused) (identity='reviewer-run-T1')
+Protects separation of duty: the integrator may not be the author or the reviewer.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 271, in test_integrator_identity_equal_to_author_or_reviewer_is_refused
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_simulated_review_bound_to_other_evidence_is_rejected (tests.test_integrate.RejectionTests.test_simulated_review_bound_to_other_evidence_is_rejected)
+SIMULATED. Protects the review binding: a verdict for different evidence cannot authorize integration.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 249, in test_simulated_review_bound_to_other_evidence_is_rejected
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_simulated_reviewer_identity_equal_to_author_is_rejected_again_at_integration (tests.test_integrate.RejectionTests.test_simulated_reviewer_identity_equal_to_author_is_rejected_again_at_integration)
+SIMULATED. Protects separation of duty: independence is re-checked, not trusted from review time.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 261, in test_simulated_reviewer_identity_equal_to_author_is_rejected_again_at_integration
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_simulated_stored_binding_that_disagrees_with_git_is_rejected (tests.test_integrate.RejectionTests.test_simulated_stored_binding_that_disagrees_with_git_is_rejected)
+SIMULATED. Protects against a doctored candidate-binding: the diff hash is recomputed from Git.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 220, in test_simulated_stored_binding_that_disagrees_with_git_is_rejected
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_simulated_tampered_verification_evidence_is_rejected (tests.test_integrate.RejectionTests.test_simulated_tampered_verification_evidence_is_rejected)
+SIMULATED. Protects against edited evidence: the evidence hash is recomputed, not trusted.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 234, in test_simulated_tampered_verification_evidence_is_rejected
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_simulated_unreviewed_candidate_forced_to_integration_ready_is_rejected (tests.test_integrate.RejectionTests.test_simulated_unreviewed_candidate_forced_to_integration_ready_is_rejected)
+SIMULATED. Protects against state forged outside review.ingest: no review row, no integration.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 176, in test_simulated_unreviewed_candidate_forced_to_integration_ready_is_rejected
+    self.assert_untouched("T1", head_before=None)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 31, in assert_untouched
+    self.assertEqual(self.lab.branch_head(), head_before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' != None
+
+======================================================================
+FAIL: test_stale_interface_binding_is_rejected_for_replan_and_marks_the_task_stale (tests.test_integrate.RejectionTests.test_stale_interface_binding_is_rejected_for_replan_and_marks_the_task_stale)
+Protects interface currency: a candidate built on a superseded binding is never integrated.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 315, in test_stale_interface_binding_is_rejected_for_replan_and_marks_the_task_stale
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_cli_integrates_a_reviewed_candidate_and_state_git_and_record_agree (tests.test_integrate.SuccessfulIntegrationTests.test_cli_integrates_a_reviewed_candidate_and_state_git_and_record_agree)
+Protects the delivery cycle: the ordinary command advances Git, state and record together.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 48, in test_cli_integrates_a_reviewed_candidate_and_state_git_and_record_agree
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_integration_branch_must_not_be_main_or_the_checked_out_branch (tests.test_integrate.SuccessfulIntegrationTests.test_integration_branch_must_not_be_main_or_the_checked_out_branch)
+Protects the user's checkout: integration never targets main or the current branch.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate.py", line 152, in test_integration_branch_must_not_be_main_or_the_checked_out_branch
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_gate_that_creates_a_replace_ref_is_rejected (tests.test_integrate_hardening.GateRepositoryTamperTests.test_gate_that_creates_a_replace_ref_is_rejected)
+refs/replace/* would make git substitute objects; a gate creating one is tampering.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 216, in test_gate_that_creates_a_replace_ref_is_rejected
+    self.assert_not_integrated("T-A")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 152, in assert_not_integrated
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_gate_that_plants_a_filter_driver_is_rejected_and_the_driver_never_runs (tests.test_integrate_hardening.GateRepositoryTamperTests.test_gate_that_plants_a_filter_driver_is_rejected_and_the_driver_never_runs)
+The reviewer's PoC: the next integration's checkout ran the planted smudge 253 times and
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 169, in test_gate_that_plants_a_filter_driver_is_rejected_and_the_driver_never_runs
+    self.assert_not_integrated("T-A")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 152, in assert_not_integrated
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_gate_that_plants_a_hook_is_rejected (tests.test_integrate_hardening.GateRepositoryTamperTests.test_gate_that_plants_a_hook_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 200, in test_gate_that_plants_a_hook_is_rejected
+    self.assert_not_integrated("T-A")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 152, in assert_not_integrated
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_tampering_at_verification_time_never_reaches_integration (tests.test_integrate_hardening.GateRepositoryTamperTests.test_tampering_at_verification_time_never_reaches_integration)
+Through the public flow: the same planting command run at VERIFICATION (in the leased
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 241, in test_tampering_at_verification_time_never_reaches_integration
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+======================================================================
+FAIL: test_union_merge_attribute_cannot_silently_resolve_a_real_conflict (tests.test_integrate_hardening.MergeAttributeTests.test_union_merge_attribute_cannot_silently_resolve_a_real_conflict)
+Protects the no-resolution rule: `merge=union` would combine two edits of one file cleanly,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_hardening.py", line 410, in test_union_merge_attribute_cannot_silently_resolve_a_real_conflict
+    self.assertEqual(integrate("T1", store=self.lab.store)["outcome"], "integrated")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'rejected' != 'integrated'
+- rejected
++ integrated
+
+
+======================================================================
+FAIL: test_explicit_request_for_a_non_head_task_is_refused_naming_the_head (tests.test_integrate_queue.QueueDeterminismTests.test_explicit_request_for_a_non_head_task_is_refused_naming_the_head)
+Protects against caller preference: only the queue head may be requested by id.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/claude-0/-home-user-NLP-Project/b202aa54-6099-5cae-8859-62abd55fd13f/scratchpad/wt-integration/tools/agentctl/tests/test_integrate_queue.py", line 41, in test_explicit_request_for_a_non_head_task_is_refused_naming_the_head
+    self.assertIsNone(self.lab.branch_head())
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'dccdf896094ed6cd2f648ce886953acf26c7a7e8' is not None
+
+----------------------------------------------------------------------
+Ran 404 tests in 165.349s
+
+FAILED (failures=23, skipped=1)
+rc=1 start=1793776238.184370432 end=1793776403.966035930

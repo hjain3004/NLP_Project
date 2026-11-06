@@ -1,0 +1,401 @@
+[
+ {
+  "sequence": 1,
+  "task_id": "DEMO-001",
+  "event_type": "task_registered",
+  "reason_code": "schema_policy_passed",
+  "occurred_at": "2026-11-04T06:44:21.616262Z"
+ },
+ {
+  "sequence": 2,
+  "task_id": "DEMO-002",
+  "event_type": "task_registered",
+  "reason_code": "schema_policy_passed",
+  "occurred_at": "2026-11-04T06:44:21.621807Z"
+ },
+ {
+  "sequence": 3,
+  "task_id": null,
+  "event_type": "ready_set_computed",
+  "reason_code": "multiple_ready_tasks",
+  "occurred_at": "2026-11-04T06:44:21.796731Z"
+ },
+ {
+  "sequence": 4,
+  "task_id": "DEMO-002",
+  "event_type": "lease_issued",
+  "reason_code": "admission_passed",
+  "occurred_at": "2026-11-04T06:44:51.277741Z"
+ },
+ {
+  "sequence": 5,
+  "task_id": "DEMO-001",
+  "event_type": "lease_issued",
+  "reason_code": "admission_passed",
+  "occurred_at": "2026-11-04T06:44:51.307732Z"
+ },
+ {
+  "sequence": 6,
+  "task_id": "DEMO-002",
+  "event_type": "worker_acknowledged",
+  "reason_code": "context_acknowledged",
+  "occurred_at": "2026-11-04T06:44:51.336845Z"
+ },
+ {
+  "sequence": 7,
+  "task_id": "DEMO-001",
+  "event_type": "worker_acknowledged",
+  "reason_code": "context_acknowledged",
+  "occurred_at": "2026-11-04T06:44:51.363349Z"
+ },
+ {
+  "sequence": 8,
+  "task_id": "DEMO-002",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T06:47:03.826497Z"
+ },
+ {
+  "sequence": 9,
+  "task_id": "DEMO-002",
+  "event_type": "author_identity_recorded",
+  "reason_code": "identity_recorded",
+  "occurred_at": "2026-11-04T06:47:03.871748Z"
+ },
+ {
+  "sequence": 10,
+  "task_id": "DEMO-002",
+  "event_type": "candidate_ingested",
+  "reason_code": "candidate_ingested",
+  "occurred_at": "2026-11-04T06:47:03.906639Z"
+ },
+ {
+  "sequence": 11,
+  "task_id": "DEMO-001",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T06:47:52.266655Z"
+ },
+ {
+  "sequence": 12,
+  "task_id": "DEMO-001",
+  "event_type": "author_identity_recorded",
+  "reason_code": "identity_recorded",
+  "occurred_at": "2026-11-04T06:47:52.306075Z"
+ },
+ {
+  "sequence": 13,
+  "task_id": "DEMO-001",
+  "event_type": "candidate_ingested",
+  "reason_code": "candidate_ingested",
+  "occurred_at": "2026-11-04T06:47:52.338465Z"
+ },
+ {
+  "sequence": 14,
+  "task_id": "DEMO-001",
+  "event_type": "verification_started",
+  "reason_code": "deterministic_verification_started",
+  "occurred_at": "2026-11-04T06:48:06.975873Z"
+ },
+ {
+  "sequence": 15,
+  "task_id": "DEMO-001",
+  "event_type": "checks_passed",
+  "reason_code": "verification_passed",
+  "occurred_at": "2026-11-04T06:48:07.917167Z"
+ },
+ {
+  "sequence": 16,
+  "task_id": "DEMO-002",
+  "event_type": "verification_started",
+  "reason_code": "deterministic_verification_started",
+  "occurred_at": "2026-11-04T06:48:08.064206Z"
+ },
+ {
+  "sequence": 17,
+  "task_id": "DEMO-002",
+  "event_type": "checks_passed",
+  "reason_code": "verification_passed",
+  "occurred_at": "2026-11-04T06:48:09.028980Z"
+ },
+ {
+  "sequence": 18,
+  "task_id": "DEMO-001",
+  "event_type": "review_pack_prepared",
+  "reason_code": "trusted_review_pack_prepared",
+  "occurred_at": "2026-11-04T06:48:18.861425Z"
+ },
+ {
+  "sequence": 19,
+  "task_id": "DEMO-002",
+  "event_type": "review_pack_prepared",
+  "reason_code": "trusted_review_pack_prepared",
+  "occurred_at": "2026-11-04T06:48:18.892489Z"
+ },
+ {
+  "sequence": 20,
+  "task_id": "DEMO-001",
+  "event_type": "review_assigned",
+  "reason_code": "independent_reviewer_reserved",
+  "occurred_at": "2026-11-04T06:48:18.898475Z"
+ },
+ {
+  "sequence": 21,
+  "task_id": "DEMO-002",
+  "event_type": "review_assigned",
+  "reason_code": "independent_reviewer_reserved",
+  "occurred_at": "2026-11-04T06:48:18.930980Z"
+ },
+ {
+  "sequence": 22,
+  "task_id": "DEMO-002",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T06:48:35.518331Z"
+ },
+ {
+  "sequence": 23,
+  "task_id": "DEMO-002",
+  "event_type": "review_passed",
+  "reason_code": "no_blocking_findings",
+  "occurred_at": "2026-11-04T06:48:35.550453Z"
+ },
+ {
+  "sequence": 24,
+  "task_id": "DEMO-001",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T06:48:42.814373Z"
+ },
+ {
+  "sequence": 25,
+  "task_id": "DEMO-001",
+  "event_type": "review_blocked",
+  "reason_code": "blocking_findings",
+  "occurred_at": "2026-11-04T06:48:42.851901Z"
+ },
+ {
+  "sequence": 26,
+  "task_id": "DEMO-002",
+  "event_type": "integration_rejected",
+  "reason_code": "affected_check_failed",
+  "occurred_at": "2026-11-04T06:49:10.270102Z"
+ },
+ {
+  "sequence": 27,
+  "task_id": "DEMO-101",
+  "event_type": "task_registered",
+  "reason_code": "schema_policy_passed",
+  "occurred_at": "2026-11-04T07:04:17.944032Z"
+ },
+ {
+  "sequence": 28,
+  "task_id": "DEMO-102",
+  "event_type": "task_registered",
+  "reason_code": "schema_policy_passed",
+  "occurred_at": "2026-11-04T07:04:17.960512Z"
+ },
+ {
+  "sequence": 29,
+  "task_id": null,
+  "event_type": "ready_set_computed",
+  "reason_code": "multiple_ready_tasks",
+  "occurred_at": "2026-11-04T07:04:18.114895Z"
+ },
+ {
+  "sequence": 30,
+  "task_id": "DEMO-102",
+  "event_type": "lease_issued",
+  "reason_code": "admission_passed",
+  "occurred_at": "2026-11-04T07:04:22.814721Z"
+ },
+ {
+  "sequence": 31,
+  "task_id": "DEMO-101",
+  "event_type": "lease_issued",
+  "reason_code": "admission_passed",
+  "occurred_at": "2026-11-04T07:04:22.819095Z"
+ },
+ {
+  "sequence": 32,
+  "task_id": "DEMO-102",
+  "event_type": "worker_acknowledged",
+  "reason_code": "context_acknowledged",
+  "occurred_at": "2026-11-04T07:04:22.892833Z"
+ },
+ {
+  "sequence": 33,
+  "task_id": "DEMO-101",
+  "event_type": "worker_acknowledged",
+  "reason_code": "context_acknowledged",
+  "occurred_at": "2026-11-04T07:04:22.909934Z"
+ },
+ {
+  "sequence": 34,
+  "task_id": "DEMO-102",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T07:06:48.306543Z"
+ },
+ {
+  "sequence": 35,
+  "task_id": "DEMO-102",
+  "event_type": "author_identity_recorded",
+  "reason_code": "identity_recorded",
+  "occurred_at": "2026-11-04T07:06:48.346762Z"
+ },
+ {
+  "sequence": 36,
+  "task_id": "DEMO-102",
+  "event_type": "candidate_ingested",
+  "reason_code": "candidate_ingested",
+  "occurred_at": "2026-11-04T07:06:48.379797Z"
+ },
+ {
+  "sequence": 37,
+  "task_id": "DEMO-101",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T07:09:29.307978Z"
+ },
+ {
+  "sequence": 38,
+  "task_id": "DEMO-101",
+  "event_type": "author_identity_recorded",
+  "reason_code": "identity_recorded",
+  "occurred_at": "2026-11-04T07:09:29.354928Z"
+ },
+ {
+  "sequence": 39,
+  "task_id": "DEMO-101",
+  "event_type": "candidate_ingested",
+  "reason_code": "candidate_ingested",
+  "occurred_at": "2026-11-04T07:09:29.387191Z"
+ },
+ {
+  "sequence": 40,
+  "task_id": "DEMO-101",
+  "event_type": "verification_started",
+  "reason_code": "deterministic_verification_started",
+  "occurred_at": "2026-11-04T07:09:36.823685Z"
+ },
+ {
+  "sequence": 41,
+  "task_id": "DEMO-101",
+  "event_type": "checks_passed",
+  "reason_code": "verification_passed",
+  "occurred_at": "2026-11-04T07:09:37.042483Z"
+ },
+ {
+  "sequence": 42,
+  "task_id": "DEMO-102",
+  "event_type": "verification_started",
+  "reason_code": "deterministic_verification_started",
+  "occurred_at": "2026-11-04T07:09:37.231165Z"
+ },
+ {
+  "sequence": 43,
+  "task_id": "DEMO-102",
+  "event_type": "checks_passed",
+  "reason_code": "verification_passed",
+  "occurred_at": "2026-11-04T07:09:37.453051Z"
+ },
+ {
+  "sequence": 44,
+  "task_id": "DEMO-101",
+  "event_type": "review_pack_prepared",
+  "reason_code": "trusted_review_pack_prepared",
+  "occurred_at": "2026-11-04T07:09:42.249218Z"
+ },
+ {
+  "sequence": 45,
+  "task_id": "DEMO-102",
+  "event_type": "review_pack_prepared",
+  "reason_code": "trusted_review_pack_prepared",
+  "occurred_at": "2026-11-04T07:09:42.266131Z"
+ },
+ {
+  "sequence": 46,
+  "task_id": "DEMO-101",
+  "event_type": "review_assigned",
+  "reason_code": "independent_reviewer_reserved",
+  "occurred_at": "2026-11-04T07:09:42.308765Z"
+ },
+ {
+  "sequence": 47,
+  "task_id": "DEMO-102",
+  "event_type": "review_assigned",
+  "reason_code": "independent_reviewer_reserved",
+  "occurred_at": "2026-11-04T07:09:42.323035Z"
+ },
+ {
+  "sequence": 48,
+  "task_id": "DEMO-102",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T07:09:59.327085Z"
+ },
+ {
+  "sequence": 49,
+  "task_id": "DEMO-102",
+  "event_type": "review_passed",
+  "reason_code": "no_blocking_findings",
+  "occurred_at": "2026-11-04T07:09:59.394002Z"
+ },
+ {
+  "sequence": 50,
+  "task_id": "DEMO-101",
+  "event_type": "model_run_recorded",
+  "reason_code": "completed",
+  "occurred_at": "2026-11-04T07:10:05.693449Z"
+ },
+ {
+  "sequence": 51,
+  "task_id": "DEMO-101",
+  "event_type": "review_passed",
+  "reason_code": "no_blocking_findings",
+  "occurred_at": "2026-11-04T07:10:05.744125Z"
+ },
+ {
+  "sequence": 52,
+  "task_id": "DEMO-101",
+  "event_type": "integration_lease_issued",
+  "reason_code": "integration_lease_issued",
+  "occurred_at": "2026-11-04T07:10:11.861334Z"
+ },
+ {
+  "sequence": 53,
+  "task_id": "DEMO-101",
+  "event_type": "integration_passed",
+  "reason_code": "integration_passed",
+  "occurred_at": "2026-11-04T07:10:11.897072Z"
+ },
+ {
+  "sequence": 54,
+  "task_id": "DEMO-002",
+  "event_type": "integration_rejected",
+  "reason_code": "affected_check_failed",
+  "occurred_at": "2026-11-04T07:10:18.648921Z"
+ },
+ {
+  "sequence": 55,
+  "task_id": "DEMO-102",
+  "event_type": "integration_lease_issued",
+  "reason_code": "integration_lease_issued",
+  "occurred_at": "2026-11-04T07:10:19.183515Z"
+ },
+ {
+  "sequence": 56,
+  "task_id": "DEMO-102",
+  "event_type": "integration_passed",
+  "reason_code": "integration_passed",
+  "occurred_at": "2026-11-04T07:10:19.215690Z"
+ },
+ {
+  "sequence": 57,
+  "task_id": "DEMO-002",
+  "event_type": "integration_rejected",
+  "reason_code": "conflict_repair_required",
+  "occurred_at": "2026-11-04T07:10:26.050765Z"
+ }
+]

@@ -244,14 +244,22 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
 
 
 def _contained_destination(root: Path, value: str) -> Path:
-    """Return a lexical contained destination without following its final link."""
+    """Return a contained destination resolved the way run() consumes it.
+
+    Comparing the destination lexically against ``root`` wrongly rejects an
+    alias path (a symlinked ancestor directory, or macOS /var versus
+    /private/var) whose parent genuinely resolves inside the repository.
+    The final path component is never resolved here, so a destination whose
+    final component is itself a symlink is still rejected below rather than
+    silently followed.
+    """
     candidate = Path(value).expanduser()
     if not candidate.is_absolute():
         candidate = root / candidate
     destination = candidate.absolute()
     try:
-        destination.relative_to(root)
-        destination.parent.resolve(strict=False).relative_to(root.resolve())
+        resolved_parent = destination.parent.resolve(strict=False)
+        resolved_parent.relative_to(root.resolve())
     except ValueError as exc:
         raise ApprovalRejected(
             "approval_output_outside_repository",
@@ -259,7 +267,7 @@ def _contained_destination(root: Path, value: str) -> Path:
         ) from exc
     if destination.is_symlink():
         raise ApprovalRejected("approval_output_invalid", "approval output cannot be a symlink")
-    return destination
+    return resolved_parent / destination.name
 
 
 def _legacy_destination(root: Path, value: str) -> Path:

@@ -1,0 +1,144 @@
+{
+  "attempt_id": "OPS-201-attempt-1",
+  "candidate_bindings": {
+    "bindings": {
+      "reviewer": {
+        "binding_type": "candidate",
+        "capability_class": "complex_implementation",
+        "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+        "model_id": "claude-opus-5-5",
+        "provider": "anthropic"
+      }
+    },
+    "roles": [
+      "reviewer"
+    ],
+    "statement": "The reviewer model binding is an unevaluated candidate (binding_type candidate, champion-challenger-v1), selected by explicit operator opt-in because the champion binding has no runnable adapter. It inherits no historical trust; promotion to champion is an owner decision."
+  },
+  "elapsed_ms": 5787,
+  "finished_at": "2026-11-05T00:16:42.825460Z",
+  "identity": {
+    "author_run_id": "d6b81448-f3e3-4061-bb22-86eed7b78a45",
+    "author_session_id": "4aceff97-b79d-41be-9910-f4c65277c017",
+    "minted_session_id": "974ac7c1-426f-45d6-aa24-58cb4d76319c",
+    "provider_run_id": "5ae2973b-b806-4cc6-9ee1-e91b3b3cf8bd"
+  },
+  "kind": "review_run",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "state": "integration_ready",
+    "status": "ingested",
+    "verdict": "no_blocking_findings"
+  },
+  "prompt": {
+    "bytes": 42960,
+    "sha256": "aef14f21729b00178e1bd4c7fbbeb93b86933c81031bd225c9a804175779786f"
+  },
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-5-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "974ac7c1-426f-45d6-aa24-58cb4d76319c",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"findings\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"blocking\":{\"type\":\"boolean\"},\"file\":{\"type\":\"string\"},\"finding_id\":{\"type\":\"string\"},\"location\":{\"type\":\"string\"},\"observed_behavior\":{\"type\":\"string\"},\"reproducible_evidence\":{\"type\":\"string\"},\"required_behavior\":{\"type\":\"string\"},\"required_outcome\":{\"type\":\"string\"},\"reviewer_confidence\":{\"enum\":[\"high\",\"medium\",\"low\"],\"type\":\"string\"},\"severity\":{\"enum\":[\"critical\",\"important\",\"minor\",\"nit\"],\"type\":\"string\"},\"violated_criterion\":{\"type\":\"string\"}},\"required\":[\"finding_id\",\"severity\",\"violated_criterion\",\"file\",\"location\",\"reproducible_evidence\",\"observed_behavior\",\"required_behavior\",\"required_outcome\",\"reviewer_confidence\",\"blocking\"],\"type\":\"object\"},\"type\":\"array\"},\"verdict\":{\"enum\":[\"no_blocking_findings\",\"blocking_findings\"],\"type\":\"string\"}},\"required\":[\"verdict\",\"findings\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": 0,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": null,
+    "failure_detail": "",
+    "is_error": false,
+    "output_excerpt": "{\"findings\": [], \"verdict\": \"no_blocking_findings\"}",
+    "requested_model": "claude-opus-5-5",
+    "result_uuid": "0ff58188-ac62-4910-a371-2baeea0d39de",
+    "served_model": "claude-opus-5-5",
+    "served_model_canonical": "claude-opus-5-5",
+    "session_id": "974ac7c1-426f-45d6-aa24-58cb4d76319c",
+    "status": "completed",
+    "stderr_excerpt": "",
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "termination_reason": "completed",
+    "timed_out": false,
+    "usage_normalized": {
+      "cost_usd": 0.162244,
+      "input_tokens": 19549,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": 4584,
+      "output_tokens": 293
+    },
+    "usage_raw": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 19547,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 19547,
+      "cache_read_input_tokens": 0,
+      "fallback_credit": null,
+      "inference_geo": "global",
+      "input_tokens": 2,
+      "iterations": [
+        {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 19547,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 19547,
+          "cache_read_input_tokens": 0,
+          "input_tokens": 2,
+          "output_tokens": 293,
+          "type": "message"
+        }
+      ],
+      "output_tokens": 293,
+      "output_tokens_details": {
+        "thinking_tokens": 209
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "wall_ms": 5740
+  },
+  "record_version": 1,
+  "review_assignment_epoch": 1,
+  "review_assignment_lease_id": "5f565084-74ff-4c8f-85d8-52815349c2ef",
+  "route": {
+    "adapter": "claude_cli",
+    "binding_type": "candidate",
+    "candidate_offered": null,
+    "capability_class": "complex_implementation",
+    "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+    "executable": "/opt/node22/bin/claude",
+    "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli [selected as an unevaluated candidate binding under champion-challenger-v1, by operator opt-in, because champion openai/gpt-5.6-terra is unsupported_provider; it inherits no trust and is not a promoted champion.]",
+    "model_id": "claude-opus-5-5",
+    "model_version": "unpinned",
+    "provider": "anthropic",
+    "status": "available"
+  },
+  "started_at": "2026-11-05T00:16:37.037733Z",
+  "task_id": "OPS-201"
+}

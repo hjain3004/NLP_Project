@@ -1,0 +1,116 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "DEMO-102",
+    "work_package_id": "DELIVERY-DEMO-2",
+    "contract_version": 1,
+    "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+    "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+    "execution_mode": "control_plane",
+    "status": "active",
+    "created_at": "2026-11-04T07:20:00Z",
+    "expires_at": "2099-11-04T00:00:00Z"
+  },
+  "intent": {
+    "objective": "Make ContextCompiler task-contract discovery ignore everything under agent-system/runtime/ and not traverse it (replan of DEMO-002 after a contract whose checks could not pass in the integration copy)",
+    "rationale": "_find_task_contract globs agent-system/** including agent-system/runtime/worktrees/**, so a leased worktree's copy of a contract can shadow or duplicate the real contract. Review notes on the first attempt (non-blocking): its no-contract test asserted only a bare PlanningError, and discovery still listed every runtime file before filtering them out.",
+    "non_goals": [
+      "Changing how contracts are validated or hashed",
+      "Changing context compilation other than contract discovery",
+      "Modifying any existing test"
+    ],
+    "acceptance_behavior": [
+      "Discovery ignores every file under agent-system/runtime/ (worktrees, attempts, integration copies) even when a runtime file is a valid task-contract with the requested task id, and still returns the one real contract and its repository-relative path",
+      "When the same task id exists both as the real contract and as a copy under agent-system/runtime/worktrees/, the real contract is returned regardless of path sort order",
+      "Discovery behaves identically when no agent-system/runtime directory exists",
+      "When no contract exists for the task id outside agent-system/runtime/ (including when the only copy is under runtime), discovery raises the existing PlanningError whose message contains 'task contract file was not found'",
+      "Discovery does not list or open files under agent-system/runtime/ before filtering (prune the directory while walking, for example with os.walk and in-place pruning of dirnames), while still examining the remaining JSON files in sorted path order"
+    ],
+    "relevant_decisions": []
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "context-discovery:runtime-exclusion-v2"
+    ],
+    "integration_order": 4,
+    "invalidation_triggers": []
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "tools/agentctl/agentctl/context.py",
+      "tools/agentctl/tests/test_context_staleness.py",
+      "tools/agentctl/agentctl/errors.py"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/context.py",
+      "tools/agentctl/tests/test_context_runtime_exclusion.py"
+    ],
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "semantic_locks": [],
+    "expected_change_shape": "A small change to _find_task_contract in context.py plus one new test module"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "complexity": "low",
+    "risk": "low",
+    "required_skills": [],
+    "preferred_worker": "claude-cli",
+    "minimum_reviewer_class": "complex_implementation",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": [],
+    "command_allowlist": [],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "task_owned_only",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "proposal_only"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py"
+    ],
+    "behavioral_requirements": [
+      "The new tests use a real temporary repository layout (tempfile) with a task-contract JSON under agent-system/work and a copy under agent-system/runtime/worktrees, and prove the real contract is returned",
+      "The no-contract test uses assertRaises(PlanningError) AND asserts the message contains 'task contract file was not found'",
+      "ContextCompiler.__init__ reads agent-system/policies/product-data-boundary.json (keys enforcement.allowed_context_roots and enforcement.excluded_by_default), so the temporary root must contain a minimal valid copy of that file written by the test",
+      "Every test in the new module must pass in a copy of the repository that has NO .git directory, run with cwd at the repository root, a minimal environment and PYTHONPATH=tools/agentctl: the tests must not run git, must not call git rev-parse, and must locate the repository with pathlib from __file__ (Path(__file__).resolve().parents[3])",
+      "No existing test is modified"
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "review-verdict"
+    ],
+    "definition_of_done": [
+      "The candidate passes the deterministic checks, receives an independent review with no blocking findings, and is integrated unchanged"
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 2,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 0,
+    "wall_clock_class": "short",
+    "token_class": "small"
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [
+      "The fix needs a file outside the writable set"
+    ],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
+  }
+}

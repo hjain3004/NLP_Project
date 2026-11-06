@@ -1,0 +1,174 @@
+{
+  "attempt_id": "DEMO-002-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "branch": "agentctl/DEMO-002/attempt-1",
+  "context_hash": "62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53",
+  "contract_hash": "c3bc6006ab0ca27d34701868eb7f1e906b1290ad4e45c48e135d7e29caf92ee4",
+  "elapsed_ms": 132628,
+  "finished_at": "2026-11-04T06:47:03.910541Z",
+  "git": {
+    "files_changed": [
+      {
+        "change_type": "modified",
+        "path": "tools/agentctl/agentctl/context.py"
+      },
+      {
+        "change_type": "added",
+        "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+      }
+    ],
+    "result_commit": "6a682e461f75eebd733ccf5937bf2f85da9d31c8"
+  },
+  "identity": {
+    "minted_session_id": "4a40799b-877c-40b4-9ab1-994e499b0968",
+    "provider_run_id": "23f9f58c-fb7d-4443-b239-e79f98987de2"
+  },
+  "kind": "author_run",
+  "lease_epoch": 1,
+  "lease_id": "14f4d681-5800-498e-81e8-e72124efd32c",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "result_commit": "6a682e461f75eebd733ccf5937bf2f85da9d31c8",
+    "status": "candidate"
+  },
+  "prompt": {
+    "bytes": 54451,
+    "sha256": "abbf8547b3ba8ffa8b27bb42c5d0c019837d70b3e1009b8834e54cfad3d0a38c"
+  },
+  "proposal_summary": "Updated ContextCompiler._find_task_contract to skip any JSON file under agent-system/runtime/ before parsing, and added a new test module covering runtime-copy exclusion, no-runtime-directory behavior, and the not-found PlanningError.",
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-sonnet-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "4a40799b-877c-40b4-9ab1-994e499b0968",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"acceptance_criteria_addressed\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"assumptions\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"files\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"action\":{\"enum\":[\"write\",\"delete\"],\"type\":\"string\"},\"content\":{\"type\":\"string\"},\"path\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"path\",\"action\",\"content\"],\"type\":\"object\"},\"minItems\":1,\"type\":\"array\"},\"summary\":{\"type\":\"string\"},\"unresolved_risks\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"summary\",\"files\",\"acceptance_criteria_addressed\",\"assumptions\",\"unresolved_risks\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": 0,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": null,
+    "failure_detail": "",
+    "is_error": false,
+    "output_excerpt": "{\"acceptance_criteria_addressed\": [\"Discovery ignores every file under agent-system/runtime/ (worktrees, attempts, integration copies) and still finds the one real contract\", \"Discovery behaves identically when no agent-system/runtime directory exists\", \"When no contract exists for the task id outside the runtime directory, the existing PlanningError (task contract file was not found) is raised\"], \"assumptions\": [\"agent-system/policies/product-data-boundary.json's schema only requires enforcement.allowed_context_roots and enforcement.excluded_by_default for ContextCompiler to construct, as used elsewhere in context.py; the test fixture supplies a minimal object matching that shape.\", \"The glob skip is done via a simple relative-path prefix check (agent-system/runtime/) rather than the rule-matching helper used by _entry for allowed/excluded context roots, since the exclusion need here is simpler.\", \"No existing test depends on the internal ordering/behavior of _find_task_contract beyond its return value and the PlanningError it raises when nothing is found, so the signature and exception behavior are left unchanged.\"], \"files\": [{\"action\": \"write\", \"content\": \"\\\"\\\"\\\"Minimal, reproducible context-pack compilation and stale-context rebuilds.\\\"\\\"\\\"\\n\\nfrom __future__ import annotations\\n\\nimport datetime as dt\\nimport json\\nimport sqlite3\\nimport uuid\\nfrom collections.abc import Mapping, Sequence\\nfrom pathlib import Path, PurePosixPath\\nfrom typing import Any\\n\\nfrom .config import repo_root as resolve_repo_root\\nfrom .errors import ContractStale, PlanningError\\nfrom .events import make_event\\nfrom .hashing import sha256_of_file, sha256_of_json_excluding\\nfrom .interfaces import current_interface_binding\\nfrom .store import EventStore\\n\\n__all__ = [\\n    \\\"CONTEXT_INPUTS\\\",\\n    \\\"EXCLUDED_BY_POLICY\\\",\\n    \\\"ContextCompiler\\\",\\n    \\\"assert_context_hash\\\",\\n]\\n\\n\\nCONTEXT_INPUTS: tuple[str, ...] = (\\n    \\\"authority_excerpt\\\",\\n    \\\"role_contract\\\",\\n    \\\"task_contract\\\",\\n    \\\"decisions\\\",\\n    \\\"consumed_interfaces\\\",\\n    \\\"dependency_manifests\\\",\\n    \\\"failure_lessons\\\",\\n    \\\"base_commit_summary\\\",\\n    \\\"permissions\\\",\\n    \\\"budgets_and_output_schema\\\",\\n)\\n\\nEXCLUDED_BY_POLICY: tuple[str, ...] = (\\n    \\\"prd\\\",\\n    \\\"conversation_history\\\",\\n    \\\"research_documents\\\",\\n    \\\"other_worker_reasoning\\\",\\n    \\\"secrets\\\",\\n    \\\"customer_documents\\\",\\n    \\\"obsolete_plans\\\",\\n    \\\"raw_logs\\\",\\n)\\n\\n_LIST_INPUTS = frozenset(\\n    {\\\"decisions\\\", \\\"consumed_interfaces\\\", \\\"dependency_manifests\\\", \\\"failure_lessons\\\"}\\n)\\n\\n_ROLE_FILES = {\\n    \\\"architectural_authority\\\": \\\"architect.md\\\",\\n    \\\"work_package_planning\\\": \\\"planner.md\\\",\\n    \\\"complex_implementation\\\": \\\"complex-implementer.md\\\",\\n    \\\"standard_implementation\\\": \\\"standard-implementer.md\\\",\\n    \\\"mechanical_execution\\\": \\\"mechanical-executor.md\\\",\\n    \\\"verifier\\\": \\\"verifier.md\\\",\\n    \\\"integrator\\\": \\\"integrator.md\\\",\\n}\\n\\n_RUNTIME_PREFIX = \\\"agent-system/runtime/\\\"\\n\\n\\ndef _timestamp() -> str:\\n    return (\\n        dt.datetime.now(dt.timezone.utc)\\n        .isoformat(timespec=\\\"microseconds\\\")\\n        .replace(\\\"+00:00\\\", \\\"Z\\\")\\n    )\\n\\n\\nclass ContextCompiler:\\n    def __init__(\\n        self,\\n        repository_root: str | Path | None = None,\\n        store: EventStore | None = None,\\n    ) -> None:\\n        self.root = (\\n            Path(repository_root).expanduser().resolve()\\n            if repository_root is not None\\n            else resolve_repo_root()\\n        )\\n        self.store = store\\n        boundary = json.loads(\\n            (self.root / \\\"agent-system/policies/product-data-boundary.json\\\").read_text(\\n                encoding=\\\"utf-8\\\"\\n            )\\n        )\\n        enforcement = boundary[\\\"enforcement\\\"]\\n        self.allowed_context_roots = tuple(enforcement[\\\"allowed_context_roots\\\"])\\n        self.excluded_context_paths = tuple(enforcement[\\\"excluded_by_default\\\"])\\n\\n    @staticmethod\\n    def _path_matches(...[truncated 17157 chars]",
+    "requested_model": "claude-sonnet-5",
+    "result_uuid": "1db267a1-0ac5-4366-ba2f-2229c1e52c56",
+    "served_model": "claude-sonnet-5",
+    "served_model_canonical": "claude-sonnet-5",
+    "session_id": "4a40799b-877c-40b4-9ab1-994e499b0968",
+    "status": "completed",
+    "stderr_excerpt": "",
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "termination_reason": "completed",
+    "timed_out": false,
+    "usage_normalized": {
+      "cost_usd": 0.3650108,
+      "input_tokens": 69855,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": 131258,
+      "output_tokens": 19665
+    },
+    "usage_raw": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 40627,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 40627,
+      "cache_read_input_tokens": 29224,
+      "fallback_credit": null,
+      "inference_geo": "global",
+      "input_tokens": 4,
+      "iterations": [
+        {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 11403,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 11403,
+          "cache_read_input_tokens": 29224,
+          "input_tokens": 2,
+          "output_tokens": 8458,
+          "type": "message"
+        }
+      ],
+      "output_tokens": 19665,
+      "output_tokens_details": {
+        "thinking_tokens": 2797
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "wall_ms": 132476
+  },
+  "record_version": 1,
+  "route": {
+    "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+    "reviewer": {
+      "adapter": "claude_cli",
+      "binding_type": "demo_environment_profile",
+      "capability_class": "complex_implementation",
+      "executable": "/opt/node22/bin/claude",
+      "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    },
+    "status": "available",
+    "task_id": "DEMO-002",
+    "worker": {
+      "adapter": "claude_cli",
+      "binding_type": "initial_prior",
+      "capability_class": "standard_implementation",
+      "executable": "/opt/node22/bin/claude",
+      "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+      "model_id": "claude-sonnet-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    }
+  },
+  "scope_audit": {
+    "accepted": true,
+    "changes": [
+      {
+        "action": "write",
+        "bytes": 14724,
+        "path": "tools/agentctl/agentctl/context.py"
+      },
+      {
+        "action": "write",
+        "bytes": 3465,
+        "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+      }
+    ]
+  },
+  "started_at": "2026-11-04T06:44:51.282440Z",
+  "task_id": "DEMO-002",
+  "worktree_path": "agent-system/runtime/worktrees/DEMO-002/attempt-1"
+}

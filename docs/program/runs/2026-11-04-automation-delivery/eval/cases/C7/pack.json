@@ -1,0 +1,64 @@
+{
+  "architecture_and_invariants": [
+    "AGENTS.md",
+    "docs/security/INVARIANTS.md"
+  ],
+  "attempt_id": "EVAL-C7-attempt-1",
+  "candidate_binding": {
+    "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+    "files_changed": [
+      {
+        "change_type": "modified",
+        "path": "tools/agentctl/agentctl/context.py"
+      },
+      {
+        "change_type": "added",
+        "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+      }
+    ],
+    "result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58"
+  },
+  "contract": {
+    "artifact_type": "task-contract",
+    "intent": {
+      "acceptance_behavior": [
+        "Discovery ignores every file under agent-system/runtime/ (worktrees, attempts, integration copies) even when a runtime file is a valid task-contract with the requested task id, and still returns the one real contract and its repository-relative path",
+        "When the same task id exists both as the real contract and as a copy under agent-system/runtime/worktrees/, the real contract is returned regardless of path sort order",
+        "Discovery behaves identically when no agent-system/runtime directory exists",
+        "When no contract exists for the task id outside agent-system/runtime/ (including when the only copy is under runtime), discovery raises the existing PlanningError whose message contains 'task contract file was not found'",
+        "Discovery does not list or open files under agent-system/runtime/ before filtering (prune the directory while walking, for example with os.walk and in-place pruning of dirnames), while still examining the remaining JSON files in sorted path order"
+      ],
+      "objective": "Make ContextCompiler task-contract discovery ignore everything under agent-system/runtime/ and not traverse it (replan of DEMO-002 after a contract whose checks could not pass in the integration copy)"
+    },
+    "permissions": {
+      "enforcement_class": "proposal_only",
+      "may_modify_tests": "none"
+    },
+    "routing": {
+      "capability_class": "standard_implementation",
+      "risk": "low"
+    },
+    "scope": {
+      "prohibited_paths": [
+        "agent-system/schemas/**",
+        "agent-system/policies/**",
+        "agent-system/routing/**",
+        "AppleBooks/**",
+        "tools/agentctl/tests/**"
+      ],
+      "writable_paths": [
+        "tools/agentctl/agentctl/context.py"
+      ]
+    }
+  },
+  "deterministic_evidence": {
+    "checks": [
+      {
+        "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+        "exit_code": 0
+      }
+    ],
+    "passed": true
+  },
+  "task_id": "EVAL-C7"
+}

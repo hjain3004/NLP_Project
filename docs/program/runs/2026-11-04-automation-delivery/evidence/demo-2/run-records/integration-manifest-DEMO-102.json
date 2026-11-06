@@ -1,0 +1,29 @@
+{
+  "affected_gates_rerun": [
+    {
+      "gate": "integration:candidate-commit-preserved",
+      "result": "pass"
+    },
+    {
+      "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+      "result": "pass"
+    }
+  ],
+  "artifact_type": "integration-manifest",
+  "candidate_patch_unchanged": true,
+  "candidate_result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+  "completed_at": "2026-11-04T07:10:19Z",
+  "dependency_interface_hashes": [],
+  "fencing_token": "b254b83844364278cc0860939a0538a64542d217827a4b33a84e5e1962a3c47e",
+  "integration_base_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+  "integration_commit": "dccdf896094ed6cd2f648ce886953acf26c7a7e8",
+  "integration_id": "DEMO-102-I1",
+  "integrator_role": "integrator",
+  "integrator_session_id": "integrator-run:ac4f464f-3eb4-424d-b25c-f0690b00795d",
+  "lease_epoch": 1,
+  "lease_id": "d088964a-ff1e-40a2-9c23-7261e880dfed",
+  "merge_strategy": "conflict_free_preserving_candidate",
+  "review_id": "DEMO-102-attempt-1-review-1",
+  "reviewed_diff_hash": "e757554c43c32d97ab3070a6604b12597bf798f957193b0877fc1fa614e41630",
+  "task_id": "DEMO-102"
+}

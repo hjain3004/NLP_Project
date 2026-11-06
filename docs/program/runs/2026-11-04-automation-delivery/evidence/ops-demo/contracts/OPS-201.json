@@ -1,0 +1,114 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "OPS-201",
+    "work_package_id": "DELIVERY-OPS",
+    "contract_version": 1,
+    "contract_hash": "916a4f15785505baf9735e4ff8e4c00d39bc7954a83e1c0686d80ba56cc7b862",
+    "base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+    "execution_mode": "control_plane",
+    "status": "active",
+    "created_at": "2026-11-04T09:00:00Z",
+    "expires_at": "2099-11-04T00:00:00Z"
+  },
+  "intent": {
+    "objective": "Correct the wording of agent-system/roles/integrator.md so that the deterministic integration queue, not a model or the integrator itself, selects the next candidate, and the integrator role consumes the head of that queue",
+    "rationale": "The role text says the integrator Owns 'selecting the next topologically valid candidate'. In the implemented design the deterministic integration queue (docs/program/AUTOMATION_DELIVERY.md: 'The deterministic queue selects the candidate'; AGENTS.md section 5: the integrator 'consumes verified candidates in topological order') makes that choice. A role contract that claims the selection invites an integrator session to choose a candidate itself.",
+    "non_goals": [
+      "Changing any other rule of the integrator role (the May not list, required output artifacts, escalation triggers, independence rules)",
+      "Editing AGENTS.md, any other role file, any policy or schema",
+      "Changing integration behaviour in agentctl"
+    ],
+    "acceptance_behavior": [
+      "The Owns list no longer contains the bullet 'selecting the next topologically valid candidate'",
+      "The role text states that the deterministic integration queue (not a model) selects the next candidate and that the integrator consumes the head of that queue",
+      "The sentence stating that the integrator alters no reviewed patch, and the whole May not, Required output artifacts, Escalation triggers and Independence rules sections and the closing sentence about AGENTS.md, are unchanged word for word",
+      "The file keeps its heading, the 'Operational role: integrator' line, and remains a short Markdown role contract with no new sections of policy"
+    ],
+    "relevant_decisions": []
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "role-contract:integrator-queue-wording-v1"
+    ],
+    "integration_order": 1,
+    "invalidation_triggers": []
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "agent-system/roles/integrator.md",
+      "docs/program/AUTOMATION_DELIVERY.md"
+    ],
+    "writable_paths": [
+      "agent-system/roles/integrator.md"
+    ],
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "semantic_locks": [],
+    "expected_change_shape": "A change to a few lines of the Owns section and possibly the one-line summary of integrator.md"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "complexity": "low",
+    "risk": "low",
+    "required_skills": [],
+    "preferred_worker": "claude-cli",
+    "minimum_reviewer_class": "complex_implementation",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": [],
+    "command_allowlist": [],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "task_owned_only",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "proposal_only"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "grep -Eiq 'deterministic[^.]{0,120}queue|queue[^.]{0,120}deterministic' agent-system/roles/integrator.md",
+      "! grep -Fq 'selecting the next topologically valid candidate' agent-system/roles/integrator.md",
+      "grep -Fq 'rebase, cherry-pick, hand-edit, or regenerate any part of the reviewed patch' agent-system/roles/integrator.md && grep -Fq 'an integrator may not integrate a candidate it authored' agent-system/roles/integrator.md && test \"$(git rev-parse --show-toplevel)\" = /work && git ls-files --error-unmatch agent-system/roles/integrator.md >/dev/null"
+    ],
+    "behavioral_requirements": [
+      "The change is confined to agent-system/roles/integrator.md and keeps every sentence not about candidate selection byte-identical",
+      "The phrase 'deterministic' appears within the same sentence as 'queue'",
+      "The text does not claim that a model, a worker or the integrator selects the candidate",
+      "docs verify (agentctl docs verify) is NOT a deterministic check of this task: it reads history older than the single synthetic-snapshot commit and cannot pass inside the check environment; it is run by the operator outside the gate"
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "review-verdict"
+    ],
+    "definition_of_done": [
+      "The candidate passes the deterministic checks, receives an independent review with no blocking findings, and is integrated unchanged"
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 2,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 0,
+    "wall_clock_class": "short",
+    "token_class": "small"
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [
+      "The fix needs a file outside the writable set"
+    ],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
+  }
+}

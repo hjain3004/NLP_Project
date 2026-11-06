@@ -1,0 +1,114 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "DEMO-001",
+    "work_package_id": "DELIVERY-DEMO",
+    "contract_version": 1,
+    "contract_hash": "df44a08a51438d3404022c947751271d03185324e61d91e067f95c5d82a40ef6",
+    "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+    "execution_mode": "control_plane",
+    "status": "active",
+    "created_at": "2026-11-04T07:00:00Z",
+    "expires_at": "2099-11-04T00:00:00Z"
+  },
+  "intent": {
+    "objective": "Make agentctl approve output-path containment accept an --out path that reaches the repository through a symlinked alias of an ancestor directory",
+    "rationale": "_contained_destination compares an unresolved destination lexically with the resolved repository root, so an alias path (for example macOS /var versus /private/var, or a Linux symlink to the repository directory) is wrongly rejected as approval_output_outside_repository even though its parent really resolves inside the repository",
+    "non_goals": [
+      "Changing approval policy, schemas, or the approval record format",
+      "Changing _legacy_destination (the no-approval-id path)",
+      "Modifying any existing test"
+    ],
+    "acceptance_behavior": [
+      "An --out path that reaches the repository through a symlinked alias of an ancestor directory is accepted when the destination's parent directory really resolves inside the repository",
+      "A path whose parent directory truly resolves outside the repository (including through a symlink inside the repository that points outside) is still rejected with approval_output_outside_repository",
+      "A destination whose final path component is a symlink is still rejected with approval_output_invalid",
+      "A relative --out path still resolves against the repository root and is accepted when it is inside the repository"
+    ],
+    "relevant_decisions": []
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "approve-output-containment:alias-paths"
+    ],
+    "integration_order": 1,
+    "invalidation_triggers": []
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "tools/agentctl/agentctl/commands/approve.py",
+      "tools/agentctl/tests/test_approval_prebind.py",
+      "tools/agentctl/agentctl/errors.py"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/commands/approve.py",
+      "tools/agentctl/tests/test_approve_output_containment.py"
+    ],
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "semantic_locks": [],
+    "expected_change_shape": "A small change to _contained_destination in approve.py plus one new test module"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "complexity": "medium",
+    "risk": "medium",
+    "required_skills": [],
+    "preferred_worker": "claude-cli",
+    "minimum_reviewer_class": "complex_implementation",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": [],
+    "command_allowlist": [],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "task_owned_only",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "proposal_only"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py",
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p 'test_approval*.py'"
+    ],
+    "behavioral_requirements": [
+      "The new tests build a real symlinked alias directory with tempfile on the real filesystem and do not mock Path",
+      "Each of the four acceptance behaviors is exercised by at least one new test",
+      "Existing approval tests still pass unchanged"
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "review-verdict"
+    ],
+    "definition_of_done": [
+      "The candidate passes the deterministic checks, receives an independent review with no blocking findings, and is integrated unchanged"
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 2,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 0,
+    "wall_clock_class": "short",
+    "token_class": "small"
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [
+      "The fix needs a file outside the writable set"
+    ],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
+  }
+}

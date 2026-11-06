@@ -1,0 +1,18 @@
+##### new test file test_approve_output_containment.py against UNFIXED BASE source, .git-less copy, minimal env
+ERROR: test_contained_destination_returns_destination_relative_to_root_for_alias
+ERROR: test_preflight_accepts_alias_path_reaching_repo_through_ancestor_symlink
+Ran 8 tests in 0.044s
+FAILED (errors=2)
+##### new test file test_context_runtime_exclusion.py against UNFIXED BASE source, .git-less copy, minimal env
+FAIL: test_discovery_ignores_runtime_even_when_it_has_a_matching_contract
+FAIL: test_discovery_never_opens_files_under_runtime
+FAIL: test_no_contract_outside_runtime_raises_planning_error
+FAIL: test_real_contract_wins_regardless_of_path_sort_order
+Ran 5 tests in 0.042s
+FAILED (failures=4)
+##### new DEMO-101 test file against the BLOCKED cycle-1 DEMO-001 candidate source (approve.py @93d1ddc: accepts alias, returns it unresolved)
+ERROR: test_contained_destination_returns_destination_relative_to_root_for_alias
+    raise ValueError(f"{str(self)!r} is not in the subpath of {str(other)!r}")
+ValueError: '/tmp/tmp5utd6w_v/alias-base/real-repo/sub/out.json' is not in the subpath of '/tmp/tmp5utd6w_v/real-repo'
+Ran 8 tests in 0.047s
+FAILED (errors=1)

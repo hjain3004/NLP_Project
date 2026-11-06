@@ -1,0 +1,4 @@
+valid: agent-system/work/DELIVERY-DEMO-2/work-package.json
+valid: agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-101.json
+valid: agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-102.json
+{"status":"validated","tasks":[{"context_hash":"51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808","task_id":"DEMO-101"},{"context_hash":"d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46","task_id":"DEMO-102"}],"work_package_id":"DELIVERY-DEMO-2"}

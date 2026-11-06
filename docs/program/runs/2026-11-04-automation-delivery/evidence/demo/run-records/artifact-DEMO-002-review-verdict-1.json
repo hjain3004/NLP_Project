@@ -1,0 +1,55 @@
+{
+  "artifact_type": "review-verdict",
+  "attempt_id": "DEMO-002-attempt-1",
+  "context_hash": "62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53",
+  "contract_hash": "c3bc6006ab0ca27d34701868eb7f1e906b1290ad4e45c48e135d7e29caf92ee4",
+  "declared_base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "diff_hash": "ad03077452869c03fd921ece1b793b5dae71511fc40ae16377b65459f1f19183",
+  "fencing_token": "136a996bcba59733f33178401193b15c6d898fd1c9bfc50091c0c1047e69e275",
+  "findings": [
+    {
+      "blocking": false,
+      "file": "tools/agentctl/tests/test_context_runtime_exclusion.py",
+      "finding_id": "DEMO-002-R1",
+      "location": "test_raises_when_only_a_runtime_copy_exists",
+      "observed_behavior": "The test only checks that some PlanningError is raised, not that it is the 'task contract file was not found' error.",
+      "reproducible_evidence": "The test uses `with self.assertRaises(PlanningError):` and never checks the message. Any other PlanningError would also pass it.",
+      "required_behavior": "Optionally, assert the message too, e.g. assertRaisesRegex(PlanningError, 'task contract file was not found').",
+      "required_outcome": "The test pins the specific error that the acceptance criterion names.",
+      "reviewer_confidence": "high",
+      "severity": "nit",
+      "violated_criterion": "Acceptance: the existing PlanningError (task contract file was not found) is raised"
+    },
+    {
+      "blocking": false,
+      "file": "tools/agentctl/agentctl/context.py",
+      "finding_id": "DEMO-002-R2",
+      "location": "_find_task_contract",
+      "observed_behavior": "Runtime worktree trees are still listed in full, though their files are never read.",
+      "reproducible_evidence": "`sorted((self.root / \"agent-system\").glob(\"**/*.json\"))` still lists and sorts every JSON file under agent-system/runtime/ before the prefix filter skips them.",
+      "required_behavior": "Optionally, prune agent-system/runtime while walking the tree (e.g. os.walk or Path.walk with pruning), so large worktree copies are never listed.",
+      "required_outcome": "Discovery cost doesn't grow with the number of runtime attempts and worktrees.",
+      "reviewer_confidence": "medium",
+      "severity": "nit",
+      "violated_criterion": "Efficiency (not part of the contract)"
+    }
+  ],
+  "independence_attestation": {
+    "author_run_id": "23f9f58c-fb7d-4443-b239-e79f98987de2",
+    "author_session_id": "4a40799b-877c-40b4-9ab1-994e499b0968",
+    "distinct": true
+  },
+  "lease_epoch": 1,
+  "lease_id": "24e58cb1-28b8-4800-9dcb-c767409f8255",
+  "review_id": "DEMO-002-attempt-1-review-1",
+  "reviewed_result_commit": "6a682e461f75eebd733ccf5937bf2f85da9d31c8",
+  "reviewer_model": "claude-opus-5-5",
+  "reviewer_provider": "anthropic",
+  "reviewer_role": "complex_implementation",
+  "reviewer_run_id": "932538c4-c5e7-4751-a842-6a20486dfed3",
+  "reviewer_session_id": "a55f420c-0f56-4eb6-b1bd-0be6f8a7985d",
+  "task_id": "DEMO-002",
+  "tree_hash": "144bc6a177751b1e39be891ba30e6c49dad56220",
+  "verdict": "no_blocking_findings",
+  "verification_evidence_hash": "94b44ef8b35e6f50b345d026bd58ba9f7e25f8de8ef59a97fe4f674b87952d72"
+}

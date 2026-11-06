@@ -1,0 +1,187 @@
+{
+  "attempt_id": "OPS-201-attempt-1",
+  "base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+  "branch": "agentctl/OPS-201/attempt-1",
+  "candidate_bindings": {
+    "bindings": {
+      "reviewer": {
+        "binding_type": "candidate",
+        "capability_class": "complex_implementation",
+        "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+        "model_id": "claude-opus-5-5",
+        "provider": "anthropic"
+      }
+    },
+    "roles": [
+      "reviewer"
+    ],
+    "statement": "The reviewer model binding is an unevaluated candidate (binding_type candidate, champion-challenger-v1), selected by explicit operator opt-in because the champion binding has no runnable adapter. It inherits no historical trust; promotion to champion is an owner decision."
+  },
+  "context_hash": "9d4161755aa91393b1432f9f28c1c058bc00eb186d0a4d3a9f1cf13841276cf5",
+  "contract_hash": "916a4f15785505baf9735e4ff8e4c00d39bc7954a83e1c0686d80ba56cc7b862",
+  "elapsed_ms": 28782,
+  "finished_at": "2026-11-05T00:00:45.660542Z",
+  "git": {
+    "files_changed": [
+      {
+        "change_type": "modified",
+        "path": "agent-system/roles/integrator.md"
+      }
+    ],
+    "result_commit": "0663c4c4ee126f30dfcfda8ee083696120957040"
+  },
+  "identity": {
+    "minted_session_id": "4aceff97-b79d-41be-9910-f4c65277c017",
+    "provider_run_id": "d6b81448-f3e3-4061-bb22-86eed7b78a45"
+  },
+  "kind": "author_run",
+  "lease_epoch": 1,
+  "lease_id": "caba93c2-f3ba-4f0c-a006-d12839411686",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "result_commit": "0663c4c4ee126f30dfcfda8ee083696120957040",
+    "status": "candidate"
+  },
+  "prompt": {
+    "bytes": 38053,
+    "sha256": "945dd6f941d2b12e455139811f089996676b928ccda6e718460eee5195aa425d"
+  },
+  "proposal_summary": "Reworded agent-system/roles/integrator.md: removed the Owns bullet claiming the integrator selects the next candidate, added a sentence stating the deterministic integration queue selects the candidate and the integrator consumes the head of that queue, and replaced the selection Owns bullet with a 'consuming the head of the deterministic integration queue' bullet. All other sections (May not, Required output artifacts, Escalation triggers, Independence rules, the no-alteration sentence, and the closing AGENTS.md sentence) are byte-identical to the original.",
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-sonnet-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "4aceff97-b79d-41be-9910-f4c65277c017",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"acceptance_criteria_addressed\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"assumptions\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"files\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"action\":{\"enum\":[\"write\",\"delete\"],\"type\":\"string\"},\"content\":{\"type\":\"string\"},\"path\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"path\",\"action\",\"content\"],\"type\":\"object\"},\"minItems\":1,\"type\":\"array\"},\"summary\":{\"type\":\"string\"},\"unresolved_risks\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"summary\",\"files\",\"acceptance_criteria_addressed\",\"assumptions\",\"unresolved_risks\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": 0,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": null,
+    "failure_detail": "",
+    "is_error": false,
+    "output_excerpt": "{\"acceptance_criteria_addressed\": [\"The Owns list no longer contains the bullet 'selecting the next topologically valid candidate'\", \"The role text states that the deterministic integration queue (not a model) selects the next candidate and that the integrator consumes the head of that queue\", \"The sentence stating that the integrator alters no reviewed patch, and the whole May not, Required output artifacts, Escalation triggers and Independence rules sections and the closing sentence about AGENTS.md, are unchanged word for word\", \"The file keeps its heading, the 'Operational role: integrator' line, and remains a short Markdown role contract with no new sections of policy\"], \"assumptions\": [\"Adding one new sentence after the existing one-line summary (stating the deterministic queue selects candidates and the integrator consumes the head) counts as the permitted change to 'possibly the one-line summary' in the expected change shape, since it does not alter the existing summary sentence itself.\", \"Replacing the Owns bullet 'selecting the next topologically valid candidate' with 'consuming the head of the deterministic integration queue' satisfies the requirement to remove the selection claim while keeping the Owns list coherent; no other Owns bullets were touched.\"], \"files\": [{\"action\": \"write\", \"content\": \"# Integrator \\u2014 `integrator`\\n\\n**Operational role:** `integrator`\\n\\nSerializes fan-in. One logical queue, topological order, and no alteration to a reviewed patch.\\n\\nThe deterministic integration queue selects the next candidate, not a model and not the integrator; the integrator consumes the head of that queue.\\n\\n## Owns\\n\\n- consuming the head of the deterministic integration queue\\n- confirming evidence and review bind to the exact result commit, tree hash, diff hash, contract hash, and verification-evidence hash\\n- checking current dependency and interface hashes\\n- a conflict-free merge that preserves the reviewed candidate commit unchanged\\n- rerunning every affected gate against the resulting tree\\n- recording the integration manifest\\n\\n## May not\\n\\n- waive a failed gate\\n- resolve conflicts in a candidate it authored\\n- rebase, cherry-pick, hand-edit, or regenerate any part of the reviewed patch \\u2014 **any alteration invalidates the review**, and the result becomes a new candidate requiring a new manifest, new verification, and new independent review\\n- integrate a candidate whose base is obsolete\\n\\n## Required output artifacts\\n\\n- an `integration-manifest` with `merge_strategy: conflict_free_preserving_candidate` and `candidate_patch_unchanged: true` \\u2014 a manifest that cannot honestly set both cannot be written\\n\\n## Escalation triggers\\n\\n- a conflict requires judgement about intent \\u2014 that is a bounded integration-repair or replanning task, not a merge decision\\n- an affected gate fails after integration\\n- a dependency interface hash has changed since the candidate was reviewed\\n\\n## Independence rules\\n\\n- an integrator may not integrate a candidate it authored\\n- integration reruns gates rather than trusting the candidate's own evidence\\n\\n---\\n\\nRead `AGENTS.md` in full before acting on this contract. Where this file and the constitution appear to conflict, the constitution wins and this file is a defect.\\n\", \"path\": \"agent-system/roles/integrator.md\"}], \"summary\": \"Reworded agent-system/roles/integrator.md: removed the Owns bullet claiming the integrator selects the next candidate, added a sentence stating the deterministic integration queue selects the candidate and the integrator consumes the head of that queue, and replaced the selection Owns bullet with a 'consuming the head of the deterministic integration queue' bullet. All other sections (May not, Required output artifacts, Escalation triggers, Independence rules, the no-alteration sentence, and the closing AGENTS.md sentence) are byte-identical to the original.\", \"unresolved_risks\": [\"None identified in the supplied files; no em...[truncated 102 chars]",
+    "requested_model": "claude-sonnet-5",
+    "result_uuid": "957eaf28-03b0-4370-8a79-c47533c5821e",
+    "served_model": "claude-sonnet-5",
+    "served_model_canonical": "claude-sonnet-5",
+    "session_id": "4aceff97-b79d-41be-9910-f4c65277c017",
+    "status": "completed",
+    "stderr_excerpt": "",
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "termination_reason": "completed",
+    "timed_out": false,
+    "usage_normalized": {
+      "cost_usd": 0.122338,
+      "input_tokens": 22918,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": 26979,
+      "output_tokens": 3067
+    },
+    "usage_raw": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 22916,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 22916,
+      "cache_read_input_tokens": 0,
+      "fallback_credit": null,
+      "inference_geo": "global",
+      "input_tokens": 2,
+      "iterations": [
+        {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 22916,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 22916,
+          "cache_read_input_tokens": 0,
+          "input_tokens": 2,
+          "output_tokens": 3067,
+          "type": "message"
+        }
+      ],
+      "output_tokens": 3067,
+      "output_tokens_details": {
+        "thinking_tokens": 1600
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "wall_ms": 28636
+  },
+  "record_version": 1,
+  "route": {
+    "candidate_roles": [
+      "reviewer"
+    ],
+    "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+    "reviewer": {
+      "adapter": "claude_cli",
+      "binding_type": "candidate",
+      "candidate_offered": null,
+      "capability_class": "complex_implementation",
+      "champion_unavailable_reason": "champion openai/gpt-5.6-terra is unsupported_provider",
+      "executable": "/opt/node22/bin/claude",
+      "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli [selected as an unevaluated candidate binding under champion-challenger-v1, by operator opt-in, because champion openai/gpt-5.6-terra is unsupported_provider; it inherits no trust and is not a promoted champion.]",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    },
+    "status": "available",
+    "task_id": "OPS-201",
+    "worker": {
+      "adapter": "claude_cli",
+      "binding_type": "initial_prior",
+      "candidate_offered": null,
+      "capability_class": "standard_implementation",
+      "champion_unavailable_reason": null,
+      "executable": "/opt/node22/bin/claude",
+      "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+      "model_id": "claude-sonnet-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    }
+  },
+  "scope_audit": {
+    "accepted": true,
+    "changes": [
+      {
+        "action": "write",
+        "bytes": 1923,
+        "path": "agent-system/roles/integrator.md"
+      }
+    ]
+  },
+  "started_at": "2026-11-05T00:00:16.878018Z",
+  "task_id": "OPS-201",
+  "worktree_path": "agent-system/runtime/worktrees/OPS-201/attempt-1"
+}

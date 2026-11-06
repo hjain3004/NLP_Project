@@ -1,0 +1,68 @@
+{
+ "attempt_id": "DEMO-002-attempt-1",
+ "details": {
+  "gates": [
+   {
+    "gate": "integration:candidate-commit-preserved",
+    "result": "pass"
+   },
+   {
+    "descendants_cleared": true,
+    "duration_ms": 120,
+    "exit_code": 0,
+    "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py",
+    "gate_isolation": "user_pid_namespace",
+    "left_processes": 0,
+    "reason": null,
+    "result": "pass",
+    "stderr_bytes": 101,
+    "stderr_hash": "869ea8047d0ae89dddb808470175fa3bdce5d6007a92e195f2d7e7e762e1f49f",
+    "stdout_bytes": 0,
+    "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false
+   },
+   {
+    "descendants_cleared": true,
+    "duration_ms": 170,
+    "exit_code": 1,
+    "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py",
+    "gate_isolation": "user_pid_namespace",
+    "left_processes": 0,
+    "reason": "exit_nonzero",
+    "result": "fail",
+    "stderr_bytes": 2094,
+    "stderr_hash": "2c46f91df4377eecf49be0ef2af4ae7b6df562ba2addc14f95f770980e85b159",
+    "stdout_bytes": 0,
+    "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false
+   },
+   {
+    "descendants_cleared": true,
+    "duration_ms": 122,
+    "exit_code": 1,
+    "gate": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py",
+    "gate_isolation": "user_pid_namespace",
+    "left_processes": 0,
+    "reason": "exit_nonzero",
+    "result": "fail",
+    "stderr_bytes": 6030,
+    "stderr_hash": "0a7fa9dcc913a9e288f2fbf6f4345bcb36b6db7d1c0f93791f4d46142eba5a93",
+    "stdout_bytes": 0,
+    "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "timed_out": false
+   }
+  ],
+  "integration_head": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+  "planned_commit": "c99649eb398a5abaca238c5d5a83272567848592"
+ },
+ "follow_up_auto_created": false,
+ "integration_head": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+ "integrator_run_id": "integrator-run:e347864e-6a8e-4092-827f-c3f81ca44176",
+ "outcome": "repair_required",
+ "proposed_follow_up": "bounded integration-repair task with fresh verification and independent review",
+ "reason_code": "affected_check_failed",
+ "retry_requires_new_evidence": true,
+ "state_after": "integration_ready",
+ "state_before": "integration_ready",
+ "task_id": "DEMO-002"
+}

@@ -1,0 +1,26 @@
+diff --git a/agent-system/routing/capability-registry.json b/agent-system/routing/capability-registry.json
+index 39f48b5..a487ca0 100644
+--- a/agent-system/routing/capability-registry.json
++++ b/agent-system/routing/capability-registry.json
+@@ -3,6 +3,7 @@
+   "version": 1,
+   "source": "design \u00a727.3",
+   "note": "The only file in agent-system/ that names a model. Task contracts refer to capability classes; changing a provider changes this file and nothing else.",
++  "demo_profile": "DELIVERY-REPO-ONLY BINDING, NOT A REGISTRY CHANGE FOR MAIN. In the isolated delivery clone used for the automation delivery acceptance run (2026-11-04), complex_implementation is bound to anthropic/claude-opus-5-5 so that the policy-required reviewer class can be routed to the only provider CLI available in this environment. The real registry binds complex_implementation to openai/gpt-5.6-terra, for which agentctl has no adapter. Any real binding change is an owner decision through the normal approval path.",
+   "version_change_rule": "A model version change registers a NEW routing candidate. It inherits no historical trust and must be re-evaluated.",
+   "entries": [
+     {
+@@ -23,10 +24,10 @@
+     },
+     {
+       "capability_class": "complex_implementation",
+-      "provider": "openai",
+-      "model_id": "gpt-5.6-terra",
++      "provider": "anthropic",
++      "model_id": "claude-opus-5-5",
+       "model_version": "unpinned",
+-      "binding_type": "initial_prior",
++      "binding_type": "demo_environment_profile",
+       "scope": "Complex code, concurrency, persistence, integration"
+     },
+     {

@@ -60,6 +60,7 @@ def task_spec_from_contract(
         deterministic_checks=tuple(contract["verification"]["deterministic_checks"]),
         human_approval_ref=permissions.get("human_approval_ref"),
         human_approval_action=permissions.get("required_human_approval_action"),
+        integration_order=dependencies.get("integration_order"),
     )
 
 

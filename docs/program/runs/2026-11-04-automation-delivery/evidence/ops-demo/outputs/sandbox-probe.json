@@ -1,0 +1,24 @@
+{
+ "available": true,
+ "limits_enforced": {
+  "capabilities": "none",
+  "cpu": true,
+  "memory": true,
+  "pids": true,
+  "rlimits": true,
+  "seccomp": true
+ },
+ "reason": "ok",
+ "runc": "/usr/bin/runc",
+ "runc_version": "runc version 1.5.2",
+ "runtime": {
+  "lines": [
+   "RUNTIME arch=x86_64",
+   "RUNTIME git=git version 2.43.0",
+   "RUNTIME python=3.13.18"
+  ],
+  "runc": "runc version 1.5.2",
+  "seccomp": true
+ },
+ "runtime_hash": "a519f5dea53b6dae1d5c426ea09c869e2cb336435d7b5ddb7ba8ca4fb2af04c0"
+}

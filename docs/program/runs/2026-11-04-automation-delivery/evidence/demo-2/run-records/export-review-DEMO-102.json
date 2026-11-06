@@ -1,0 +1,127 @@
+{
+  "attempt_id": "DEMO-102-attempt-1",
+  "elapsed_ms": 17134,
+  "finished_at": "2026-11-04T07:09:59.397811Z",
+  "identity": {
+    "author_run_id": "8026bde1-7fa1-4e7b-b68c-f2873e8fcf7a",
+    "author_session_id": "a1cdf7ef-9d40-4846-bd9a-b00c2e564639",
+    "minted_session_id": "e1ce595e-506a-4d6d-bc3c-dd785b23dcd3",
+    "provider_run_id": "1f3af50b-6b7b-4e31-a1f8-66c4b42c1dad"
+  },
+  "kind": "review_run",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "state": "integration_ready",
+    "status": "ingested",
+    "verdict": "no_blocking_findings"
+  },
+  "prompt": {
+    "bytes": 62585,
+    "sha256": "359ca7e272d4fa4d895878fb2b46488c6740a561866ef2a182f122dba9e0bdfa"
+  },
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-opus-5-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "e1ce595e-506a-4d6d-bc3c-dd785b23dcd3",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"findings\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"blocking\":{\"type\":\"boolean\"},\"file\":{\"type\":\"string\"},\"finding_id\":{\"type\":\"string\"},\"location\":{\"type\":\"string\"},\"observed_behavior\":{\"type\":\"string\"},\"reproducible_evidence\":{\"type\":\"string\"},\"required_behavior\":{\"type\":\"string\"},\"required_outcome\":{\"type\":\"string\"},\"reviewer_confidence\":{\"enum\":[\"high\",\"medium\",\"low\"],\"type\":\"string\"},\"severity\":{\"enum\":[\"critical\",\"important\",\"minor\",\"nit\"],\"type\":\"string\"},\"violated_criterion\":{\"type\":\"string\"}},\"required\":[\"finding_id\",\"severity\",\"violated_criterion\",\"file\",\"location\",\"reproducible_evidence\",\"observed_behavior\",\"required_behavior\",\"required_outcome\",\"reviewer_confidence\",\"blocking\"],\"type\":\"object\"},\"type\":\"array\"},\"verdict\":{\"enum\":[\"no_blocking_findings\",\"blocking_findings\"],\"type\":\"string\"}},\"required\":[\"verdict\",\"findings\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": 0,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": null,
+    "failure_detail": "",
+    "is_error": false,
+    "output_excerpt": "{\"findings\": [{\"blocking\": false, \"file\": \"tools/agentctl/agentctl/context.py\", \"finding_id\": \"F1\", \"location\": \"_find_task_contract: excluded_runtime_root = (agent_system_root / \\\"runtime\\\").resolve()\", \"observed_behavior\": \"Pruning only works when agent-system/runtime and its resolved path are lexically identical. That holds in the normal layout and in the tests.\", \"reproducible_evidence\": \"The pruning check compares the unresolved `Path(dirpath) / name` (built from os.walk(agent_system_root)) against `(agent_system_root / 'runtime').resolve()`. self.root is resolved, but if `agent-system` itself is a symlink, or any path component below root resolves differently, resolve() returns the target path. The two paths then never compare equal, so runtime/ is not pruned and its contracts are walked, read, and can be returned when they sort first.\", \"required_behavior\": \"Prune runtime/ no matter how the agent-system path resolves. For example, compare against the unresolved `agent_system_root / 'runtime'`, or prune `name == 'runtime'` when `dirpath == agent_system_root`.\", \"required_outcome\": \"Make the comparison path-consistent. This is a robustness improvement and does not block this change.\", \"reviewer_confidence\": \"medium\", \"severity\": \"minor\", \"violated_criterion\": \"Discovery does not list or open files under agent-system/runtime/ (prune the directory while walking)\"}, {\"blocking\": false, \"file\": \"tools/agentctl/tests/test_context_runtime_exclusion.py\", \"finding_id\": \"F2\", \"location\": \"test_discovery_never_opens_files_under_runtime\", \"observed_behavior\": \"The test proves runtime files are not opened. It does not prove runtime/ is never traversed.\", \"reproducible_evidence\": \"The test spies only on Path.read_text. An implementation that fully walks or lists runtime/ and filters the paths before reading would still pass, so the 'does not list ... before filtering' requirement has no test coverage.\", \"required_behavior\": \"Optionally also show that runtime/ is never descended into. For example, spy on os.walk output, or put an unreadable directory under runtime/ and check that walking never reaches it.\", \"required_outcome\": \"Add stronger regression protection for the pruning requirement. The implementation itself already prunes correctly via dirnames[:].\", \"reviewer_confidence\": \"high\", \"severity\": \"minor\", \"violated_criterion\": \"Tests exercise the real behavior (directory pruning, not just read filtering)\"}], \"verdict\": \"no_blocking_findings\"}",
+    "requested_model": "claude-opus-5-5",
+    "result_uuid": "92f8ce4b-a2a3-47fe-b4f8-4b611d91f4fb",
+    "served_model": "claude-opus-5-5",
+    "served_model_canonical": "claude-opus-5-5",
+    "session_id": "e1ce595e-506a-4d6d-bc3c-dd785b23dcd3",
+    "status": "completed",
+    "stderr_excerpt": "",
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "termination_reason": "completed",
+    "timed_out": false,
+    "usage_normalized": {
+      "cost_usd": 0.232431,
+      "input_tokens": 26514,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": 16166,
+      "output_tokens": 1576
+    },
+    "usage_raw": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 25077,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 25077,
+      "cache_read_input_tokens": 1435,
+      "fallback_credit": null,
+      "inference_geo": "global",
+      "input_tokens": 2,
+      "iterations": [
+        {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 25077,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 25077,
+          "cache_read_input_tokens": 1435,
+          "input_tokens": 2,
+          "output_tokens": 1576,
+          "type": "message"
+        }
+      ],
+      "output_tokens": 1576,
+      "output_tokens_details": {
+        "thinking_tokens": 669
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "wall_ms": 16996
+  },
+  "record_version": 1,
+  "review_assignment_epoch": 1,
+  "review_assignment_lease_id": "1c4f9a55-d173-443b-bbe1-03b59460e53e",
+  "route": {
+    "adapter": "claude_cli",
+    "binding_type": "demo_environment_profile",
+    "capability_class": "complex_implementation",
+    "executable": "/opt/node22/bin/claude",
+    "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli",
+    "model_id": "claude-opus-5-5",
+    "model_version": "unpinned",
+    "provider": "anthropic",
+    "status": "available"
+  },
+  "started_at": "2026-11-04T07:09:42.263625Z",
+  "task_id": "DEMO-102"
+}
