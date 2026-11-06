@@ -27,6 +27,10 @@ class ReviewIdentity:
     provider_run_id: str
     model_session_id: str
     actor_role: str
+    # Capability class is routing metadata, not an operational identity.  It is
+    # retained in trusted bindings for auditability but is deliberately not an
+    # independence collision dimension.
+    capability_class: str = ""
 
 
 _IDENTITY_DIMENSIONS = (
@@ -74,7 +78,11 @@ class ReviewManager:
             payload.update(
                 author_task_id=identity.task_id,
                 author_attempt_id=identity.attempt_id,
-                author_actor_role=identity.actor_role,
+                # Keep the historical field as the capability-class value for
+                # old readers; the operational identity has its own field.
+                author_actor_role=identity.capability_class or identity.actor_role,
+                author_operational_role=identity.actor_role,
+                author_capability_class=identity.capability_class,
             )
             connection.execute(
                 "UPDATE attempts SET author_session_id = ?, author_run_id = ?, payload_json = ? "
@@ -95,12 +103,22 @@ class ReviewManager:
     def author_identity(self, task_id: str) -> ReviewIdentity:
         attempt = self._attempt(task_id)
         payload = json.loads(attempt["payload_json"])
+        task = self.store.rows(
+            "SELECT capability_class FROM tasks WHERE task_id = ?", (task_id,)
+        )[0]
         return ReviewIdentity(
             task_id=str(payload.get("author_task_id", task_id)),
             attempt_id=str(payload.get("author_attempt_id", attempt["attempt_id"])),
             provider_run_id=str(attempt["author_run_id"] or attempt["attempt_id"]),
             model_session_id=str(attempt["author_session_id"] or "unknown-author-session"),
-            actor_role=str(payload.get("author_actor_role", "implementation")),
+            actor_role=str(
+                payload.get("author_operational_role", payload.get("author_actor_role", "implementation"))
+            ),
+            capability_class=str(
+                payload.get("author_capability_class")
+                or payload.get("author_actor_role")
+                or task["capability_class"]
+            ),
         )
 
     def _record_rejection(
@@ -167,7 +185,11 @@ class ReviewManager:
             "reviewer_attempt_id": reviewer.attempt_id,
             "reviewer_run_id": reviewer.provider_run_id,
             "reviewer_session_id": reviewer.model_session_id,
-            "reviewer_role": reviewer.actor_role,
+            # ``reviewer_role`` is retained for artifact compatibility and is
+            # the routed capability class.  Operational role is separate.
+            "reviewer_role": reviewer.capability_class or reviewer.actor_role,
+            "reviewer_operational_role": reviewer.actor_role,
+            "reviewer_capability_class": reviewer.capability_class or reviewer.actor_role,
             "lease_id": str(uuid.uuid4()),
             "lease_epoch": int(previous_epoch or 0) + 1,
             "fencing_token": secrets.token_hex(32),
@@ -380,7 +402,8 @@ class ReviewManager:
             attempt_id=str(assignment["reviewer_attempt_id"]),
             provider_run_id=str(assignment["reviewer_run_id"]),
             model_session_id=str(assignment["reviewer_session_id"]),
-            actor_role=str(assignment["reviewer_role"]),
+            actor_role=str(assignment.get("reviewer_operational_role", "verifier")),
+            capability_class=str(assignment.get("reviewer_capability_class", assignment["reviewer_role"])),
         )
         collision = next(
             (dimension for dimension in _IDENTITY_DIMENSIONS if getattr(author, dimension) == getattr(reviewer, dimension)),
