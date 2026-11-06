@@ -129,3 +129,16 @@ are unmet. See `g0-package/README.md` for the ordered owner actions and target h
 
 ## Next executable step
 Owner decides the `complex_implementation` reviewer binding (`registry-owner-decision.md`) and HERO_SCENARIO option (`g0-package/`).
+
+## G0 closeout preparation — 2026-11-06
+
+The trusted integration checkout ran `PYTHONPATH=tools/agentctl python3 -m agentctl gate G0`
+against `80ed500792b837510f142c570d94b3649f597881`. The command exited 0 and recorded an
+open phase-gate result at `agent-system/work/P0/gates/G0-result.json`: G0-01 through G0-11
+passed; G0-12, G0-13, and G0-14 remain open. This is gate evidence, not a closure claim.
+
+The proposal-only supervised-workflow amendment is in `g0-package/`. It reuses the existing
+`ManualProposalAdapter` and the normal ingest, verify, independent-review, and integration
+commands. It does not change active scope, criteria, schemas, policy, routing, or product
+code. No architecture audit or typed approval was fabricated. Unattended automation remains
+deferred after the recorded authentication refusal.
