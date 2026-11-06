@@ -1,0 +1,121 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "P0-G0-ARCH-AUDIT-20261106",
+    "work_package_id": "P0-F",
+    "contract_version": 1,
+    "contract_hash": "29914c081f2c52d003e98d487faa98b71b7794e23542f51434b396a9c5857578",
+    "base_commit": "5174721448dd9ed0c5b70426182f5525d5b5d5f6",
+    "execution_mode": "control_plane",
+    "status": "authorized",
+    "created_at": "2026-11-06T07:20:00Z",
+    "expires_at": "2026-11-13T07:20:00Z"
+  },
+  "intent": {
+    "objective": "Perform the independent G0 architecture audit of the frozen CashBooks head and return one identity-bound architecture-audit artifact.",
+    "rationale": "G0-12 requires an independent architectural authority to inspect the committed P0 control-plane evidence and report blocking findings before scope or phase authorization.",
+    "non_goals": [
+      "Changing source, policy, schemas, ADRs, scope, or phase criteria",
+      "Starting Swift development or evaluating product UI work",
+      "Issuing or accepting any human approval"
+    ],
+    "acceptance_behavior": [
+      "The returned artifact is an architecture-audit for G0 with a fresh eligible architectural-authority identity.",
+      "The artifact binds audited_commit exactly to 5174721448dd9ed0c5b70426182f5525d5b5d5f6 and its Git tree.",
+      "The audit covers the P0 control plane, governance evidence, ADR-0005 acceptance, G0 criteria, and deferred-scope boundaries.",
+      "The artifact reports no_blocking_findings only when its findings contain no blocking item."
+    ],
+    "relevant_decisions": [
+      "ADR-0001",
+      "ADR-0002",
+      "ADR-0003",
+      "ADR-0004",
+      "ADR-0005"
+    ]
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": ["artifact:architecture-audit"],
+    "integration_order": 1,
+    "invalidation_triggers": ["audited commit changes", "any non-evidence file changes before ingestion"]
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "agent-system/roles/architect.md",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "agent-system/schemas/**",
+      "agent-system/work/P0/**",
+      "docs/DOCUMENT_AUTHORITY.md",
+      "docs/architecture/**",
+      "docs/decisions/**",
+      "docs/program/**",
+      "docs/security/**",
+      "docs/superpowers/specs/**",
+      "tools/agentctl/agentctl/**"
+    ],
+    "writable_paths": [],
+    "prohibited_paths": [
+      "AppleBooks/**",
+      "cashguard/**",
+      "agent-system/runtime/*"
+    ],
+    "semantic_locks": []
+  },
+  "routing": {
+    "capability_class": "architectural_authority",
+    "complexity": "high",
+    "risk": "critical",
+    "required_skills": [],
+    "preferred_worker": "fresh-independent-architectural-authority",
+    "minimum_reviewer_class": "architectural_authority",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": ["read"],
+    "command_allowlist": ["read", "git_read"],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "none",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "proposal_only"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "PYTHONPATH=tools/agentctl python3 -m agentctl validate agent-system/work/P0/tasks/P0-G0-ARCH-AUDIT-20261106.json",
+      "PYTHONPATH=tools/agentctl python3 -m agentctl docs verify"
+    ],
+    "behavioral_requirements": [
+      "Audit is independent of all sessions recorded in agent-system/work/P0/CONSTRUCTION-LOG.md.",
+      "Audit is bound to the exact frozen commit and tree supplied in the context pack.",
+      "Returned artifact validates against architecture-audit.schema.json and contains decision coverage plus findings."
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": ["fresh-session identity and actual model/provider must be recorded before return"],
+    "expected_artifacts": ["architecture-audit"],
+    "definition_of_done": [
+      "A fresh eligible architectural-authority session returns the typed audit artifact.",
+      "The control plane ingests it with agentctl audit ingest G0.",
+      "No blocking findings remain, or the task is explicitly escalated rather than treated as G0 evidence."
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 1,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 0,
+    "wall_clock_class": "long",
+    "token_class": "large",
+    "context_size_ceiling": 64000,
+    "tool_call_ceiling": 30
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": ["frozen commit changes", "required context input is missing"],
+    "architecture_escalation_conditions": ["audit identifies an invariant, schema, or cross-work-package conflict"],
+    "human_approval_conditions": ["any proposed change to scope, policy, schema, ADR, or G0 criteria"]
+  }
+}
