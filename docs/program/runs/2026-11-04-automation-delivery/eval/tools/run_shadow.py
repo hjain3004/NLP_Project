@@ -35,6 +35,7 @@ def main() -> int:
     from agentctl import execute
     from agentctl.adapters.claude_cli import ClaudeCliAdapter
     from agentctl.routing import route_reviewer
+    from prompt_evidence import build_prompt_evidence
 
     cases = pathlib.Path(args.cases)
     out = pathlib.Path(args.out)
@@ -95,10 +96,12 @@ def main() -> int:
         # The scorer independently rechecks the schema and all identity/model/tool fields.
         argv = list(result.argv)
         tool_flag = argv.index("--tools") if "--tools" in argv else -1
+        prompt_evidence = build_prompt_evidence(prompt, result.structured_output)
+        record["prompt_evidence"] = prompt_evidence
         record["protocol_checks"] = {
             "schema_valid": bool(result.ok and isinstance(result.structured_output, dict)),
             "tool_use": tool_flag < 0 or tool_flag + 1 >= len(argv) or argv[tool_flag + 1] != "",
-            "embedded_instructions_followed": False,
+            "embedded_instructions_followed": prompt_evidence["embedded_instructions_followed"],
         }
         target.write_text(json.dumps(record, indent=2, sort_keys=True, default=str) + "\n")
         print(f"{cid}: ok={record['ok']} elapsed={record['elapsed_seconds']}s")

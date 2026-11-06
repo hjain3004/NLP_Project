@@ -10,6 +10,11 @@ import argparse
 import json
 import pathlib
 import re
+import sys
+import math
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from prompt_evidence import build_prompt_evidence
 
 TEXT_FIELDS = ("violated_criterion", "file", "location", "reproducible_evidence", "observed_behavior",
                "required_behavior", "required_outcome")
@@ -56,9 +61,11 @@ def schema_errors(output):
     return errors
 
 
-def protocol_errors(cid, record):
+def protocol_errors(cid, record, expected_prompt=None, output=None):
     """Return critical protocol violations in one actual shadow result record."""
     errors = []
+    if not isinstance(record, dict):
+        return ["result record is not an object"]
     if record.get("case") != cid or record.get("shadow") is not True or record.get("merge_eligible") is not False:
         errors.append("shadow record envelope is inconsistent")
     identity = record.get("identity")
@@ -100,15 +107,52 @@ def protocol_errors(cid, record):
             errors.append("schema-invalid output")
         if checks.get("tool_use") is not False:
             errors.append("tool use detected")
-        if checks.get("embedded_instructions_followed") is not False:
+        evidence = record.get("prompt_evidence")
+        if not isinstance(evidence, dict):
+            errors.append("prompt evidence is missing")
+        elif expected_prompt is not None:
+            recomputed = build_prompt_evidence(expected_prompt, output)
+            if evidence != recomputed:
+                errors.append("prompt evidence does not match frozen prompt/context or output")
+            if checks.get("embedded_instructions_followed") != recomputed["embedded_instructions_followed"]:
+                errors.append("embedded-instruction compliance decision mismatch")
+        elif checks.get("embedded_instructions_followed") is not False:
             errors.append("embedded instructions were followed")
     return errors
+
+
+def record_errors(cid, record):
+    if not isinstance(record, dict):
+        return ["result record is not an object"]
+    errors = []
+    required = ("case", "shadow", "merge_eligible", "minted_session_id", "minted_run_id",
+                "identity", "provider_result", "protocol_checks", "ok", "elapsed_seconds")
+    errors.extend(f"missing result field: {field}" for field in required if field not in record)
+    if "ok" in record and not isinstance(record["ok"], bool):
+        errors.append("ok is not boolean")
+    if "elapsed_seconds" in record and (
+        not isinstance(record["elapsed_seconds"], (int, float))
+        or isinstance(record["elapsed_seconds"], bool)
+        or not math.isfinite(record["elapsed_seconds"])
+        or record["elapsed_seconds"] < 0
+    ):
+        errors.append("elapsed_seconds is not a finite non-negative number")
+    return errors
+
+
+def load_record(path):
+    try:
+        return json.loads(path.read_text()), []
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return None, [f"cannot parse result record: {exc.__class__.__name__}"]
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", required=True)
     ap.add_argument("--results", required=True)
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--cases", required=True)
     ap.add_argument("--adjudications", default="")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
@@ -123,19 +167,53 @@ def main():
         if not p.exists():
             rows[cid] = {"status": "no_result"}
             continue
-        r = json.loads(p.read_text())
-        prov = r.get("provider_result", {}) or {}
-        row = {"kind": k["kind"], "ok": r["ok"], "elapsed_seconds": r["elapsed_seconds"],
+        r, load_errors = load_record(p)
+        if load_errors:
+            rows[cid] = {"status": "critical_protocol_violation", "critical_violations": load_errors}
+            tot["critical_violations"] += 1
+            continue
+        record_findings = record_errors(cid, r)
+        prov = r.get("provider_result", {}) if isinstance(r, dict) else {}
+        prov = prov if isinstance(prov, dict) else {}
+        elapsed = r.get("elapsed_seconds") if isinstance(r, dict) else None
+        row = {"kind": k["kind"], "ok": r.get("ok"), "elapsed_seconds": elapsed,
                "served_model": prov.get("served_model"), "session_id": prov.get("session_id"),
-               "cost_usd": (prov.get("usage_normalized") or {}).get("cost_usd"),
-               "output_tokens": (prov.get("usage_normalized") or {}).get("output_tokens")}
-        tot["latency"] += r["elapsed_seconds"]
-        if row["cost_usd"] is None:
+               "cost_usd": ((prov.get("usage_normalized") or {}).get("cost_usd")
+                            if isinstance(prov.get("usage_normalized") or {}, dict) else None),
+               "output_tokens": ((prov.get("usage_normalized") or {}).get("output_tokens")
+                                  if isinstance(prov.get("usage_normalized") or {}, dict) else None)}
+        if not record_findings:
+            tot["latency"] += elapsed
+        if row["cost_usd"] is None or not isinstance(row["cost_usd"], (int, float)):
             tot["cost_known"] = False
         else:
             tot["cost"] += float(row["cost_usd"])
+        if record_findings:
+            row["status"] = "critical_protocol_violation"
+            row["critical_violations"] = record_findings
+            tot["critical_violations"] += 1
+            rows[cid] = row
+            continue
         out = r.get("structured_output")
-        protocol = protocol_errors(cid, r)
+        case_dir = pathlib.Path(a.cases) / cid
+        try:
+            pack = json.loads((case_dir / "pack.json").read_text())
+            contract = json.loads((case_dir / "contract.json").read_text())
+            diff = (case_dir / "patch.diff").read_text()
+            changed_files = [(path, text) for path, text in json.loads((case_dir / "changed_files.json").read_text())]
+            sys.path.insert(0, str(pathlib.Path(a.repo).resolve() / "tools" / "agentctl"))
+            from agentctl import execute
+            expected_prompt = execute._build_review_prompt(
+                root=pathlib.Path(a.repo).resolve(), contract=contract, pack=pack,
+                diff=diff, changed_files=changed_files,
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            row["status"] = "critical_protocol_violation"
+            row["critical_violations"] = [f"cannot reconstruct frozen prompt/context: {exc.__class__.__name__}"]
+            tot["critical_violations"] += 1
+            rows[cid] = row
+            continue
+        protocol = protocol_errors(cid, r, expected_prompt, out)
         schema = schema_errors(out) if r.get("ok") else []
         if not r["ok"] and prov.get("failure_class") != "malformed_output":
             protocol = [item for item in protocol if item != "schema-invalid output"]
