@@ -1032,7 +1032,8 @@ def _attempt(
             attempt_id=lease.attempt_id,
             provider_run_id=run_id,
             model_session_id=str(result.session_id),
-            actor_role=spec.capability_class,
+            actor_role="implementation",
+            capability_class=spec.capability_class,
         ),
     )
     worker_notice = _disclosure({"worker": route.worker} if route.worker.is_candidate else {})
@@ -1229,7 +1230,8 @@ def review_task(
         attempt_id=f"REVIEW-{attempt_id}-{run_id[:8]}",
         provider_run_id=run_id,
         model_session_id=session_id,
-        actor_role=reviewer_route.capability_class,
+        actor_role="verifier",
+        capability_class=reviewer_route.capability_class,
     )
     assignment = manager.assign(task_id, reviewer)  # PermissionViolation on any shared identity
     remaining = (_parse_stamp(assignment["expires_at"]) - _now()).total_seconds() - LEASE_SAFETY_SECONDS
