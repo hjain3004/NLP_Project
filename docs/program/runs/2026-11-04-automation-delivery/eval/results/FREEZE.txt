@@ -1,0 +1,8 @@
+CashBooks shadow-evaluation freeze marker
+freeze_format: 1
+frozen_package_commit: b100f47ceaac61cf34b79be36f7a5e67362ed0b1
+repair_base_commit: f7b3a6e3faf4d2f4d63b9b3aa1b5c062adfed57a
+sha256sums_sha256: a25479660e6c67f572d30a362eca4432f1ad3ad63062d3c6f24a3875b0dbb3ee
+case_packs_oracles_answer_key: unchanged-and-verified
+candidate_calls_before_marker: 0
+candidate_calls_after_marker: 0
