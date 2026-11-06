@@ -143,6 +143,12 @@ commands. It does not change active scope, criteria, schemas, policy, routing, o
 code. No architecture audit or typed approval was fabricated. Unattended automation remains
 deferred after the recorded authentication refusal.
 
+The owner-supplied governance approval was checked directly: its HMAC, principal, action,
+proposal target, and proposal hash are valid. Preflight rejected it before application because
+its scope was `Approve exactly governance-change-set-v2`, while governance application requires
+`Apply only the exact governance-change-set proposal operations`. The record remains
+unconsumed; the corrected-scope authentication command is in `g0-package/owner-action-package.md`.
+
 ## Continued G0 preparation — 2026-11-06
 
 Option B is prepared but unapplied. Governance v2 revalidation returned `status=ok` with all

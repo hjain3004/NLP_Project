@@ -75,3 +75,7 @@ in `CHECKPOINT.md`.
   run, or audit result.
 - `owner-action-package.md` is the single ordered command package. Typed approval is claimed
   only where AGENTS.md §10, the ADR index, or G0 criteria explicitly require it.
+- The supplied governance approval was HMAC-valid and target-bound, but its scope was
+  `Approve exactly governance-change-set-v2`; the control plane requires
+  `Apply only the exact governance-change-set proposal operations`. It remains unconsumed
+  and is not usable for application.

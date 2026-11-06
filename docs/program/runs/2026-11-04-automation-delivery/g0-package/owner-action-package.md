@@ -50,16 +50,19 @@ PYTHONPATH=tools/agentctl python3 -m agentctl approve schema_commitment \
   --target-type governance-change-set \
   --target-id P0-GOVERNANCE-CHANGESET-2026-10-11-V2 \
   --target-hash 188264877cb5648faf7e710ccbbbbdad622af3b0f7ea28640c05bbeecdbb00b1 \
+  --scope "Apply only the exact governance-change-set proposal operations" \
   --reason "Approve exactly governance-change-set-v2" \
-  --out agent-system/work/P0/approvals/governance-change-set-v2-approval.json
+  --out agent-system/work/P0/approvals/governance-change-set-v2-approval-correct-scope.json
 PYTHONPATH=tools/agentctl python3 -m agentctl governance apply \
   --proposal agent-system/work/P0/proposals/governance-change-set-v2.json \
-  --approval agent-system/work/P0/approvals/governance-change-set-v2-approval.json \
+  --approval agent-system/work/P0/approvals/governance-change-set-v2-approval-correct-scope.json \
   --preflight
 ```
 
-The first command requires the configured human authentication/seal path. The second must
-not be run until that sealed artifact exists and independent review approves the follow-up.
+The first command requires the configured human authentication/seal path. The previously
+supplied record was HMAC-valid and target-bound but had the wrong scope, so it is preserved
+unconsumed and cannot be used. The second command must not be run until the correctly scoped
+sealed artifact exists and independent review approves the follow-up.
 
 ## 3. Review and accept ADR-0005
 
