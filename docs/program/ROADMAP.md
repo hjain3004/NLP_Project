@@ -18,6 +18,16 @@ typed approval requirements, review independence, and phase-gate status are unch
 G0 remains open until its actual closure requirements are met; delivering automation is
 not synonymous with closing G0. Do not expand this delivery into unrelated P0 cleanup.
 
+### Supervised development workflow
+
+Until unattended provider execution has a valid authenticated adapter and a recorded live
+cycle, development tasks may proceed only through the existing `ManualProposalAdapter`
+protocol: dispatch the immutable task/context pack, return the typed implementation
+manifest, run verifier-owned checks, obtain an independent review, and integrate only the
+unchanged verified candidate. This is a development workflow, not a product capability,
+does not promote a routing candidate, and does not close G0. It introduces no new control
+plane, schema, approval bypass, provider binding, or scope expansion.
+
 Report working behavior and remaining gaps, not test totals as a proxy for completion.
 Routing and integration are not complete until the documented live cycle succeeds.
 

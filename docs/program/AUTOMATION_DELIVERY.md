@@ -2,6 +2,11 @@
 
 **Owner request:** 2026-10-22. **Target:** end of 2026-10-22, America/Los_Angeles.
 **Status (2026-11-04):** Implemented for one provider path (Anthropic CLI) and observed end to end once in an isolated delivery clone; see `docs/program/runs/2026-11-04-automation-delivery/`. Not multi-provider, not a speedup or schedule claim, and G0 is not closed.
+**Status amendment:** Unattended provider execution and automatic candidate collection remain
+deferred after the recorded authentication refusal. The supported interim development path
+is the existing `ManualProposalAdapter` dispatch/return protocol followed by verifier-owned
+checks, independent review, and serialized integration. This does not alter G0 criteria,
+active product scope, routing bindings, approval policy, or invariants.
 **Baseline inspected:** `5442761372e8fa1b4681705062ba83c98adaa941`.
 
 The target is a working development workflow, not a test-count target. A deadline does
@@ -9,6 +14,8 @@ not establish completion or permit bypassing invariants, approvals, or review. T
 earlier plan deferred integration to P1 and live adapters to a later automation level;
 the owner's current request brings this infrastructure work forward. This document does
 not close G0, authorize application development, or retrospectively certify old work.
+The supervised interim path above is limited to manually returned, hash-bound artifacts;
+it is not evidence of unattended provider integration.
 
 ## Observable delivery
 
