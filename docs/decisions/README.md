@@ -64,4 +64,4 @@ number.
 | ADR-0002 | Python development CLI beside a Swift product | accepted |
 | ADR-0003 | Bounded standard-library schema validation | accepted |
 | ADR-0004 | Single Git root with history import | accepted |
-| ADR-0005 | Symmetric approval seal at Level 1 | proposed |
+| ADR-0005 | Symmetric approval seal at Level 1 | accepted |
