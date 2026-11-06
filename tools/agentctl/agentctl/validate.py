@@ -591,22 +591,6 @@ def _validate_cross_artifact_links(
 
     target_type = document["target_type"]
     target_id = document["target_id"]
-    if target_type == "adr":
-        if target_id != "ADR-0005":
-            _fail(
-                "dependency_unresolved",
-                "referenced approval target does not resolve",
-                target_type=target_type,
-                target_id=target_id,
-            )
-        adr_path = root / "docs/decisions/ADR-0005-symmetric-approval-seal.md"
-        if not adr_path.is_file() or not _path_is_safe(str(adr_path.relative_to(root)), root):
-            _fail("dependency_unresolved", "referenced approval target does not resolve", target_id=target_id)
-        text = adr_path.read_text(encoding="utf-8")
-        if not text.startswith("# ADR-0005 ") or "\n## Status\n\nstatus: proposed\n" not in text:
-            _fail("dependency_unresolved", "ADR approval target is not currently proposed", target_id=target_id)
-        _assert_link(document["target_hash"], sha256_of_file(adr_path), "target_hash")
-        return
     id_fields = {
         "phase-gate": "gate_id",
         "task-contract": "task_id",

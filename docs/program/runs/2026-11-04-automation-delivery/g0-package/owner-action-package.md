@@ -68,15 +68,16 @@ sealed artifact exists and independent review approves the follow-up.
 
 Use `adr-0005-acceptance-followup.md` for the exact mapping and tests. Current ADR byte hash:
 `672940b94ea9becca0aeb9d1fa92ff2405054f367bf2bccb2052f9e8d11a09bd`.
-The mapping cannot be activated before governance v2 because the schema and policy action do
-not yet exist in the live tree. Acceptance must be a separate sealed
+The mapping proposal is not active yet because it is outside governance v2's ten approved
+operation paths and requires its own independent review/integration. Acceptance must be a separate sealed
 `consequential_adr_acceptance`; do not change the ADR status during preparation.
 
 ## 4. Obtain and ingest G0-12
 
-Use `architecture-audit-dispatch.md`. The current final PR head is
-`4ed3c3d812725ac85315eeda3ac6cf155c3ba79c`; if Option B or any follow-up changes are
-applied, replace it with the final trusted head and recompute its tree hash. The authority
+Use `architecture-audit-dispatch.md`. The current reviewed-follow-up candidate is commit
+`41bbf85b6c4c55ad94dff1f4d2b0efd067cdec8f`, tree
+`b592e6df5658759b491a0b314e987f5186c8ef90`; after independent review, replace these with
+the final trusted head and recompute its tree hash. The authority
 must be independent and use the existing manual protocol or an already authorized provider
 path—never a fabricated artifact or a new adapter.
 
@@ -94,6 +95,32 @@ PYTHONPATH=tools/agentctl python3 -m agentctl hash --json --digest-only \
 Issue `scope_authorization` against the final scope hash and `phase_authorization` against
 the criteria hash using the existing `agentctl approve` command. These are the G0-13 and
 G0-14 approvals, not substitutes for ADR-0005 or governance approval.
+
+After the ADR target-mapping change is independently reviewed and integrated, and after the
+audit dispatch is accepted, the remaining owner-authenticated commands are:
+
+```sh
+PYTHONPATH=tools/agentctl python3 -m agentctl approve consequential_adr_acceptance \
+  --target-type adr --target-id ADR-0005 \
+  --target-hash 672940b94ea9becca0aeb9d1fa92ff2405054f367bf2bccb2052f9e8d11a09bd \
+  --scope "Accept ADR-0005 exactly as hashed; no other ADR or policy change" \
+  --reason "Accept ADR-0005 exactly as reviewed" \
+  --out agent-system/work/P0/approvals/ADR-0005-acceptance.json
+
+PYTHONPATH=tools/agentctl python3 -m agentctl approve scope_authorization \
+  --target-type document_set --target-id G0-scope \
+  --target-hash 897ab364e170ba0298584fb074cd3eed8a8fdba3c73e7fcf0b28addf1b047cb7 \
+  --scope "Authorize the approved CashBooks P0-to-G3 headless local-intelligence scope with deferred UI, recruiter release, Plaid, backend, Share Extension, and broader accounting" \
+  --reason "Authorize G0 active scope after HERO_SCENARIO Option B" \
+  --out agent-system/work/P0/approvals/G0-scope-approval.json
+
+PYTHONPATH=tools/agentctl python3 -m agentctl approve phase_authorization \
+  --target-type phase_gate --target-id G0 \
+  --target-hash c1a199c1aa820932108314834c81246db25a6acb9031a34a5aa2daec673cff1c \
+  --scope "Authorize evaluation and closure of G0 against the committed G0 criteria" \
+  --reason "Authorize G0 phase evaluation after independent audit" \
+  --out agent-system/work/P0/approvals/G0-phase-approval.json
+```
 
 ## 6. Close only after all evidence exists
 

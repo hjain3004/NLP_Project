@@ -81,13 +81,6 @@ _APPROVAL_TARGETS = {
             "proposal_id",
         ),
     },
-    "adr": {
-        "ADR-0005": (
-            "docs/decisions/ADR-0005-symmetric-approval-seal.md",
-            "adr",
-            None,
-        ),
-    },
 }
 
 
@@ -136,26 +129,6 @@ def resolve_approval_target(
             "approval_target_unreadable",
             "approval target cannot be read",
             path=relative_path,
-        )
-    if target_type == "adr":
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise ApprovalRejected(
-                "approval_target_unreadable", "ADR target cannot be read", path=relative_path
-            ) from exc
-        if not text.startswith("# ADR-0005 ") or "\n## Status\n\nstatus: proposed\n" not in text:
-            raise ApprovalRejected(
-                "approval_target_stale",
-                "ADR target must be ADR-0005 with proposed status",
-                path=relative_path,
-            )
-        return ApprovalTarget(
-            target_type=target_type,
-            target_id=target_id,
-            path=path,
-            payload={"artifact_type": "adr", "target_id": target_id, "status": "proposed"},
-            target_hash=hashlib.sha256(path.read_bytes()).hexdigest(),
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))

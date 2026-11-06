@@ -45,28 +45,19 @@ class ApprovalTests(unittest.TestCase):
     root = _repo_root()
 
     def setUp(self) -> None:
-        self.committed_fixture = json.loads(
+        self.fixture = json.loads(
             (self.root / "agent-system/examples/valid/08-human-approval.json").read_text(
                 encoding="utf-8"
             )
         )
-        self.fixture = copy.deepcopy(self.committed_fixture)
-        self.fixture["authorized_action"] = "phase_authorization"
-        self.fixture["target_type"] = "phase-gate"
-        self.fixture["target_id"] = "EX-GATE-001"
-        self.fixture["target_hash"] = "834625540822aac70d819972077cb28ca2614d3ab12951cf7b6298185198876a"
-        self.fixture["scope"] = "Synthetic acceptance fixture only"
-        self.fixture["reason"] = "Exercise the positive approval-validation path with a public synthetic fixture key"
-        self.fixture["authentication_method"] = "interactive_tty_with_key_unlock"
-        self.fixture = seal_approval(self.fixture, SYNTHETIC_FIXTURE_KEY)
 
     def test_committed_valid_fixture_is_cryptographically_accepted(self) -> None:
         verified = verify_approval(
-            self.committed_fixture,
+            self.fixture,
             SYNTHETIC_FIXTURE_KEY,
-            expected_action=self.committed_fixture["authorized_action"],
-            expected_target_hash=self.committed_fixture["target_hash"],
-            expected_scope=self.committed_fixture["scope"],
+            expected_action="phase_authorization",
+            expected_target_hash=self.fixture["target_hash"],
+            expected_scope=self.fixture["scope"],
             now=datetime(2026, 9, 26, tzinfo=timezone.utc),
         )
         self.assertEqual(verified["approval_id"], "EX-APPROVAL-001")
@@ -583,23 +574,6 @@ class ApprovalTests(unittest.TestCase):
                 reason="Approve exact schema",
                 policy={"tiers": {"schema_commitment": ["keychain_backed", "local_authentication"]}},
                 requested_authentication_method="interactive_tty_with_key_unlock",
-            )
-        self.assertEqual(raised.exception.code, "approval_weaker_method")
-
-    def test_consequential_adr_acceptance_requires_strong_authentication(self) -> None:
-        record = copy.deepcopy(self.committed_fixture)
-        record["authorized_action"] = "consequential_adr_acceptance"
-        record["target_type"] = "adr"
-        record["target_id"] = "ADR-0005"
-        record["target_hash"] = "672940b94ea9becca0aeb9d1fa92ff2405054f367bf2bccb2052f9e8d11a09bd"
-        record["authentication_method"] = "interactive_tty_with_key_unlock"
-        record = seal_approval(record, SYNTHETIC_FIXTURE_KEY)
-        with self.assertRaises(ApprovalRejected) as raised:
-            verify_approval(
-                record,
-                SYNTHETIC_FIXTURE_KEY,
-                expected_action="consequential_adr_acceptance",
-                policy={"tiers": {"consequential_adr_acceptance": ["keychain_backed", "local_authentication"]}},
             )
         self.assertEqual(raised.exception.code, "approval_weaker_method")
 

@@ -9,6 +9,16 @@ for this audit.
 
 ## Required independent dispatch
 
+Current trusted audit candidate (after the applied governance and follow-ups):
+
+```text
+commit: 41bbf85b6c4c55ad94dff1f4d2b0efd067cdec8f
+tree:   b592e6df5658759b491a0b314e987f5186c8ef90
+```
+
+If the independent review requires a repair, discard these two values and recompute them
+from the reviewed final commit before dispatch.
+
 An authorized operator must create or select the immutable G0 audit task contract at the
 final intended commit. The contract must name capability class
 `architectural_authority`, the exact audited commit, the G0 criteria, the authority map,
@@ -72,3 +82,8 @@ rejection and repair through the governance workflow; do not edit the audit into
 The current `agentctl run` command cannot perform this dispatch because the registered
 architectural-authority provider has no adapter. The manual adapter protocol above is the
 existing authorized path; no new adapter or provider binding is proposed.
+
+The separate code-review attempt for the ADR target mapping correctly blocked the mapping
+because `approval.py` is outside governance-change-set-v2's approved ten-operation set. That
+mapping was removed from the active tree; this audit package is unaffected and remains bound
+to the current commit/tree above.
