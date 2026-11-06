@@ -15,6 +15,11 @@ of duty 6 and AGENTS.md §10. The governance proposal adds the missing
 The existing resolver only registers JSON governance proposals. It must gain a dedicated,
 fixed ADR target mapping (not caller-selected path discovery):
 
+This mapping is intentionally not active in the current tree. An independent review found
+that adding it to `approval.py` is outside governance-change-set-v2's ten approved operation
+paths. It is therefore a separate engineering proposal requiring its own write set,
+independent review, and ordinary integration before any ADR approval can be issued.
+
 ```text
 target_type: adr
 target_id: ADR-0005
