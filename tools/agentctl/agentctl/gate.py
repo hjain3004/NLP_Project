@@ -85,7 +85,7 @@ def _audit_dispatch_binding(
         "artifact_type", "dispatch_id", "audit_id", "task_id", "attempt_id",
         "contract_hash", "context_hash", "gate_id", "pass_id", "audited_commit",
         "audited_tree_hash", "capability_class", "operational_role", "auditor_role", "auditor_provider",
-        "auditor_model", "auditor_session_id", "auditor_run_id", "identity_evidence_ref",
+        "auditor_model", "auditor_model_version", "auditor_session_id", "auditor_run_id", "identity_evidence_ref",
         "identity_evidence_hash", "author_identities", "unknown_author_identities",
         "state", "issued_at", "expires_at", _AUDIT_DISPATCH_SEAL,
     )
@@ -112,7 +112,7 @@ def _audit_dispatch_binding(
     for field in (
         "dispatch_id", "audit_id", "task_id", "attempt_id", "contract_hash", "context_hash",
         "pass_id", "audited_commit", "audited_tree_hash", "auditor_provider", "auditor_model",
-        "auditor_session_id", "auditor_run_id", "identity_evidence_ref", "identity_evidence_hash",
+        "auditor_model_version", "auditor_session_id", "auditor_run_id", "identity_evidence_ref", "identity_evidence_hash",
     ):
         if not isinstance(assignment[field], str) or not assignment[field]:
             raise PermissionViolation("audit dispatch identity binding is malformed", field=field)
@@ -142,7 +142,12 @@ def _audit_dispatch_binding(
     if tree != assignment["audited_tree_hash"]:
         raise PermissionViolation("audit dispatch target tree does not match the frozen target")
     registry = load_registry(root).get("architectural_authority")
-    if registry is None or registry.get("provider") != assignment["auditor_provider"] or registry.get("model_id") != assignment["auditor_model"]:
+    if (
+        registry is None
+        or registry.get("provider") != assignment["auditor_provider"]
+        or registry.get("model_id") != assignment["auditor_model"]
+        or registry.get("model_version") != assignment["auditor_model_version"]
+    ):
         raise PermissionViolation("audit dispatch model is not the registered architectural authority")
     return dict(assignment)
 
@@ -1006,6 +1011,8 @@ def ingest_audit(
     dispatch_key: bytes | None = None,
 ) -> dict[str, Any]:
     """Reject construction authors and optionally persist an architecture audit."""
+    if store is None:
+        raise PermissionViolation("architecture audit ingestion requires the controller event store")
     if audit.get("artifact_type") != "architecture-audit" or audit.get("gate_id") != gate_id:
         raise InvalidArtifact("architecture audit does not bind the requested gate")
     log_path = Path(construction_log)
