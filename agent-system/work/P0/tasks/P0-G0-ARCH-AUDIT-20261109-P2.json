@@ -1,0 +1,33 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "P0-G0-ARCH-AUDIT-20261109-P2",
+    "work_package_id": "P0-F",
+    "contract_version": 1,
+    "contract_hash": "24ac74bd376ed9c3e7feefaca9e66a55aaca8fc9b83f0461d1d560b89ed2c517",
+    "base_commit": "f590b3302eebbfdbd7af25af1658cab32bc280fc",
+    "execution_mode": "control_plane",
+    "status": "authorized",
+    "created_at": "2026-11-09T18:00:00Z",
+    "expires_at": "2026-11-16T18:00:00Z"
+  },
+  "intent": {
+    "objective": "Perform an independent G0 architecture audit of the repaired CashBooks control plane and return one identity-bound architecture-audit artifact.",
+    "rationale": "The prior audit could not establish sufficient coverage and exposed a self-declared independence path; this fresh bounded audit evaluates the repaired head.",
+    "non_goals": ["Changing source, policy, schemas, ADRs, scope, or phase criteria", "Starting Swift development or evaluating product UI work", "Issuing or accepting any human approval"],
+    "acceptance_behavior": ["The returned artifact is an architecture-audit for G0 with a fresh eligible architectural-authority identity.", "The artifact binds audited_commit exactly to the frozen dispatch head and its Git tree.", "The audit covers the repaired ingestion binding, P0 control plane, governance evidence, ADR-0005 acceptance, G0 criteria, and deferred-scope boundaries.", "The artifact reports no_blocking_findings only when its findings contain no blocking item."],
+    "relevant_decisions": ["ADR-0001", "ADR-0002", "ADR-0003", "ADR-0004", "ADR-0005"]
+  },
+  "dependencies": {"requires": [], "consumes": [], "produces": ["artifact:architecture-audit"], "integration_order": 1, "invalidation_triggers": ["audited commit changes", "any non-evidence file changes before ingestion"]},
+  "scope": {
+    "readable_paths": ["AGENTS.md", "agent-system/roles/architect.md", "agent-system/policies/**", "agent-system/routing/**", "agent-system/schemas/**", "agent-system/work/P0/**", "docs/DOCUMENT_AUTHORITY.md", "docs/architecture/**", "docs/decisions/**", "docs/program/**", "docs/security/**", "docs/superpowers/specs/**", "tools/agentctl/agentctl/**", "tools/agentctl/tests/test_gate.py"],
+    "writable_paths": [],
+    "prohibited_paths": ["AppleBooks/**", "cashguard/**", "agent-system/runtime/*"],
+    "semantic_locks": []
+  },
+  "routing": {"capability_class": "architectural_authority", "complexity": "high", "risk": "critical", "required_skills": [], "preferred_worker": "fresh-independent-architectural-authority", "minimum_reviewer_class": "architectural_authority", "required_provider_diversity": false},
+  "permissions": {"tool_allowlist": ["read"], "command_allowlist": ["read", "git_read"], "network": false, "secret_access": false, "may_modify_tests": "none", "destructive_commands": false, "external_side_effects": false, "enforcement_class": "proposal_only"},
+  "verification": {"deterministic_checks": ["PYTHONPATH=tools/agentctl python3 -m agentctl validate agent-system/work/P0/tasks/P0-G0-ARCH-AUDIT-20261109-P2.json", "PYTHONPATH=tools/agentctl python3 -m agentctl docs verify"], "behavioral_requirements": ["Audit is independent of all sessions recorded in agent-system/work/P0/CONSTRUCTION-LOG.md.", "Audit is bound to the exact frozen commit and tree supplied in the context pack.", "Returned artifact validates against architecture-audit.schema.json and contains decision coverage plus findings."], "protected_checks": [], "expected_artifacts": ["architecture-audit"], "definition_of_done": ["A fresh eligible architectural-authority session returns the typed audit artifact.", "The result is independently ingested against the trusted dispatch binding."]},
+  "budgets": {"maximum_attempts": 1, "maximum_repair_cycles": 0, "maximum_artifact_corrections": 0, "wall_clock_class": "bounded", "token_class": "large", "context_size_ceiling": 64000, "tool_call_ceiling": 0},
+  "escalation": {"local_repair_conditions": [], "capability_escalation_conditions": [], "replan_conditions": ["insufficient coverage or stale target"], "architecture_escalation_conditions": ["architecture, privacy, financial, or cross-work-package conflict"], "human_approval_conditions": ["phase closure, scope change, schema or invariant change"]}
+}
