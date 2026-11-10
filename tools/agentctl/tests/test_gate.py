@@ -13,7 +13,7 @@ from unittest import mock
 
 from agentctl.approval import ApprovalManager, ApprovalRejected, create_approval
 from agentctl.errors import InvalidArtifact, PermissionViolation
-from agentctl.gate import GateEvaluator, ingest_audit
+from agentctl.gate import GateEvaluator, ingest_audit, register_audit_dispatch
 from agentctl.hashing import sha256_hex, sha256_of_file, sha256_of_json
 from agentctl.store import EventStore
 
@@ -1297,8 +1297,8 @@ class AuditTests(unittest.TestCase):
             "gate_id": "G0",
             "pass_id": "pass-1",
             "auditor_role": "architectural_authority",
-            "auditor_provider": "fixture-provider",
-            "auditor_model": "fixture-model",
+            "auditor_provider": "openai",
+            "auditor_model": "gpt-5.6-sol",
             "auditor_session_id": session,
             "auditor_run_id": run,
             "audited_commit": commit,
@@ -1314,6 +1314,35 @@ class AuditTests(unittest.TestCase):
             "findings": [],
             "verdict": "no_blocking_findings",
             "independence_attestation": {"fresh_session": True, "distinct": True},
+        }
+
+    def _dispatch(self, audit: dict) -> dict:
+        return {
+            "artifact_type": "architecture-audit-dispatch",
+            "dispatch_id": "DISPATCH-AUDIT-1",
+            "audit_id": audit["audit_id"],
+            "task_id": "TASK-AUDIT-1",
+            "attempt_id": "ATTEMPT-AUDIT-1",
+            "contract_hash": "c" * 64,
+            "context_hash": "d" * 64,
+            "gate_id": "G0",
+            "pass_id": audit["pass_id"],
+            "audited_commit": audit["audited_commit"],
+            "audited_tree_hash": audit["audited_tree_hash"],
+            "capability_class": "architectural_authority",
+            "operational_role": "architectural_auditor",
+            "auditor_role": audit["auditor_role"],
+            "auditor_provider": audit["auditor_provider"],
+            "auditor_model": audit["auditor_model"],
+            "auditor_session_id": audit["auditor_session_id"],
+            "auditor_run_id": audit["auditor_run_id"],
+            "identity_evidence_ref": "controller-evidence:test",
+            "identity_evidence_hash": "e" * 64,
+            "author_identities": ["author-session", "author-run"],
+            "unknown_author_identities": False,
+            "state": "active",
+            "issued_at": "2026-01-01T00:00:00Z",
+            "expires_at": "2099-01-01T00:00:00Z",
         }
 
     def test_construction_author_identity_is_rejected(self) -> None:
@@ -1370,15 +1399,29 @@ class AuditTests(unittest.TestCase):
             log = directory / "CONSTRUCTION-LOG.md"
             log.write_text("author_session_id: authored-session\n")
             store = EventStore(directory / "runtime.sqlite3", repository_root=self.root)
+            audit = self._audit()
+            register_audit_dispatch(store, self._dispatch(audit), source_path="test-assignment.json")
             result = ingest_audit(
                 "G0",
-                self._audit(),
+                audit,
                 construction_log=log,
                 store=store,
                 repository_root=self.root,
             )
             self.assertEqual(result["audit_id"], "AUDIT-1")
-            self.assertEqual(store.scalar("SELECT COUNT(*) FROM artifacts"), 1)
+            self.assertEqual(store.scalar("SELECT COUNT(*) FROM artifacts"), 2)
+
+    def test_store_backed_ingestion_requires_controller_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            log = directory / "CONSTRUCTION-LOG.md"
+            log.write_text("author_session_id: authored-session\n")
+            store = EventStore(directory / "runtime.sqlite3", repository_root=self.root)
+            with self.assertRaises(PermissionViolation):
+                ingest_audit(
+                    "G0", self._audit(), construction_log=log, store=store,
+                    repository_root=self.root,
+                )
 
 
 if __name__ == "__main__":

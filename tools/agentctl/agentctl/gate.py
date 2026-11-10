@@ -18,10 +18,11 @@ from .config import load as load_config
 from .errors import InvalidArtifact, PermissionViolation, PlanningError
 from .events import make_event
 from .hashing import sha256_hex, sha256_of_file, sha256_of_json
+from .routing import load_registry
 from .store import EventStore
 from .validate import validate_artifact
 
-__all__ = ["GateEvaluator", "ingest_audit"]
+__all__ = ["GateEvaluator", "ingest_audit", "register_audit_dispatch"]
 
 _G0_CLOSURE_PATHS = frozenset(
     {
@@ -42,6 +43,121 @@ def _timestamp() -> str:
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
+
+
+_AUDIT_DISPATCH_TYPE = "architecture-audit-dispatch"
+_AUDIT_OPERATIONAL_ROLE = "architectural_auditor"
+
+
+def _parse_audit_time(value: object, *, field: str) -> dt.datetime:
+    if not isinstance(value, str):
+        raise PermissionViolation("audit dispatch timestamp is absent", field=field)
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PermissionViolation("audit dispatch timestamp is malformed", field=field) from exc
+    if parsed.tzinfo is None:
+        raise PermissionViolation("audit dispatch timestamp lacks timezone", field=field)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def _audit_dispatch_binding(
+    assignment: Mapping[str, Any], *, root: Path, now: dt.datetime | None = None
+) -> dict[str, Any]:
+    required = (
+        "artifact_type", "dispatch_id", "audit_id", "task_id", "attempt_id",
+        "contract_hash", "context_hash", "gate_id", "pass_id", "audited_commit",
+        "audited_tree_hash", "capability_class", "operational_role", "auditor_role", "auditor_provider",
+        "auditor_model", "auditor_session_id", "auditor_run_id", "identity_evidence_ref",
+        "identity_evidence_hash", "author_identities", "unknown_author_identities",
+        "state", "issued_at", "expires_at",
+    )
+    missing = [field for field in required if field not in assignment]
+    if missing:
+        raise PermissionViolation("audit dispatch evidence is incomplete", missing=missing)
+    if assignment["artifact_type"] != _AUDIT_DISPATCH_TYPE:
+        raise PermissionViolation("audit dispatch evidence has the wrong artifact type")
+    if assignment["state"] != "active":
+        raise PermissionViolation("audit dispatch assignment is not active", state=assignment["state"])
+    if (
+        assignment["gate_id"] != "G0"
+        or assignment["operational_role"] != _AUDIT_OPERATIONAL_ROLE
+        or assignment["auditor_role"] != "architectural_authority"
+    ):
+        raise PermissionViolation("audit dispatch role or gate is not authorized")
+    if assignment["capability_class"] != "architectural_authority":
+        raise PermissionViolation("audit dispatch capability is not architectural_authority")
+    for field in (
+        "dispatch_id", "audit_id", "task_id", "attempt_id", "contract_hash", "context_hash",
+        "pass_id", "audited_commit", "audited_tree_hash", "auditor_provider", "auditor_model",
+        "auditor_session_id", "auditor_run_id", "identity_evidence_ref", "identity_evidence_hash",
+    ):
+        if not isinstance(assignment[field], str) or not assignment[field]:
+            raise PermissionViolation("audit dispatch identity binding is malformed", field=field)
+    if not isinstance(assignment["author_identities"], list) or not all(
+        isinstance(item, str) and item for item in assignment["author_identities"]
+    ):
+        raise PermissionViolation("audit dispatch author identities are malformed")
+    if assignment["unknown_author_identities"] is not False:
+        raise PermissionViolation("audit dispatch has unknown author identities")
+    if assignment["auditor_session_id"] in assignment["author_identities"] or assignment["auditor_run_id"] in assignment["author_identities"]:
+        raise PermissionViolation("audit dispatch auditor identity is an author identity")
+    if len(assignment["identity_evidence_hash"]) != 64 or any(
+        character not in "0123456789abcdef" for character in assignment["identity_evidence_hash"]
+    ):
+        raise PermissionViolation("audit dispatch identity evidence hash is malformed")
+    current = (now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
+    if _parse_audit_time(assignment["expires_at"], field="expires_at") <= current:
+        raise PermissionViolation("audit dispatch assignment has expired")
+    _parse_audit_time(assignment["issued_at"], field="issued_at")
+    try:
+        tree = subprocess.check_output(
+            ["git", "rev-parse", f"{assignment['audited_commit']}^{{tree}}"],
+            cwd=root, text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise PermissionViolation("audit dispatch target is not a repository commit") from exc
+    if tree != assignment["audited_tree_hash"]:
+        raise PermissionViolation("audit dispatch target tree does not match the frozen target")
+    registry = load_registry(root).get("architectural_authority")
+    if registry is None or registry.get("provider") != assignment["auditor_provider"] or registry.get("model_id") != assignment["auditor_model"]:
+        raise PermissionViolation("audit dispatch model is not the registered architectural authority")
+    return dict(assignment)
+
+
+def register_audit_dispatch(
+    store: EventStore, assignment: Mapping[str, Any], *, source_path: str = ""
+) -> dict[str, Any]:
+    """Record one controller-owned, identity-bound manual audit assignment."""
+    binding = _audit_dispatch_binding(assignment, root=store.repository_root)
+    current_head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=store.repository_root, text=True
+    ).strip()
+    if current_head != binding["audited_commit"]:
+        raise PermissionViolation("audit dispatch must be registered at the frozen repository head")
+    artifact_id = f"audit-dispatch:{binding['dispatch_id']}"
+    event = make_event(
+        event_type="architecture_audit_dispatched",
+        reason_code="trusted_audit_assignment",
+        actor_role="control_plane",
+        phase_id="G0",
+        repository_commits=[binding["audited_commit"]],
+        artifact_refs=[artifact_id, binding["audit_id"]],
+    )
+
+    def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+        connection.execute(
+            "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, content_hash, path, integrable, payload_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+            (
+                artifact_id, _AUDIT_DISPATCH_TYPE, binding["task_id"], binding["attempt_id"],
+                sha256_of_json(binding), source_path,
+                json.dumps(binding, sort_keys=True, separators=(",", ":")),
+            ),
+        )
+        return {"dispatch_id": binding["dispatch_id"], "audit_id": binding["audit_id"], "state": "active"}
+
+    return dict(store.execute(f"audit-dispatch:{binding['dispatch_id']}", event, mutation))
 
 
 class GateEvaluator:
@@ -956,6 +1072,27 @@ def ingest_audit(
                 evaluated_commit=expected_commit,
                 disallowed_paths=disallowed,
             )
+    if store is not None:
+        dispatch_rows = store.rows(
+            "SELECT payload_json FROM artifacts WHERE artifact_type = ? AND integrable = 1",
+            (_AUDIT_DISPATCH_TYPE,),
+        )
+        assignments = [
+            json.loads(row["payload_json"])
+            for row in dispatch_rows
+            if json.loads(row["payload_json"]).get("audit_id") == audit.get("audit_id")
+        ]
+        if not assignments:
+            raise PermissionViolation("architecture audit has no trusted controller dispatch assignment")
+        assignment = _audit_dispatch_binding(
+            assignments[-1], root=Path(repository_root or store.repository_root)
+        )
+        for field in (
+            "audit_id", "gate_id", "pass_id", "auditor_role", "auditor_provider", "auditor_model",
+            "auditor_session_id", "auditor_run_id", "audited_commit", "audited_tree_hash",
+        ):
+            if audit.get(field) != assignment.get(field):
+                raise PermissionViolation("architecture audit does not match trusted dispatch", field=field)
     result = {
         "audit_id": audit["audit_id"],
         "gate_id": gate_id,
