@@ -673,6 +673,11 @@ class GateTests(unittest.TestCase):
             shutil.copytree(
                 self.root / "agent-system/policies", root / "agent-system/policies"
             )
+            (root / "agent-system/routing").mkdir(parents=True)
+            shutil.copy2(
+                self.root / "agent-system/routing/capability-registry.json",
+                root / "agent-system/routing/capability-registry.json",
+            )
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             subprocess.run(
                 ["git", "-C", str(root), "config", "user.email", "test@example.invalid"],
@@ -728,8 +733,8 @@ class GateTests(unittest.TestCase):
                 "gate_id": "G0",
                 "pass_id": "merge",
                 "auditor_role": "architectural_authority",
-                "auditor_provider": "fixture-provider",
-                "auditor_model": "fixture-model",
+                "auditor_provider": "openai",
+                "auditor_model": "gpt-5.6-sol",
                 "auditor_session_id": "fresh-session",
                 "auditor_run_id": "fresh-run",
                 "audited_commit": audited_commit,
@@ -768,6 +773,42 @@ class GateTests(unittest.TestCase):
                 check=True,
             )
             store = EventStore(temporary_root / "runtime.sqlite3", repository_root=root)
+            dispatch = seal_audit_dispatch(
+                {
+                    "artifact_type": "architecture-audit-dispatch",
+                    "dispatch_id": "DISPATCH-REPLAY-IDEMPOTENCY",
+                    "audit_id": clean_audit["audit_id"],
+                    "task_id": "TASK-REPLAY-IDEMPOTENCY",
+                    "attempt_id": "ATTEMPT-REPLAY-IDEMPOTENCY",
+                    "contract_hash": "c" * 64,
+                    "context_hash": "d" * 64,
+                    "gate_id": "G0",
+                    "pass_id": clean_audit["pass_id"],
+                    "audited_commit": audited_commit,
+                    "audited_tree_hash": audited_tree,
+                    "capability_class": "architectural_authority",
+                    "operational_role": "architectural_auditor",
+                    "auditor_role": clean_audit["auditor_role"],
+                    "auditor_provider": clean_audit["auditor_provider"],
+                    "auditor_model": clean_audit["auditor_model"],
+                    "auditor_session_id": clean_audit["auditor_session_id"],
+                    "auditor_run_id": clean_audit["auditor_run_id"],
+                    "identity_evidence_ref": "controller:test",
+                    "identity_evidence_hash": "e" * 64,
+                    "author_identities": ["author-session", "author-run"],
+                    "unknown_author_identities": False,
+                    "state": "active",
+                    "issued_at": "2026-01-01T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+                key,
+            )
+            evaluated_head = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+            ).strip()
+            subprocess.run(["git", "-C", str(root), "checkout", "-q", audited_commit], check=True)
+            register_audit_dispatch(store, dispatch, key=key)
+            subprocess.run(["git", "-C", str(root), "checkout", "-q", evaluated_head], check=True)
             ApprovalManager(store, key=key).register(approval, path=approval_ref)
             evaluator = GateEvaluator(root, approval_key=key, store=store)
             first = evaluator.evaluate(source)

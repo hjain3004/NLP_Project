@@ -197,6 +197,7 @@ class GateEvaluator:
         repository_root: str | os.PathLike[str] | None = None,
         *,
         approval_key: bytes | None = None,
+        dispatch_key: bytes | None = None,
         store: EventStore | None = None,
         command_timeout_seconds: int = 300,
     ) -> None:
@@ -206,6 +207,7 @@ class GateEvaluator:
             else load_config().repo_root
         )
         self.approval_key = approval_key
+        self.dispatch_key = dispatch_key if dispatch_key is not None else approval_key
         self.store = store
         self.command_timeout_seconds = command_timeout_seconds
 
@@ -322,6 +324,7 @@ class GateEvaluator:
                                     store=self.store if persist_audit else None,
                                     source_path=reference,
                                     repository_root=self.root,
+                                    dispatch_key=self.dispatch_key,
                                 )
                             except (InvalidArtifact, PermissionViolation, subprocess.SubprocessError):
                                 result = "fail"
