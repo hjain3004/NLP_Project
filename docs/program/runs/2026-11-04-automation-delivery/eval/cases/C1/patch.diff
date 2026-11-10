@@ -1,0 +1,581 @@
+diff --git a/tools/agentctl/agentctl/commands/verify.py b/tools/agentctl/agentctl/commands/verify.py
+index 682880d79b1fb27cf6af25fcccb9bb00d8929227..38b0d6dff834cfa60bf29269ae0531e97a6cafd1 100644
+--- a/tools/agentctl/agentctl/commands/verify.py
++++ b/tools/agentctl/agentctl/commands/verify.py
+@@ -1,16 +1,19 @@
+ """``agentctl verify <task-id>`` — run trusted deterministic verification."""
+ 
+ import json
+ import sys
+ 
++from ..gate_runner import drop_sensitive_environment
+ from ..verify import verify_task
+ 
+ NAME = "verify"
+ 
+ 
+ def run(argv: list[str]) -> int:
++    # Verification runs gates at this process's uid; it reads no credential, so keep none.
++    drop_sensitive_environment()
+     if len(argv) != 1:
+         print("usage: agentctl verify <task-id>", file=sys.stderr)
+         return 2
+     print(json.dumps(verify_task(argv[0]), sort_keys=True, separators=(",", ":")))
+     return 0
+diff --git a/tools/agentctl/agentctl/integrate.py b/tools/agentctl/agentctl/integrate.py
+index 78a61fb51c6dfb2c0bff15d60f7bafef4da1c3c4..6fbb8502b1fb84bd4978a89c827cfa4806dfcdec 100644
+--- a/tools/agentctl/agentctl/integrate.py
++++ b/tools/agentctl/agentctl/integrate.py
+@@ -48,40 +48,41 @@ from .integration_queue import (
+     IntegrationQueue,
+     IntegrationRefused,
+     IntegrationRejected,
+     build_queue,
+     claim_integration,
+     complete_integration,
+     current_lease,
+     latest_intent,
+     lease_is_live,
+     new_lease,
+     next_lease_epoch,
+     record_reconciliation,
+     record_rejection,
+     renew_lease,
+     run_gate_commands,
+     store_query,
+ )
+ from .interfaces import current_interface_binding
+ from .locks import semantic_lock_claims
+ from .models import TaskState
++from .scheduler import NO_DETERMINISTIC_CHECKS, UNSANDBOXED_GATE_HIGH_RISK, UNSANDBOXED_GATE_REFUSED_RISKS
+ from .store import EventStore
+ from .validate import validate_artifact
+ 
+ __all__ = [
+     "DEFAULT_BRANCH",
+     "IntegrationSettings",
+     "exit_code_for",
+     "integrate",
+     "integrate_task",
+ ]
+ 
+ DEFAULT_BRANCH = "agentctl/integration"
+ _PROTECTED_BRANCHES = frozenset({"main", "master"})
+ _TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+ _ZERO = "0" * 40
+ _OK_OUTCOMES = frozenset({"integrated", "already_integrated", "reconciled"})
+ _DRIVER_KEY = re.compile(
+     r"^(filter\..+\.(clean|smudge|process)|merge\..+\.driver|diff\..+\.(command|textconv))$"
+ )
+ 
+@@ -517,40 +518,55 @@ class _Evidence:
+     review_id: str
+     review_payload: Mapping[str, Any]
+     implementation_manifest: Mapping[str, Any]
+     interface_hashes: tuple[tuple[str, str], ...]
+     checks: tuple[str, ...]
+ 
+ 
+ def _reject(reason: str, outcome: str, message: str, **context: object) -> IntegrationRejected:
+     return IntegrationRejected(message, reason_code=reason, outcome=outcome, **context)
+ 
+ 
+ def _verify(store: EventStore, git: _Git, task_id: str, integrator_id: str) -> _Evidence:
+     """Verify every binding against stored evidence and actual Git.
+ 
+     Nothing here trusts a stored flag without recomputing it from its source.
+     """
+     root = store.repository_root
+     task = store.rows("SELECT * FROM tasks WHERE task_id = ?", (task_id,))[0]
+     payload = json.loads(task["payload_json"])
+ 
++    # (0) Pre-claim refusals read the contract, not a stored pass: gates run unsandboxed (prohibited
++    # for high-risk tasks, AGENTS.md section 7), and a contract with no checks verified nothing.
++    if payload.get("risk") in UNSANDBOXED_GATE_REFUSED_RISKS:
++        raise _reject(
++            UNSANDBOXED_GATE_HIGH_RISK, "human_required",
++            "gates run unsandboxed and are prohibited for high-risk tasks",
++            retry_requires_new_evidence=True, risk=payload.get("risk"),
++        )
++    if not payload.get("deterministic_checks"):
++        raise _reject(
++            NO_DETERMINISTIC_CHECKS, "repair_required",
++            "the task contract owns no deterministic check, so nothing was verified",
++            retry_requires_new_evidence=True,
++        )
++
+     # (a) required dependencies are completed.
+     waiting = [
+         row["depends_on_task_id"]
+         for row in store.rows(
+             "SELECT d.depends_on_task_id FROM dependencies d LEFT JOIN tasks t "
+             "ON t.task_id = d.depends_on_task_id WHERE d.task_id = ? "
+             "AND d.depends_on_task_id != '' AND (t.state IS NULL OR t.state != 'completed') "
+             "ORDER BY d.depends_on_task_id",
+             (task_id,),
+         )
+     ]
+     if waiting:
+         raise _reject(
+             "dependency_incomplete", "waiting_on_dependency",
+             "required dependencies are not completed", waiting_on=waiting,
+         )
+ 
+     # (b) interface bindings are current; locked sources are unchanged.
+     pins = payload.get("interface_pins") or {}
+     interface_hashes: list[tuple[str, str]] = []
+diff --git a/tools/agentctl/agentctl/scheduler.py b/tools/agentctl/agentctl/scheduler.py
+index 92dbaed526e36e9647967a089b75bf19e8fcade8..25e77d7b9e57eb884cf0f43745653fa1fbc34a77 100644
+--- a/tools/agentctl/agentctl/scheduler.py
++++ b/tools/agentctl/agentctl/scheduler.py
+@@ -229,40 +229,46 @@ class TaskSpec:
+ _CAPABILITY_RANK = {
+     "mechanical_execution": 0,
+     "standard_implementation": 1,
+     "complex_implementation": 2,
+     "work_package_planning": 2,
+     "verifier": 2,
+     "integrator": 2,
+     "architectural_authority": 3,
+ }
+ 
+ 
+ #: Public name for routing's reviewer-floor comparisons.
+ CAPABILITY_RANK = _CAPABILITY_RANK
+ 
+ #: Wall-clock limit for each contract-owned deterministic check. A check that reaches it
+ #: is a failing check (exit_code 124, ``timed_out: true``), never a hung verifier. Checks run
+ #: through the shared ``gate_runner.run_checks`` (allowlisted environment, rlimits, user+PID
+ #: namespace where available, no surviving descendants).
+ CHECK_TIMEOUT_SECONDS = 600.0
+ 
++#: Contract risks for which unsandboxed gates are refused (AGENTS.md section 7), and the named reasons
++#: verification and integration record for the two verification refusals.
++UNSANDBOXED_GATE_REFUSED_RISKS = frozenset({"high", "critical"})
++UNSANDBOXED_GATE_HIGH_RISK = "unsandboxed_gate_high_risk"
++NO_DETERMINISTIC_CHECKS = "no_deterministic_checks"
++
+ #: Options for every git command the control plane runs. A worktree's ``.git`` links to the
+ #: SHARED git directory, so anything a worker or a gate check plants in the repository config
+ #: (``diff.external``, ``core.fsmonitor``, a pager) would otherwise execute later under the
+ #: control plane's privileges. Diff-like commands additionally pass ``--no-ext-diff
+ #: --no-textconv`` (an empty ``diff.external`` alone makes a plain ``git diff`` fail).
+ GIT_HARDENING_ARGS: tuple[str, ...] = (
+     "--no-pager",
+     "-c", "core.fsmonitor=false",
+     "-c", "diff.external=",
+     "-c", "core.hooksPath=/dev/null",
+ )
+ 
+ 
+ def hardened_git_environment(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+     """Scrubbed environment for control-plane git: no inherited config, credentials, or ``GIT_*``."""
+     git_path = shutil.which("git")
+     path = ["/usr/local/bin", "/usr/bin", "/bin"]
+     if git_path:
+         path.insert(0, os.path.dirname(os.path.realpath(git_path)))
+     env = {
+@@ -1019,92 +1025,107 @@ class Scheduler:
+         if tree.returncode != 0 or diff.returncode != 0:
+             raise PermissionViolation(
+                 "manifest integrity check failed", task_id=spec.task_id, mismatch="provenance"
+             )
+         return {
+             "task_id": spec.task_id,
+             "attempt_id": str(lease["attempt_id"]),
+             "base_commit": spec.base_commit,
+             "result_commit": result_commit,
+             "tree_hash": tree.stdout.strip(),
+             "diff_hash": hashlib.sha256(diff.stdout).hexdigest(),
+             "files_changed": actual_files,
+             "worktree_path": str(lease["worktree_path"]),
+             "contract_hash": spec.contract_hash,
+             "context_hash": spec.context_hash,
+         }
+ 
+     def verify_candidate(self, task_id: str) -> dict[str, Any]:
+         """Run contract-owned deterministic checks and bind their evidence to a candidate."""
+         spec = self._spec(task_id)
++        if spec.risk in UNSANDBOXED_GATE_REFUSED_RISKS:
++            # Gates run unsandboxed at the control-plane uid (AGENTS.md section 7: prohibited for
++            # high-risk tasks). Refuse before any state transition or check, so the task is unchanged.
++            raise PermissionViolation(
++                "deterministic checks run unsandboxed and are prohibited for high-risk tasks",
++                task_id=task_id, reason_code=UNSANDBOXED_GATE_HIGH_RISK, risk=spec.risk,
++            )
+         status = str(self.store.status(task_id)["state"])
+         transition(status, "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
+         attempt = self.store.rows(
+             "SELECT * FROM attempts WHERE task_id = ? ORDER BY attempt_number DESC LIMIT 1",
+             (task_id,),
+         )[0]
+         binding_row = self.store.rows(
+             "SELECT payload_json FROM artifacts WHERE artifact_id = ? AND integrable = 1",
+             (f"candidate-binding:{task_id}:{attempt['attempt_id']}",),
+         )
+         if not binding_row:
+             raise IllegalTransition("candidate has no trusted Git binding", task_id=task_id)
+         binding = json.loads(binding_row[0]["payload_json"])
+         started = make_event(
+             event_type="verification_started",
+             reason_code="deterministic_verification_started",
+             actor_role="verifier",
+             task_id=task_id,
+             attempt_id=attempt["attempt_id"],
+             prior_state="candidate",
+             next_state="deterministic_verification",
+             repository_commits=[binding["result_commit"]],
+         )
+ 
+         def begin(connection: sqlite3.Connection) -> dict[str, str]:
+             current = connection.execute(
+                 "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+             ).fetchone()
+             if current is None:
+                 raise IllegalTransition("task disappeared before verification", task_id=task_id)
+             transition(current["state"], "verification_started", TaskState.DETERMINISTIC_VERIFICATION)
+             connection.execute(
+                 "UPDATE tasks SET state = 'deterministic_verification', updated_at = CURRENT_TIMESTAMP "
+                 "WHERE task_id = ?", (task_id,)
+             )
+             return {"task_id": task_id, "state": "deterministic_verification"}
+ 
+         self.store.execute(f"verify-start:{task_id}:{attempt['attempt_id']}", started, begin)
+         worktree = (self.store.repository_root / binding["worktree_path"]).resolve()
+         results, tamper = self._run_gate_checks(worktree, spec.deterministic_checks)
+-        passed = not tamper and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
++        # No check means nothing was verified; `all([])` must never read as a pass.
++        vacuous = not spec.deterministic_checks
++        passed = (
++            not vacuous and not tamper
++            and all(item["exit_code"] == 0 and not item.get("reason") for item in results)
++        )
+         evidence = {"candidate_binding": binding, "checks": results, "passed": passed}
++        if vacuous:
++            evidence["failure_reason"] = NO_DETERMINISTIC_CHECKS
+         if tamper:
+             evidence["repository_tamper"] = tamper
+         evidence_hash = sha256_of_json(evidence)
+         next_state = "independent_review" if passed else "repair_required"
+         event_name = "checks_passed" if passed else "implementation_defect"
+         event = make_event(
+             event_type=event_name,
+             reason_code=(
+                 "verification_passed" if passed
+-                else str(tamper["reason_code"]) if tamper else "verification_failed"
++                else str(tamper["reason_code"]) if tamper
++                else NO_DETERMINISTIC_CHECKS if vacuous else "verification_failed"
+             ),
+             actor_role="verifier",
+             task_id=task_id,
+             attempt_id=attempt["attempt_id"],
+             prior_state="deterministic_verification",
+             next_state=next_state,
+             repository_commits=[binding["result_commit"]],
+             artifact_refs=[f"verification:{task_id}:{attempt['attempt_id']}"],
+         )
+ 
+         def finish(connection: sqlite3.Connection) -> dict[str, Any]:
+             current = connection.execute(
+                 "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+             ).fetchone()
+             if current is None:
+                 raise IllegalTransition("task disappeared during verification", task_id=task_id)
+             transition(current["state"], event_name, TaskState(next_state))
+             connection.execute(
+                 "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, "
+                 "content_hash, path, integrable, payload_json) VALUES "
+diff --git a/tools/agentctl/tests/helpers_lane_b.py b/tools/agentctl/tests/helpers_lane_b.py
+index 7f09a293c6937ddf33008fc49f38474c32907ba6..df9327525c710b13b6cc626c25853d2c1af31428 100644
+--- a/tools/agentctl/tests/helpers_lane_b.py
++++ b/tools/agentctl/tests/helpers_lane_b.py
+@@ -168,41 +168,41 @@ class Lab:
+     def tamper(self, sql: str, params: tuple[Any, ...] = ()) -> None:
+         """SIMULATED corruption: mutate stored state outside the public API.
+ 
+         Used only to test that integration re-derives evidence instead of
+         trusting stored flags. Each caller labels its result as simulated.
+         """
+         event = make_event(
+             event_type="test_fixture_mutation",
+             reason_code="simulated_fixture",
+             actor_role="test-harness",
+         )
+         self.store.execute(f"fixture:{uuid.uuid4()}", event, lambda c: c.execute(sql, params).rowcount)
+ 
+     # -- candidates ---------------------------------------------------------
+ 
+     def candidate(
+         self,
+         task_id: str,
+         files: dict[str, str],
+         *,
+-        checks: tuple[str, ...] = (),
++        checks: tuple[str, ...] = ("true",),
+         dependencies: tuple[str, ...] = (),
+         interface_pins: dict[str, str] | None = None,
+         review: bool = True,
+         author_session: str | None = None,
+         reviewer_session: str | None = None,
+     ) -> Candidate:
+         author_session = author_session or f"author-session-{task_id}"
+         reviewer_session = reviewer_session or f"reviewer-session-{task_id}"
+         digest = hashlib.sha256(task_id.encode()).hexdigest()
+         spec = TaskSpec(
+             task_id=task_id,
+             work_package_id="WP-LANE-B",
+             contract_hash=digest,
+             context_hash=hashlib.sha256(digest.encode()).hexdigest(),
+             base_commit=self.base,
+             capability_class="standard_implementation",
+             risk="low",
+             enforcement_class="sandboxed_tools",
+             writable_paths=tuple(files),
+             prohibited_paths=("AppleBooks/**",),
+diff --git a/tools/agentctl/tests/test_security_hardening.py b/tools/agentctl/tests/test_security_hardening.py
+index 8f252a3fa6872c84705953e50d024c7878e29e98..a05b2f4b499e16a9fdea66b79b60fc289b3f2ab3 100644
+--- a/tools/agentctl/tests/test_security_hardening.py
++++ b/tools/agentctl/tests/test_security_hardening.py
+@@ -54,40 +54,41 @@ class TrustedCandidateTests(unittest.TestCase):
+         self.store = EventStore(
+             pathlib.Path(self.temporary.name) / "runtime.sqlite3",
+             repository_root=self.root,
+         )
+         self.scheduler = Scheduler(self.store)
+         self.manager = ReviewManager(self.store)
+         self.spec = TaskSpec(
+             task_id="TASK-CANDIDATE",
+             work_package_id="WP",
+             contract_hash="1" * 64,
+             context_hash="2" * 64,
+             base_commit=self.base,
+             capability_class="standard_implementation",
+             risk="low",
+             enforcement_class="sandboxed_tools",
+             writable_paths=("docs/candidate.md",),
+             prohibited_paths=("secrets/**",),
+             semantic_locks={},
+             maximum_attempts=3,
+             maximum_artifact_corrections=1,
++            deterministic_checks=("true",),
+         )
+         self.scheduler.register_task(self.spec)
+ 
+     def tearDown(self) -> None:
+         self.temporary.cleanup()
+ 
+     def _manifest(self, lease: object, result_commit: str) -> dict:
+         return {
+             "artifact_type": "implementation-manifest",
+             "task_id": self.spec.task_id,
+             "attempt_id": lease.attempt_id,
+             "lease_id": lease.lease_id,
+             "lease_epoch": lease.epoch,
+             "fencing_token": lease.fencing_token,
+             "worker_role": self.spec.capability_class,
+             "provider": "fixture-provider",
+             "model": "fixture-model",
+             "model_version": "fixture-version",
+             "contract_hash": self.spec.contract_hash,
+             "context_hash": self.spec.context_hash,
+diff --git a/tools/agentctl/tests/test_verify_hardening.py b/tools/agentctl/tests/test_verify_hardening.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd9a4bc87de571a44b9cd191914519310f9e0c33
+--- /dev/null
++++ b/tools/agentctl/tests/test_verify_hardening.py
+@@ -0,0 +1,195 @@
++"""Regression tests for the final architecture audit's three verification gaps.
++
++F3  A contract with no deterministic checks must not verify (vacuous verification).
++F1a ``agentctl verify`` must drop credential-like variables from its own environment,
++    exactly as ``agentctl integrate`` does.
++F1b Gates run unsandboxed at the control-plane uid (AGENTS.md section 7: prohibited for
++    high-risk tasks), so verify and integrate must refuse ``high`` and ``critical`` tasks.
++
++Everything here uses real Git, the real event store, and the real scheduler. Where state is
++corrupted outside the public API (``Lab.tamper``) the test says SIMULATED: it stands in for
++stored state that an older build could have written (a vacuous pass, a high-risk contract
++that was verified before the refusal existed).
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import pathlib
++import subprocess
++import sys
++import tempfile
++import unittest
++from dataclasses import replace
++from unittest import mock
++
++from agentctl.errors import PermissionViolation
++from agentctl.integrate import integrate
++
++from tests.helpers_lane_b import AGENTCTL_DIR, BRANCH, Lab
++
++FILES = {"docs/hardening.txt": "synthetic\n"}
++
++
++class _LabCase(unittest.TestCase):
++    def setUp(self) -> None:
++        self.lab = Lab()
++        self.addCleanup(self.lab.close)
++        self.scratch = pathlib.Path(tempfile.mkdtemp(prefix="verify-hardening-"))
++        self.addCleanup(lambda: __import__("shutil").rmtree(self.scratch, ignore_errors=True))
++
++    def unverified_candidate(self, task_id: str, *, checks: tuple[str, ...], risk: str = "low"):
++        """A real candidate left in state ``candidate``: registered at ``risk``, verification not yet run.
++
++        Registration, dispatch, the Git commit, manifest ingest and the candidate binding are the
++        real public paths; only the automatic ``verify_candidate`` call inside ``Lab.candidate`` is
++        suppressed so the test can invoke verification itself.
++        """
++        register = self.lab.scheduler.register_task
++        with mock.patch.object(
++            self.lab.scheduler, "register_task",
++            side_effect=lambda spec: register(replace(spec, risk=risk)),
++        ), mock.patch.object(self.lab.scheduler, "verify_candidate"):
++            candidate = self.lab.candidate(task_id, FILES, checks=checks, review=False)
++        self.assertEqual(self.lab.state(task_id), "candidate")
++        return candidate
++
++    def evidence(self, task_id: str) -> dict:
++        (row,) = self.lab.artifacts("verification-evidence", task_id)
++        return row["payload"]
++
++
++class NoDeterministicChecksTests(_LabCase):
++    def test_verification_of_a_contract_with_no_checks_fails_with_a_named_reason(self) -> None:
++        """F3: `all([])` made an empty check list a pass; nothing had been verified."""
++        self.unverified_candidate("T-NC", checks=())
++
++        result = self.lab.scheduler.verify_candidate("T-NC")
++
++        self.assertEqual(result["state"], "repair_required")
++        evidence = self.evidence("T-NC")
++        self.assertIs(evidence["passed"], False)
++        self.assertEqual(evidence["checks"], [])
++        self.assertEqual(evidence["failure_reason"], "no_deterministic_checks")
++        (event,) = self.lab.events("implementation_defect", "T-NC")
++        self.assertEqual(event["reason_code"], "no_deterministic_checks")
++        (row,) = self.lab.artifacts("verification-evidence", "T-NC")
++        self.assertEqual(row["integrable"], 0)
++
++    def test_integration_rejects_a_task_whose_contract_has_no_checks_and_moves_nothing(self) -> None:
++        """F3: SIMULATED legacy state -- evidence stored as a pass by a build that verified vacuously.
++
++        Integration must not rely on the stored `passed` flag when the contract owns no check.
++        """
++        self.lab.candidate("T-NC2", FILES, checks=("true",))
++        self.assertEqual(self.lab.state("T-NC2"), "integration_ready")
++        self.lab.tamper(
++            "UPDATE tasks SET payload_json = json_set(payload_json, '$.deterministic_checks', json('[]')) "
++            "WHERE task_id = ?", ("T-NC2",),
++        )
++
++        result = integrate("T-NC2", store=self.lab.store)
++
++        self.assertEqual(result["outcome"], "rejected", result)
++        self.assertEqual(result["reason_code"], "no_deterministic_checks", result)
++        self.assertIsNone(self.lab.branch_head(BRANCH))
++        self.assertEqual(self.lab.state("T-NC2"), "integration_ready")
++        self.assertEqual(self.lab.artifacts("integration-record", "T-NC2"), [])
++
++
++class HighRiskRefusalTests(_LabCase):
++    def test_verify_refuses_high_and_critical_tasks_before_any_transition_or_check(self) -> None:
++        """F1b: unsandboxed gates are prohibited for high-risk tasks; refuse before anything runs."""
++        for index, risk in enumerate(("high", "critical")):
++            with self.subTest(risk=risk):
++                task_id = f"T-HR{index}"
++                marker = self.scratch / f"gate-ran-{risk}"
++                self.unverified_candidate(task_id, checks=(f"touch {marker}",), risk=risk)
++                events_before = len(self.lab.events(task_id=task_id))
++
++                with self.assertRaises(PermissionViolation) as raised:
++                    self.lab.scheduler.verify_candidate(task_id)
++
++                self.assertEqual(raised.exception.context["reason_code"], "unsandboxed_gate_high_risk")
++                self.assertEqual(self.lab.state(task_id), "candidate")
++                self.assertEqual(len(self.lab.events(task_id=task_id)), events_before)
++                self.assertEqual(self.lab.artifacts("verification-evidence", task_id), [])
++                self.assertFalse(marker.exists(), "a gate ran for a high-risk task")
++
++    def test_verify_still_verifies_a_medium_risk_task(self) -> None:
++        """F1b boundary: only high and critical are refused."""
++        self.unverified_candidate("T-MR", checks=("true",), risk="medium")
++
++        result = self.lab.scheduler.verify_candidate("T-MR")
++
++        self.assertEqual(result["state"], "independent_review")
++        self.assertIs(self.evidence("T-MR")["passed"], True)
++
++    def test_integration_rejects_a_high_risk_task_without_running_gates_or_moving_the_branch(self) -> None:
++        """F1b: SIMULATED -- the contract risk is raised after verification, as if a build without
++        the verify refusal had verified it. Integration must still not run its gates."""
++        marker = self.scratch / "integration-gate-ran"
++        self.lab.candidate(
++            "T-HRI", FILES, checks=(f'case "$PWD" in *agentctl-integration-gate-*) touch {marker};; esac; true',)
++        )
++        self.assertEqual(self.lab.state("T-HRI"), "integration_ready")
++        self.lab.tamper(
++            "UPDATE tasks SET payload_json = json_set(payload_json, '$.risk', 'high') WHERE task_id = ?",
++            ("T-HRI",),
++        )
++
++        result = integrate("T-HRI", store=self.lab.store)
++
++        self.assertEqual(result["outcome"], "rejected", result)
++        self.assertEqual(result["reason_code"], "unsandboxed_gate_high_risk", result)
++        self.assertIsNone(self.lab.branch_head(BRANCH))
++        self.assertEqual(self.lab.state("T-HRI"), "integration_ready")
++        self.assertFalse(marker.exists(), "an integration gate ran for a high-risk task")
++
++
++class VerifyCommandEnvironmentTests(_LabCase):
++    # Gates never inherit os.environ (they get an allow-list), so a probe inside a check cannot tell
++    # whether the verify process dropped its credentials. The observable is the verify process's own
++    # os.environ at the moment the real command hands off to verification.
++    PROBE = (
++        "import json, os, sys\n"
++        "import agentctl.verify as verify_module\n"
++        "real = verify_module.verify_task\n"
++        "def probe(*args, **kwargs):\n"
++        "    with open(os.environ['VERIFY_PROBE_OUT'], 'w') as handle:\n"
++        "        json.dump({name: name in os.environ for name in sys.argv[2:]}, handle)\n"
++        "    return real(*args, **kwargs)\n"
++        "verify_module.verify_task = probe\n"
++        "from agentctl.cli import main\n"
++        "sys.exit(main(['verify', sys.argv[1]]))\n"
++    )
++    SENTINELS = ("ANTHROPIC_API_KEY", "SYNTHETIC_AUTH_TOKEN", "CLAUDE_SYNTHETIC_SESSION")
++    KEPT = "AGENTCTL_SYNTHETIC_KEEP"
++
++    def test_verify_command_drops_credential_like_variables_from_its_environment(self) -> None:
++        """F1a: only `integrate` dropped credentials; `verify` kept them in the process that runs gates."""
++        self.unverified_candidate("T-ENV", checks=("true",))
++        out = self.scratch / "probe.json"
++        env = {
++            **os.environ,
++            "PYTHONPATH": str(AGENTCTL_DIR),
++            "VERIFY_PROBE_OUT": str(out),
++            self.KEPT: "present",
++            **{name: "synthetic-not-a-secret" for name in self.SENTINELS},
++        }
++
++        done = subprocess.run(
++            [sys.executable, "-c", self.PROBE, "T-ENV", *self.SENTINELS, self.KEPT],
++            cwd=self.lab.root, env=env, capture_output=True, text=True, timeout=120,
++        )
++
++        self.assertEqual(done.returncode, 0, done.stderr)
++        self.assertEqual(json.loads(done.stdout)["state"], "independent_review")
++        seen = json.loads(out.read_text())
++        self.assertEqual({name: seen[name] for name in self.SENTINELS}, {name: False for name in self.SENTINELS})
++        self.assertIs(seen[self.KEPT], True, "only credential-like variables may be dropped")
++
++
++if __name__ == "__main__":
++    unittest.main()

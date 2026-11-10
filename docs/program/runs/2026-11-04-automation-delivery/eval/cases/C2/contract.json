@@ -1,0 +1,32 @@
+{
+  "artifact_type": "task-contract",
+  "intent": {
+    "acceptance_behavior": [
+      "An --out path that reaches the repository through a symlinked alias of an ancestor directory is accepted when the destination's parent directory really resolves inside the repository",
+      "A path whose parent directory truly resolves outside the repository (including through a symlink inside the repository that points outside) is still rejected with approval_output_outside_repository",
+      "A destination whose final path component is a symlink is still rejected with approval_output_invalid",
+      "A relative --out path still resolves against the repository root and is accepted when it is inside the repository"
+    ],
+    "objective": "Make agentctl approve output-path containment accept an --out path that reaches the repository through a symlinked alias of an ancestor directory"
+  },
+  "permissions": {
+    "enforcement_class": "proposal_only",
+    "may_modify_tests": "task_owned_only"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "risk": "low"
+  },
+  "scope": {
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/commands/approve.py",
+      "tools/agentctl/tests/test_approve_output_containment.py"
+    ]
+  }
+}

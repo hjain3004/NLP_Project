@@ -29,7 +29,9 @@
     "capability_class": "mechanical_execution",
     "complexity": "low",
     "risk": "low",
-    "minimum_reviewer_class": "standard_implementation"
+    "preferred_worker": "fixture-worker",
+    "minimum_reviewer_class": "standard_implementation",
+    "required_provider_diversity": false
   },
   "permissions": {
     "tool_allowlist": ["read", "write"],
@@ -47,6 +49,13 @@
     "protected_checks": [],
     "expected_artifacts": [],
     "definition_of_done": ["Fixture is rejected for the missing escalation field"]
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
   },
   "budgets": {
     "maximum_attempts": 1,

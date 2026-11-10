@@ -30,6 +30,21 @@
       "scope": "Complex code, concurrency, persistence, integration"
     },
     {
+      "capability_class": "complex_implementation",
+      "provider": "anthropic",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "binding_type": "candidate",
+      "scope": "Challenger for the complex_implementation champion (openai, no adapter). Routable only with explicit operator opt-in, and only for task risks inside champion-challenger-v1 sample_scope. Work authored or reviewed by this binding does not make a task merge-eligible until the owner promotes it: such tasks reach integration_ready but are not integrated (challenger_not_merge_eligible).",
+      "candidate_status": "unevaluated",
+      "promotion_requires": {
+        "policy": "champion-challenger-v1",
+        "source": "agent-system/routing/champion-challenger.json",
+        "decision_owner": "human owner",
+        "rule": "Registered as a NEW routing candidate under version_change_rule: it inherits no historical trust. Promotion requires a representative sample, zero critical violations and acceptable review burden under champion-challenger-v1."
+      }
+    },
+    {
       "capability_class": "standard_implementation",
       "provider": "anthropic",
       "model_id": "claude-sonnet-5",

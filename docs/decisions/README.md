@@ -17,6 +17,11 @@ An ADR that changes an invariant, a schema commitment, or anything with a
 `release_or_public_claim` consequence requires human approval, recorded as a typed approval
 artifact and referenced under `Required approvals`.
 
+An ADR acceptance that is consequential uses the typed `consequential_adr_acceptance` action.
+That action is bound to the exact ADR bytes and requires the strong authentication tier
+declared in `agent-system/policies/approval-policy.json`; an ADR remains `proposed` until
+the declared authority's sealed approval is accepted.
+
 ## Required headings
 
 Every ADR uses exactly these, in this order:
@@ -59,4 +64,4 @@ number.
 | ADR-0002 | Python development CLI beside a Swift product | accepted |
 | ADR-0003 | Bounded standard-library schema validation | accepted |
 | ADR-0004 | Single Git root with history import | accepted |
-| ADR-0005 | Symmetric approval seal at Level 1 | proposed |
+| ADR-0005 | Symmetric approval seal at Level 1 | accepted |

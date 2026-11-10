@@ -222,6 +222,8 @@ def _validate_local_semantics(artifact_type: str, document: Mapping[str, Any], r
     approval_requirements: list[str] = []
     if permissions["destructive_commands"]:
         approval_requirements.append("destructive_operation")
+    if permissions.get("required_human_approval_action") == "consequential_adr_acceptance":
+        approval_requirements.append("consequential_adr_acceptance")
     if permissions["may_modify_tests"] == "protected_with_approval":
         approval_requirements.append("protected_test_change")
     if approval_requirements:

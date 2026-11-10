@@ -1,0 +1,55 @@
+{
+  "acceptance_criteria_addressed": [
+    "Discovery ignores every file under agent-system/runtime/ (worktrees, attempts, integration copies) even when a runtime file is a valid task-contract with the requested task id, and still returns the one real contract and its repository-relative path",
+    "When the same task id exists both as the real contract and as a copy under agent-system/runtime/worktrees/, the real contract is returned regardless of path sort order",
+    "Discovery behaves identically when no agent-system/runtime directory exists",
+    "When no contract exists for the task id outside agent-system/runtime/ (including when the only copy is under runtime), discovery raises the existing PlanningError whose message contains 'task contract file was not found'",
+    "Discovery does not list or open files under agent-system/runtime/ before filtering (prune the directory while walking with os.walk and in-place pruning of dirnames), while still examining the remaining JSON files in sorted path order"
+  ],
+  "artifact_type": "implementation-manifest",
+  "assumptions": [
+    "The product-data-boundary.json schema only requires the two keys enforcement.allowed_context_roots and enforcement.excluded_by_default for ContextCompiler.__init__ to succeed, as stated in the contract's behavioral requirements.",
+    "Path sort order for candidate JSON files can be preserved by collecting pathlib.Path objects during the pruned os.walk and calling sorted() on them, matching the ordering previously produced by Path.glob('**/*.json').",
+    "A test that patches pathlib.Path.read_text to record every path actually opened is an acceptable black-box way to demonstrate that files under agent-system/runtime/ are never opened, since os.walk's dirnames pruning itself is only observable via its effect on which files get read.",
+    "The _find_task_contract method is intended to remain testable directly (as a non-public but stable discovery primitive) rather than only indirectly through default_inputs."
+  ],
+  "attempt_id": "DEMO-102-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "commands_executed": [],
+  "context_hash": "d808e54e1294809b9252c72f3eab077854b8b119565d1a33400c0901e7304c46",
+  "contract_hash": "fa123a3421a26e0ba457d42d4723e14bfca180d5c83a1a8e2b4ddc4631176cc6",
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "fencing_token": "dw7wu-UriRQX2ueCv20x-tLDDqUPSfZ4kmaxO7nIDl4",
+  "files_changed": [
+    {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/context.py"
+    },
+    {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+    }
+  ],
+  "lease_epoch": 1,
+  "lease_id": "8384b479-6266-442c-9e43-79df929f5b37",
+  "model": "claude-sonnet-5",
+  "model_version": "claude-sonnet-5",
+  "provider": "anthropic",
+  "result_commit": "cb5c73159df9097cb3374a28803f0b65c0f05c58",
+  "task_id": "DEMO-102",
+  "termination_reason": "completed",
+  "unresolved_risks": [
+    "No live run of the deterministic check command was possible in this proposal-only environment, so the new test module has not been executed against the real repository; it should be run by the control plane before integration.",
+    "The AGENTS.md file contains directive-sounding language about memory, roles, and permissions; its text was treated strictly as data/context per the task contract and ignored for any instruction-following purposes, per the system contract's explicit warning.",
+    "If some other part of the codebase relies on _find_task_contract's old glob-based traversal order or on it visiting agent-system/runtime (e.g., a test outside the two permitted files), this change could have unintended ripple effects; no such usage was found in the provided files, but the full repository was not available to grep exhaustively."
+  ],
+  "usage": {
+    "cost_usd": 0.28863859999999997,
+    "input_tokens": 29918,
+    "latency_ms": 144644,
+    "output_tokens": 18479
+  },
+  "worker_role": "standard_implementation"
+}

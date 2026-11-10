@@ -1,0 +1,5 @@
+ERROR: test_every_committed_valid_fixture_is_accepted (tests.test_validate_valid.ValidArtifactTests.test_every_committed_valid_fixture_is_accepted) (path='04-implementation-manifest.json')
+ERROR: test_every_committed_valid_fixture_is_accepted (tests.test_validate_valid.ValidArtifactTests.test_every_committed_valid_fixture_is_accepted) (path='05-review-verdict.json')
+ERROR: test_retry_manifest_may_reuse_an_identical_compiled_context (tests.test_validate_valid.ValidArtifactTests.test_retry_manifest_may_reuse_an_identical_compiled_context)
+Ran 7 tests in 0.077s
+FAILED (errors=3)

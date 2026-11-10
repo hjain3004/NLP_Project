@@ -1,0 +1,126 @@
+diff --git a/tools/agentctl/agentctl/context.py b/tools/agentctl/agentctl/context.py
+index fb40818..ac0df64 100644
+--- a/tools/agentctl/agentctl/context.py
++++ b/tools/agentctl/agentctl/context.py
+@@ -63,6 +63,8 @@ _ROLE_FILES = {
+     "integrator": "integrator.md",
+ }
+ 
++_RUNTIME_PREFIX = "agent-system/runtime/"
++
+ 
+ def _timestamp() -> str:
+     return (
+@@ -333,6 +335,9 @@ class ContextCompiler:
+ 
+     def _find_task_contract(self, task_id: str) -> tuple[str, dict[str, Any]]:
+         for path in sorted((self.root / "agent-system").glob("**/*.json")):
++            relative = path.relative_to(self.root).as_posix()
++            if relative.startswith(_RUNTIME_PREFIX):
++                continue
+             try:
+                 document = json.loads(path.read_text(encoding="utf-8"))
+             except (OSError, json.JSONDecodeError):
+@@ -342,7 +347,7 @@ class ContextCompiler:
+                 and document.get("artifact_type") == "task-contract"
+                 and document.get("identity", {}).get("task_id") == task_id
+             ):
+-                return path.relative_to(self.root).as_posix(), document
++                return relative, document
+         raise PlanningError("task contract file was not found", task_id=task_id)
+ 
+ 
+diff --git a/tools/agentctl/tests/test_context_runtime_exclusion.py b/tools/agentctl/tests/test_context_runtime_exclusion.py
+new file mode 100644
+index 0000000..22fe593
+--- /dev/null
++++ b/tools/agentctl/tests/test_context_runtime_exclusion.py
+@@ -0,0 +1,88 @@
++"""Task-contract discovery must ignore everything under agent-system/runtime/."""
++
++from __future__ import annotations
++
++import json
++import pathlib
++import tempfile
++import unittest
++
++from agentctl.context import ContextCompiler
++from agentctl.errors import PlanningError
++
++
++_BOUNDARY = {
++    "enforcement": {
++        "allowed_context_roots": ["agent-system", "docs", "AGENTS.md"],
++        "excluded_by_default": [],
++    }
++}
++
++
++def _contract(task_id: str) -> dict:
++    return {"artifact_type": "task-contract", "identity": {"task_id": task_id}}
++
++
++class ContextRuntimeExclusionTests(unittest.TestCase):
++    def _make_repo(self, root: pathlib.Path) -> None:
++        policies = root / "agent-system" / "policies"
++        policies.mkdir(parents=True)
++        (policies / "product-data-boundary.json").write_text(json.dumps(_BOUNDARY))
++
++    def test_ignores_runtime_copies_and_finds_the_real_contract(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            root = pathlib.Path(temporary)
++            self._make_repo(root)
++
++            real_dir = root / "agent-system" / "work" / "WP" / "tasks"
++            real_dir.mkdir(parents=True)
++            (real_dir / "DEMO-900.json").write_text(json.dumps(_contract("DEMO-900")))
++
++            shadow_locations = [
++                root / "agent-system" / "runtime" / "worktrees" / "attempt-1" / "agent-system" / "work" / "WP" / "tasks",
++                root / "agent-system" / "runtime" / "attempts" / "attempt-2" / "tasks",
++                root / "agent-system" / "runtime" / "integration" / "candidate-3" / "tasks",
++            ]
++            for shadow_dir in shadow_locations:
++                shadow_dir.mkdir(parents=True)
++                (shadow_dir / "DEMO-900.json").write_text(json.dumps(_contract("DEMO-900")))
++
++            compiler = ContextCompiler(root)
++            found_path, document = compiler._find_task_contract("DEMO-900")
++
++            self.assertEqual(found_path, "agent-system/work/WP/tasks/DEMO-900.json")
++            self.assertEqual(document["identity"]["task_id"], "DEMO-900")
++
++    def test_behaves_identically_without_a_runtime_directory(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            root = pathlib.Path(temporary)
++            self._make_repo(root)
++
++            real_dir = root / "agent-system" / "work" / "WP" / "tasks"
++            real_dir.mkdir(parents=True)
++            (real_dir / "DEMO-901.json").write_text(json.dumps(_contract("DEMO-901")))
++
++            self.assertFalse((root / "agent-system" / "runtime").exists())
++
++            compiler = ContextCompiler(root)
++            found_path, document = compiler._find_task_contract("DEMO-901")
++
++            self.assertEqual(found_path, "agent-system/work/WP/tasks/DEMO-901.json")
++            self.assertEqual(document["identity"]["task_id"], "DEMO-901")
++
++    def test_raises_when_only_a_runtime_copy_exists(self) -> None:
++        with tempfile.TemporaryDirectory() as temporary:
++            root = pathlib.Path(temporary)
++            self._make_repo(root)
++
++            runtime_dir = root / "agent-system" / "runtime" / "worktrees" / "attempt-1" / "tasks"
++            runtime_dir.mkdir(parents=True)
++            (runtime_dir / "DEMO-902.json").write_text(json.dumps(_contract("DEMO-902")))
++
++            compiler = ContextCompiler(root)
++            with self.assertRaises(PlanningError):
++                compiler._find_task_contract("DEMO-902")
++
++
++if __name__ == "__main__":
++    unittest.main()

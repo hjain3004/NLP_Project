@@ -1,0 +1,46 @@
+{
+ "candidate_binding": {
+  "attempt_id": "DEMO-001-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "context_hash": "84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6",
+  "contract_hash": "df44a08a51438d3404022c947751271d03185324e61d91e067f95c5d82a40ef6",
+  "diff_hash": "dfe61b8ad43346ee24f868bca5efbf3b66cd9f97f0877a57c6df1183ec19615f",
+  "files_changed": [
+   {
+    "change_type": "modified",
+    "path": "tools/agentctl/agentctl/commands/approve.py"
+   },
+   {
+    "change_type": "added",
+    "path": "tools/agentctl/tests/test_approve_output_containment.py"
+   }
+  ],
+  "result_commit": "93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2",
+  "task_id": "DEMO-001",
+  "tree_hash": "dfc69059b7dbe39b0eadfbe028ab01e86d793208",
+  "worktree_path": "agent-system/runtime/worktrees/DEMO-001/attempt-1"
+ },
+ "checks": [
+  {
+   "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py",
+   "duration_ms": 120,
+   "exit_code": 0,
+   "gate_isolation": "user_pid_namespace",
+   "left_processes": 0,
+   "reason": null,
+   "stderr_hash": "af55efa5c3ceb122f8184c380aa405d3f3b4e7e0c1e892773d0eff31d0645c8a",
+   "stdout_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p 'test_approval*.py'",
+   "duration_ms": 771,
+   "exit_code": 0,
+   "gate_isolation": "user_pid_namespace",
+   "left_processes": 0,
+   "reason": null,
+   "stderr_hash": "20a4bb09852b0e12ac29e3c2ea74a3d4479600f88af42936247178e633507b87",
+   "stdout_hash": "8190df5a0092a63c00a0b97665ffab18a92e094445c75931f84c5e121b431024"
+  }
+ ],
+ "passed": true
+}

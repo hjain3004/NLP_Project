@@ -1,0 +1,3 @@
+ERROR: test_contained_destination_returns_destination_relative_to_root_for_alias (tests.oracle_approve_containment.ApproveOutputContainmentTests.test_contained_destination_returns_destination_relative
+Ran 8 tests in 0.036s
+FAILED (errors=1)

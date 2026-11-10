@@ -60,6 +60,7 @@ class ReviewIndependenceTests(unittest.TestCase):
             semantic_locks={},
             maximum_attempts=1,
             maximum_artifact_corrections=1,
+            deterministic_checks=("true",),
         )
         self.scheduler.register_task(spec)
         lease = self.scheduler.dispatch(task_id, worker_identity="author-session")

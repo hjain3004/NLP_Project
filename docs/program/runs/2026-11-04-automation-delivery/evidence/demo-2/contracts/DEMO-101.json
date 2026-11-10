@@ -1,0 +1,121 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "DEMO-101",
+    "work_package_id": "DELIVERY-DEMO-2",
+    "contract_version": 1,
+    "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+    "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+    "execution_mode": "control_plane",
+    "status": "active",
+    "created_at": "2026-11-04T07:20:00Z",
+    "expires_at": "2099-11-04T00:00:00Z"
+  },
+  "intent": {
+    "objective": "Make agentctl approve accept an --out path that reaches the repository through a symlinked alias of an ancestor directory, end to end through the command path (replan of DEMO-001 after a blocking review). KNOWN REVIEW FINDING from an earlier attempt at this fix (task DEMO-001, independent reviewer, blocking): the earlier candidate only removed the lexical check `destination.relative_to(root)` from _contained_destination. That makes the helper ACCEPT an alias path, but it still RETURNS the path unresolved (candidate.absolute()). The caller run() in approve.py then executes `destination.relative_to(config.repo_root)` on that return value, in the approval-issuance path (register(record, path=...)) and in the --recover-output path (the final print, after _write_exclusive_json already created the file). PurePath.relative_to is purely lexical, so an alias path such as <base>/alias-repo/sub/out.json is not relative to <base>/real-repo and raises an uncaught ValueError: the command crashes, after the human has authenticated, for exactly the input the fix is meant to support (and --preflight reports ok for a path the real run cannot finish). The earlier test only re-applied .parent.resolve() to the helper's return value, so it passed while the command was broken. A correct fix must return the contained destination in a form run() accepts, for example destination.parent.resolve(strict=False) / destination.name, with the final-component symlink check still applied, and its tests must exercise the caller-level behavior, not only the helper's resolved parent.",
+    "rationale": "_contained_destination compares an unresolved destination lexically with the resolved repository root, so an alias path (macOS /var versus /private/var, or a Linux symlink to the repository directory) is wrongly rejected as approval_output_outside_repository even though its parent really resolves inside the repository. A first attempt (DEMO-001) fixed only the helper's check and was blocked in independent review because the command path still crashed.",
+    "non_goals": [
+      "Changing approval policy, schemas, or the approval record format",
+      "Changing _legacy_destination (the path used when no --approval-id is given)",
+      "Modifying any existing test",
+      "Driving the interactive authentication or issuance path (it needs a TTY)"
+    ],
+    "acceptance_behavior": [
+      "Through the command path run(argv) with --approval-id, --preflight and an --out path that reaches a temporary repository root through a real symlinked alias of an ancestor directory, the command returns 0 and reports status ok; before the fix it raised ApprovalRejected approval_output_outside_repository",
+      "The destination returned by _contained_destination for that alias path can be used exactly as run() uses it: destination.relative_to(root), where root is the resolved repository root passed in, succeeds and gives the repository-relative POSIX path (for example sub/out.json); returning the unresolved alias path is not acceptable because run() would then raise ValueError in the issuance and --recover-output paths",
+      "A destination whose parent truly resolves outside the repository is still rejected with approval_output_outside_repository, both for a plain outside path and for a path through a symlink inside the repository that points outside, and both through run(argv) --preflight and the helper",
+      "A destination whose final path component is a symlink (inside the repository) is still rejected with approval_output_invalid by the helper",
+      "A relative --out path still resolves against the repository root and is accepted when inside it, and its returned destination relates to the root via relative_to",
+      "The behavior without --approval-id (the legacy path) is unchanged"
+    ],
+    "relevant_decisions": []
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "approve-output-containment:alias-paths-v2"
+    ],
+    "integration_order": 3,
+    "invalidation_triggers": []
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "tools/agentctl/agentctl/commands/approve.py",
+      "tools/agentctl/agentctl/config.py",
+      "tools/agentctl/tests/test_approval_prebind.py",
+      "tools/agentctl/agentctl/errors.py"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/commands/approve.py",
+      "tools/agentctl/tests/test_approve_output_containment.py"
+    ],
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "semantic_locks": [],
+    "expected_change_shape": "A small change to _contained_destination in approve.py (resolve the parent, join the final name) plus one new test module"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "complexity": "medium",
+    "risk": "medium",
+    "required_skills": [],
+    "preferred_worker": "claude-cli",
+    "minimum_reviewer_class": "complex_implementation",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": [],
+    "command_allowlist": [],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "task_owned_only",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "proposal_only"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py"
+    ],
+    "behavioral_requirements": [
+      "The new tests build a real symlinked alias directory with tempfile on the real filesystem (os.symlink) and do not mock Path or the helper under test",
+      "At least one test drives run(argv) with --preflight for the alias case, with approve_command.load_config patched to return a Config whose repo_root is a real temporary directory (resolved) that contains copies of agent-system/policies/approval-policy.json and approval-principals.json taken from the real repository via Path(__file__).resolve().parents[3]; use action phase_authorization, --target-type phase-gate, --target-hash of 64 'a' characters, and a lowercase UUID as in tools/agentctl/tests/test_approval_prebind.py",
+      "At least one test applies destination.relative_to(root) to the helper's return value for the alias case and asserts the repository-relative path, because that is the operation run() performs after the helper",
+      "Rejection tests cover a truly outside path, a symlink inside the repository pointing outside, and a final-component symlink",
+      "Every test in the new module must pass in a copy of the repository that has NO .git directory, run with cwd at the repository root, a minimal environment and PYTHONPATH=tools/agentctl: the tests must not run git, must not call git rev-parse, and must locate the repository with pathlib from __file__ (Path(__file__).resolve().parents[3])",
+      "The new tests demonstrably fail against the unfixed approve.py for the alias case and pass after the fix",
+      "No existing test is modified"
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "review-verdict"
+    ],
+    "definition_of_done": [
+      "The candidate passes the deterministic checks, receives an independent review with no blocking findings, and is integrated unchanged"
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 2,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 0,
+    "wall_clock_class": "short",
+    "token_class": "small"
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [
+      "The fix needs a file outside the writable set"
+    ],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
+  }
+}

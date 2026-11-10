@@ -1,0 +1,119 @@
+{
+  "artifact_type": "task-contract",
+  "identity": {
+    "task_id": "OPS-202",
+    "work_package_id": "DELIVERY-OPS",
+    "contract_version": 1,
+    "contract_hash": "0c0c0127780b29def4d15c038f3a0e2fedb3c717749eceb7e94d06c4b6c22888",
+    "base_commit": "c5ed8f7a783242167657d4a9d7343c55f9c721a6",
+    "execution_mode": "control_plane",
+    "status": "active",
+    "created_at": "2026-11-04T09:00:00Z",
+    "expires_at": "2099-11-04T00:00:00Z"
+  },
+  "intent": {
+    "objective": "Bound the memory the tree materialiser uses: materialize_tree in tools/agentctl/agentctl/check_environment.py must refuse, with the module's existing CandidateTreeUnsafe error, a tree in which any single blob exceeds 32 MiB or whose blobs total more than 256 MiB, and must leave no partial tree behind",
+    "rationale": "materialize_tree reads each blob fully into memory (process.stdout.read(int(header[2]))) with no size bound while building check trees, so a candidate that commits one huge blob can exhaust control-plane memory before any sandbox limit applies (independent review B3 finding 5).",
+    "non_goals": [
+      "Changing the sandbox, its limits, or run_candidate_checks semantics",
+      "Changing the safety rules the materialiser already enforces (forbidden path components, duplicate or clashing entries, O_NOFOLLOW, symlink handling)",
+      "Modifying any existing test or any file other than the two writable files"
+    ],
+    "acceptance_behavior": [
+      "A named module-level constant limits one blob to 32 MiB (32 * 1024 * 1024 bytes) and another limits the total of all blob sizes to 256 MiB (256 * 1024 * 1024 bytes); both are in the module's __all__ or documented in the materialize_tree docstring",
+      "A tree containing a single blob larger than the per-blob limit makes materialize_tree raise CandidateTreeUnsafe, before the oversized blob's content is read into memory (the size is taken from the cat-file header or a size listing, and the blob is not read)",
+      "A tree whose blobs are each within the per-blob limit but total more than the total limit makes materialize_tree raise CandidateTreeUnsafe",
+      "After either refusal the destination directory does not exist (no partial tree left behind), also when the refusal was detected after some entries were already written",
+      "A blob of exactly the per-blob limit and a tree totalling exactly the total limit are accepted; ordinary trees (small files, executable files, symlinks, nested directories) materialise byte for byte exactly as before",
+      "The error message names the offending path (per-blob case) or states the total limit (total case)"
+    ],
+    "relevant_decisions": []
+  },
+  "dependencies": {
+    "requires": [],
+    "consumes": [],
+    "produces": [
+      "check-environment:materialize-limits-v1"
+    ],
+    "integration_order": 2,
+    "invalidation_triggers": []
+  },
+  "scope": {
+    "readable_paths": [
+      "AGENTS.md",
+      "tools/agentctl/agentctl/check_environment.py",
+      "tools/agentctl/tests/test_check_environment.py"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/check_environment.py",
+      "tools/agentctl/tests/test_materialise_limits.py"
+    ],
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "semantic_locks": [],
+    "expected_change_shape": "Two module constants, a pre-read size check in materialize_tree with cleanup of the destination on refusal, and one new test module"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "complexity": "medium",
+    "risk": "low",
+    "required_skills": [],
+    "preferred_worker": "claude-cli",
+    "minimum_reviewer_class": "complex_implementation",
+    "required_provider_diversity": false
+  },
+  "permissions": {
+    "tool_allowlist": [],
+    "command_allowlist": [],
+    "network": false,
+    "secret_access": false,
+    "may_modify_tests": "task_owned_only",
+    "destructive_commands": false,
+    "external_side_effects": false,
+    "enforcement_class": "proposal_only"
+  },
+  "verification": {
+    "deterministic_checks": [
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_materialise_limits.py",
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py",
+      "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py"
+    ],
+    "behavioral_requirements": [
+      "The new tests build real Git repositories in temporary directories (git init, git add, git commit through subprocess, with a fixed local identity configured per repository) and call materialize_tree directly with an ObjectReader on that repository; they must NOT call run_candidate_checks, sandbox.probe or runc, because the tests themselves run inside the runc sandbox where runc does not exist",
+      "To keep the tests fast and the disk use small, the tests may patch the module constants (for example with unittest.mock.patch.object on the module) to small values; at least one test must instead use the real constants with a blob of exactly 32 MiB plus 1 byte (accepted vs refused boundary) written sparsely or as zero bytes, and one with exactly 32 MiB, so the real limit value is protected; do not create more than about 70 MiB of test data in total",
+      "A regression test shows the pre-change failure: an oversized blob is materialised without error on the unchanged code (the tests fail on the original source and pass after the change)",
+      "The tests cover: per-blob refusal, total refusal, exact-limit acceptance, destination absent after refusal (including a refusal detected after earlier small files were already written), the unchanged byte-for-byte result for an ordinary tree with an executable file and a symlink, and that the refusal is CandidateTreeUnsafe (assertRaises) and not another exception",
+      "Every test in the new module passes inside the check environment: uid 65534, no network, no runc, a private synthetic Git repository at /work with a single commit, HOME=/tmp, only /tmp and /work writable; use tempfile under /tmp and locate the repository root with pathlib from __file__, never with git rev-parse of the working directory",
+      "No existing test is modified"
+    ],
+    "protected_checks": [],
+    "manual_checkpoints": [],
+    "expected_artifacts": [
+      "implementation-manifest",
+      "review-verdict"
+    ],
+    "definition_of_done": [
+      "The candidate passes the deterministic checks, receives an independent review with no blocking findings, and is integrated unchanged"
+    ]
+  },
+  "budgets": {
+    "maximum_attempts": 2,
+    "maximum_repair_cycles": 0,
+    "maximum_artifact_corrections": 0,
+    "wall_clock_class": "short",
+    "token_class": "small"
+  },
+  "escalation": {
+    "local_repair_conditions": [],
+    "capability_escalation_conditions": [],
+    "replan_conditions": [
+      "The fix needs a file outside the writable set"
+    ],
+    "architecture_escalation_conditions": [],
+    "human_approval_conditions": []
+  }
+}

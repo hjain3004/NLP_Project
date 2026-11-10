@@ -1,0 +1,70 @@
+elapsed 20.349555015563965
+{
+ "environment": {
+  "check_timeout_seconds": 400.0,
+  "contract": "agentctl.check-environment",
+  "contract_version": 1,
+  "cwd": "/work",
+  "env_allowlist": [
+   "AGENTCTL_CANDIDATE_COMMIT",
+   "HOME",
+   "LANG",
+   "PATH",
+   "PYTHONDONTWRITEBYTECODE",
+   "TZ"
+  ],
+  "git_mode": "synthetic-repository",
+  "isolation": "runc",
+  "limits": {
+   "file_size_bytes": 134217728,
+   "memory_bytes": 4294967296,
+   "open_files": 4096,
+   "pids": 1024,
+   "processes": 1024,
+   "tmp_bytes": 268435456
+  },
+  "limits_enforced": {
+   "capabilities": "none",
+   "cpu": true,
+   "memory": true,
+   "pids": true,
+   "rlimits": true,
+   "seccomp": true
+  },
+  "network": "none",
+  "runtime": {
+   "lines": [
+    "RUNTIME arch=x86_64",
+    "RUNTIME git=git version 2.43.0",
+    "RUNTIME python=3.13.18"
+   ],
+   "runc": "runc version 1.5.2",
+   "seccomp": true
+  },
+  "runtime_hash": "a519f5dea53b6dae1d5c426ea09c869e2cb336435d7b5ddb7ba8ca4fb2af04c0",
+  "shell": "/bin/sh -c",
+  "tree": "materialized-from-git-objects",
+  "user": "65534:65534"
+ },
+ "failure_reason": null,
+ "passed": false
+}
+0 pass None | over -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py
+0 pass None | -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py
+1 fail exit_nonzero | iscover -s tools/agentctl/tests -t tools/agentctl -p test_docscheck.py
+1 fail exit_nonzero | er -s tools/agentctl/tests -t tools/agentctl -p test_validate_valid.py
+0 pass None |  discover -s tools/agentctl/tests -t tools/agentctl -p test_hashing.py
+0 pass None | test discover -s tools/agentctl/tests -t tools/agentctl -p test_dag.py
+0 pass None | t discover -s tools/agentctl/tests -t tools/agentctl -p test_events.py
+0 pass None | st discover -s tools/agentctl/tests -t tools/agentctl -p test_store.py
+0 pass None | t discover -s tools/agentctl/tests -t tools/agentctl -p test_models.py
+0 pass None | st discover -s tools/agentctl/tests -t tools/agentctl -p test_locks.py
+0 pass None |  -s tools/agentctl/tests -t tools/agentctl -p test_approval_prebind.py
+0 pass None | cover -s tools/agentctl/tests -t tools/agentctl -p test_program_dag.py
+0 pass None | -s tools/agentctl/tests -t tools/agentctl -p test_jsonschema_subset.py
+0 pass None |  -s tools/agentctl/tests -t tools/agentctl -p test_validate_invalid.py
+1 fail exit_nonzero |  tools/agentctl/tests -t tools/agentctl -p test_review_independence.py
+0 pass None | -s tools/agentctl/tests -t tools/agentctl -p test_check_environment.py
+1 fail exit_nonzero | PYTHONPATH=tools/agentctl python3 -m agentctl docs verify
+1 fail exit_nonzero | }queue|queue[^.]{0,120}deterministic' agent-system/roles/integrator.md
+1 fail exit_nonzero | e next topologically valid candidate' agent-system/roles/integrator.md

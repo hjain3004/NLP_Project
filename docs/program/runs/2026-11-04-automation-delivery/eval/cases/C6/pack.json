@@ -1,0 +1,65 @@
+{
+  "architecture_and_invariants": [
+    "AGENTS.md",
+    "docs/security/INVARIANTS.md"
+  ],
+  "attempt_id": "EVAL-C6-attempt-1",
+  "candidate_binding": {
+    "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+    "files_changed": [
+      {
+        "change_type": "modified",
+        "path": "tools/agentctl/agentctl/commands/approve.py"
+      },
+      {
+        "change_type": "added",
+        "path": "tools/agentctl/tests/test_approve_output_containment.py"
+      }
+    ],
+    "result_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76"
+  },
+  "contract": {
+    "artifact_type": "task-contract",
+    "intent": {
+      "acceptance_behavior": [
+        "Through the command path run(argv) with --approval-id, --preflight and an --out path that reaches a temporary repository root through a real symlinked alias of an ancestor directory, the command returns 0 and reports status ok; before the fix it raised ApprovalRejected approval_output_outside_repository",
+        "The destination returned by _contained_destination for that alias path can be used exactly as run() uses it: destination.relative_to(root), where root is the resolved repository root passed in, succeeds and gives the repository-relative POSIX path (for example sub/out.json); returning the unresolved alias path is not acceptable because run() would then raise ValueError in the issuance and --recover-output paths",
+        "A destination whose parent truly resolves outside the repository is still rejected with approval_output_outside_repository, both for a plain outside path and for a path through a symlink inside the repository that points outside, and both through run(argv) --preflight and the helper",
+        "A destination whose final path component is a symlink (inside the repository) is still rejected with approval_output_invalid by the helper",
+        "A relative --out path still resolves against the repository root and is accepted when inside it, and its returned destination relates to the root via relative_to",
+        "The behavior without --approval-id (the legacy path) is unchanged"
+      ],
+      "objective": "Make agentctl approve accept an --out path that reaches the repository through a symlinked alias of an ancestor directory, end to end through the command path (replan of DEMO-001 after a blocking review). KNOWN REVIEW FINDING from an earlier attempt at this fix (task DEMO-001, independent reviewer, blocking): the earlier candidate only removed the lexical check `destination.relative_to(root)` from _contained_destination. That makes the helper ACCEPT an alias path, but it still RETURNS the path unresolved (candidate.absolute()). The caller run() in approve.py then executes `destination.relative_to(config.repo_root)` on that return value, in the approval-issuance path (register(record, path=...)) and in the --recover-output path (the final print, after _write_exclusive_json already created the file). PurePath.relative_to is purely lexical, so an alias path such as <base>/alias-repo/sub/out.json is not relative to <base>/real-repo and raises an uncaught ValueError: the command crashes, after the human has authenticated, for exactly the input the fix is meant to support (and --preflight reports ok for a path the real run cannot finish). The earlier test only re-applied .parent.resolve() to the helper's return value, so it passed while the command was broken. A correct fix must return the contained destination in a form run() accepts, for example destination.parent.resolve(strict=False) / destination.name, with the final-component symlink check still applied, and its tests must exercise the caller-level behavior, not only the helper's resolved parent."
+    },
+    "permissions": {
+      "enforcement_class": "proposal_only",
+      "may_modify_tests": "task_owned_only"
+    },
+    "routing": {
+      "capability_class": "standard_implementation",
+      "risk": "low"
+    },
+    "scope": {
+      "prohibited_paths": [
+        "agent-system/schemas/**",
+        "agent-system/policies/**",
+        "agent-system/routing/**",
+        "AppleBooks/**"
+      ],
+      "writable_paths": [
+        "tools/agentctl/agentctl/commands/approve.py",
+        "tools/agentctl/tests/test_approve_output_containment.py"
+      ]
+    }
+  },
+  "deterministic_evidence": {
+    "checks": [
+      {
+        "command": "PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_approve_output_containment.py",
+        "exit_code": 0
+      }
+    ],
+    "passed": true
+  },
+  "task_id": "EVAL-C6"
+}

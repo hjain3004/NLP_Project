@@ -58,9 +58,16 @@ def run(argv: list[str]) -> int:
                 detail=str(exc),
             ) from exc
     source = config.repo_root / "agent-system/work/P0/gates" / f"{gate_id}-criteria.json"
+    dispatch_key = None
+    if not args.dry_run_only:
+        try:
+            dispatch_key = config.seal_key_path.read_bytes()
+        except OSError:
+            dispatch_key = None
     result = GateEvaluator(
         config.repo_root,
         store=None if args.dry_run_only else EventStore(),
+        dispatch_key=dispatch_key,
     ).evaluate(
         source,
         write_result=not args.dry_run_only,

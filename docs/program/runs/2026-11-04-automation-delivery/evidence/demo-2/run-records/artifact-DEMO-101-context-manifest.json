@@ -1,0 +1,54 @@
+{
+  "artifact_type": "context-manifest",
+  "attempt_id": "DEMO-101-attempt-1",
+  "compiled_at": "2026-11-04T07:20:00Z",
+  "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+  "excluded_by_policy": [
+    "prd",
+    "conversation_history",
+    "research_documents",
+    "other_worker_reasoning",
+    "secrets",
+    "customer_documents",
+    "obsolete_plans",
+    "raw_logs"
+  ],
+  "inputs": {
+    "authority_excerpt": {
+      "bytes": 16639,
+      "path": "AGENTS.md",
+      "sha256": "a7e449125ce93abe56195e93fafd514bb65674394dcf47fa0526c6723601e7c2"
+    },
+    "base_commit_summary": {
+      "bytes": 663,
+      "path": "agent-system/work/P0/evidence/migration.json",
+      "sha256": "9934b82d17491e8ccca3c3e100a262e2ba3283d0f6da0cc9f28ff804654feada"
+    },
+    "budgets_and_output_schema": {
+      "bytes": 4344,
+      "path": "agent-system/schemas/implementation-manifest.schema.json",
+      "sha256": "8a849e370a72f7a18d2a09ff41ba4a5f0b44d310c616baf9b325295b668832aa"
+    },
+    "consumed_interfaces": [],
+    "decisions": [],
+    "dependency_manifests": [],
+    "failure_lessons": [],
+    "permissions": {
+      "bytes": 3674,
+      "path": "agent-system/policies/permissions.json",
+      "sha256": "eaca781d3baea7a0547711924aafd9a19f59ece7698c48993eab6f3cc08043d0"
+    },
+    "role_contract": {
+      "bytes": 1496,
+      "path": "agent-system/roles/standard-implementer.md",
+      "sha256": "dabdd61354fb505d5d36b0f86b7ed0a0f7fdab1e190fe8504ede7a8fb38c45de"
+    },
+    "task_contract": {
+      "bytes": 8402,
+      "path": "agent-system/work/DELIVERY-DEMO-2/tasks/DEMO-101.json",
+      "sha256": "62b1bcd37713b9c2e715e9131b2864786a3d0a5cc80446dca70a2b85a0014888"
+    }
+  },
+  "role": "standard_implementation",
+  "task_id": "DEMO-101"
+}

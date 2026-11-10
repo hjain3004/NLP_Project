@@ -1,0 +1,174 @@
+{
+  "attempt_id": "DEMO-001-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "branch": "agentctl/DEMO-001/attempt-1",
+  "context_hash": "84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6",
+  "contract_hash": "df44a08a51438d3404022c947751271d03185324e61d91e067f95c5d82a40ef6",
+  "elapsed_ms": 181030,
+  "finished_at": "2026-11-04T06:47:52.342672Z",
+  "git": {
+    "files_changed": [
+      {
+        "change_type": "modified",
+        "path": "tools/agentctl/agentctl/commands/approve.py"
+      },
+      {
+        "change_type": "added",
+        "path": "tools/agentctl/tests/test_approve_output_containment.py"
+      }
+    ],
+    "result_commit": "93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2"
+  },
+  "identity": {
+    "minted_session_id": "542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f",
+    "provider_run_id": "24a2741d-defd-44c4-9a48-a0105aada1c6"
+  },
+  "kind": "author_run",
+  "lease_epoch": 1,
+  "lease_id": "f98e6033-2a79-4eca-946f-d40effc6d058",
+  "options": {
+    "effective_timeout_seconds": 600.0,
+    "max_budget_usd": 1.5,
+    "timeout_seconds": 600.0
+  },
+  "outcome": {
+    "result_commit": "93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2",
+    "status": "candidate"
+  },
+  "prompt": {
+    "bytes": 90433,
+    "sha256": "9e47b1829b7b4bfee667a32c0e15d6285a27be909698bc8a66078461fe7f2cb7"
+  },
+  "proposal_summary": "Fixed _contained_destination in approve.py by dropping the early lexical `destination.relative_to(root)` pre-check, which rejected an unresolved destination before the real resolved-parent containment check could run. Containment is now decided solely by resolving destination.parent and comparing it against root.resolve(), so a symlinked alias of an ancestor directory (e.g. /var vs /private/var, or a symlink to the repo) is correctly accepted, while a parent that truly resolves outside the repo (including via an internal symlink pointing outward) is still rejected, and the final-component symlink check is untouched. Added a new test module exercising all four acceptance behaviors with real filesystem symlinks.",
+  "provider_result": {
+    "api_error_status": null,
+    "argv": [
+      "/opt/node22/bin/claude",
+      "-p",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--model",
+      "claude-sonnet-5",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--permission-mode",
+      "dontAsk",
+      "--session-id",
+      "542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f",
+      "--json-schema",
+      "{\"additionalProperties\":false,\"properties\":{\"acceptance_criteria_addressed\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"assumptions\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"},\"files\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"action\":{\"enum\":[\"write\",\"delete\"],\"type\":\"string\"},\"content\":{\"type\":\"string\"},\"path\":{\"minLength\":1,\"type\":\"string\"}},\"required\":[\"path\",\"action\",\"content\"],\"type\":\"object\"},\"minItems\":1,\"type\":\"array\"},\"summary\":{\"type\":\"string\"},\"unresolved_risks\":{\"items\":{\"type\":\"string\"},\"type\":\"array\"}},\"required\":[\"summary\",\"files\",\"acceptance_criteria_addressed\",\"assumptions\",\"unresolved_risks\"],\"type\":\"object\"}",
+      "--max-budget-usd",
+      "1.5000"
+    ],
+    "exit_status": 0,
+    "extra_models": [],
+    "extra_models_flagged": false,
+    "failure_class": null,
+    "failure_detail": "",
+    "is_error": false,
+    "output_excerpt": "{\"acceptance_criteria_addressed\": [\"An --out path reaching the repository through a symlinked alias of an ancestor directory is now accepted because containment is decided solely by resolving destination.parent and comparing it against the resolved repository root, instead of first rejecting on an unresolved lexical comparison.\", \"A path whose parent truly resolves outside the repository, including via a symlink that lives inside the repo but points outside, is still rejected with approval_output_outside_repository (the resolved-parent containment check is unchanged in that regard).\", \"A destination whose own final path component is a symlink is still rejected with approval_output_invalid via the unchanged destination.is_symlink() check.\", \"A relative --out path is still joined onto the repository root before the parent-resolution check, so it resolves against the repository root and is accepted when inside it.\"], \"assumptions\": [\"config.repo_root (the `root` argument) is always an absolute directory path; it may itself be given through a symlinked alias, which is why both sides of the containment comparison are resolved rather than only one.\", \"Path.resolve(strict=False) is available and behaves consistently (resolves existing ancestor symlinks, leaves nonexistent trailing components literal) on the Python versions agentctl targets.\", \"The sandbox running the new tests supports creating real symlinks on its filesystem (true for Linux CI/dev containers).\", \"_legacy_destination and all other functions/behavior in approve.py are intentionally left untouched per the non-goals.\"], \"files\": [{\"action\": \"write\", \"content\": \"\\\"\\\"\\\"Interactive issuance of hash-bound human approval artifacts.\\\"\\\"\\\"\\n\\nfrom __future__ import annotations\\n\\nimport argparse\\nimport datetime as dt\\nimport getpass\\nimport hashlib\\nimport json\\nimport os\\nimport re\\nimport shlex\\nimport sys\\nimport uuid\\nfrom collections.abc import Callable\\nfrom pathlib import Path\\n\\nfrom ..approval import (\\n    ApprovalManager,\\n    ApprovalRejected,\\n    authentication_method_for_action,\\n    build_approval,\\n    doctor,\\n    resolve_approval_target,\\n    seal_approval,\\n    _require_principal_method,\\n)\\nfrom ..config import load as load_config\\nfrom ..local_authentication import (\\n    LocalAuthenticationAdapter,\\n    MacOSLocalAuthentication,\\n    authenticate_exact_hash,\\n)\\nfrom ..store import EventStore\\n\\nNAME = \\\"approve\\\"\\n\\n\\ndef _parser() -> argparse.ArgumentParser:\\n    parser = argparse.ArgumentParser(prog=\\\"agentctl approve\\\", add_help=False)\\n    parser.add_argument(\\\"action\\\")\\n    parser.add_argument(\\\"--target-type\\\", required=True)\\n    parser.add_argument(\\\"--target-id\\\", required=True)\\n    parser.add_argument(\\\"--target-hash\\\", required=True)\\n    parser.add_argument(\\\"--reason\\\", required=True)\\n    parser.add_argument(\\\"--scope\\\")\\n    parser.add_argument(\\\"--auth-method\\\")\\n    parser.add_argument(\\\"--approval-id\\\")\\n    parser.add_argument(\\\"--preflight\\\", action=\\\"store_true\\\")\\n    parser.add_argument(\\\"--recover-output\\\", action=\\\"store_true\\\")\\n    parser.add_argument(\\\"--out\\\")\\n    return parser\\n\\n\\ndef _output_path(root: Path, action: str, target_id: str) -> Path:\\n    if action == \\\"phase_authorization\\\":\\n        name = f\\\"{target_id}-phase-approval.json\\\"\\n    elif action == \\\"scope_authorization\\\":\\n        name = f\\\"{target_id}-approval.json\\\"\\n    else:\\n        name = f\\\"{target_id}-{action.replace('_authorization', '')}-approval.json\\\"\\n    return root / \\\"agent-system/work/P0/approvals\\\" / name\\n\\n\\ndef _issue_record(\\n    *,\\n    key: bytes | None,\\n    principal: str,\\n    machine_identity: str,\\n    action: str,\\n    target_type: str,\\n    target_id: str,\\n    target_hash: str,\\n    scope: str,\\n    reason: str,\\n    policy: dict,\\n    requested_authentication_method: str | None = None,\\n    authentication_adapter: LocalAuthenticationAdapter | None = None,\\n    seal_key_loader: Callable[[], bytes] | None = None,\\n    princip...[truncated 22372 chars]",
+    "requested_model": "claude-sonnet-5",
+    "result_uuid": "20e09065-cd21-452a-a546-d50c21886b3e",
+    "served_model": "claude-sonnet-5",
+    "served_model_canonical": "claude-sonnet-5",
+    "session_id": "542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f",
+    "status": "completed",
+    "stderr_excerpt": "",
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "termination_reason": "completed",
+    "timed_out": false,
+    "usage_normalized": {
+      "cost_usd": 0.38181,
+      "input_tokens": 41076,
+      "input_tokens_definition": "usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens (all three must be reported)",
+      "latency_ms": 179564,
+      "output_tokens": 21751
+    },
+    "usage_raw": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 41074,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 41074,
+      "cache_read_input_tokens": 0,
+      "fallback_credit": null,
+      "inference_geo": "global",
+      "input_tokens": 2,
+      "iterations": [
+        {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 41074,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 41074,
+          "cache_read_input_tokens": 0,
+          "input_tokens": 2,
+          "output_tokens": 21751,
+          "type": "message"
+        }
+      ],
+      "output_tokens": 21751,
+      "output_tokens_details": {
+        "thinking_tokens": 11744
+      },
+      "server_tool_use": {
+        "web_fetch_requests": 0,
+        "web_search_requests": 0
+      },
+      "service_tier": "standard",
+      "speed": "standard"
+    },
+    "wall_ms": 180890
+  },
+  "record_version": 1,
+  "route": {
+    "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+    "reviewer": {
+      "adapter": "claude_cli",
+      "binding_type": "demo_environment_profile",
+      "capability_class": "complex_implementation",
+      "executable": "/opt/node22/bin/claude",
+      "message": "complex_implementation -> anthropic/claude-opus-5-5 via claude_cli",
+      "model_id": "claude-opus-5-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    },
+    "status": "available",
+    "task_id": "DEMO-001",
+    "worker": {
+      "adapter": "claude_cli",
+      "binding_type": "initial_prior",
+      "capability_class": "standard_implementation",
+      "executable": "/opt/node22/bin/claude",
+      "message": "standard_implementation -> anthropic/claude-sonnet-5 via claude_cli",
+      "model_id": "claude-sonnet-5",
+      "model_version": "unpinned",
+      "provider": "anthropic",
+      "status": "available"
+    }
+  },
+  "scope_audit": {
+    "accepted": true,
+    "changes": [
+      {
+        "action": "write",
+        "bytes": 19438,
+        "path": "tools/agentctl/agentctl/commands/approve.py"
+      },
+      {
+        "action": "write",
+        "bytes": 2521,
+        "path": "tools/agentctl/tests/test_approve_output_containment.py"
+      }
+    ]
+  },
+  "started_at": "2026-11-04T06:44:51.311806Z",
+  "task_id": "DEMO-001",
+  "worktree_path": "agent-system/runtime/worktrees/DEMO-001/attempt-1"
+}

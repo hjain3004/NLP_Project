@@ -1,0 +1,91 @@
+diff --git a/tools/agentctl/agentctl/commands/approve.py b/tools/agentctl/agentctl/commands/approve.py
+index 5668307..c5c9140 100644
+--- a/tools/agentctl/agentctl/commands/approve.py
++++ b/tools/agentctl/agentctl/commands/approve.py
+@@ -244,13 +244,20 @@ def _validate_inputs(args: argparse.Namespace, root: Path, policy: dict) -> dict
+ 
+ 
+ def _contained_destination(root: Path, value: str) -> Path:
+-    """Return a lexical contained destination without following its final link."""
++    """Return a destination whose parent must really resolve inside the repository.
++
++    Containment is decided entirely on resolved paths so that an alias of an
++    ancestor directory (for example macOS ``/var`` versus ``/private/var``, or
++    a symlink to the repository itself) is accepted whenever it genuinely
++    reaches inside the repository.  The destination's own final component is
++    never resolved here, so a symlink standing in for the output file itself
++    is still caught below rather than silently followed.
++    """
+     candidate = Path(value).expanduser()
+     if not candidate.is_absolute():
+         candidate = root / candidate
+     destination = candidate.absolute()
+     try:
+-        destination.relative_to(root)
+         destination.parent.resolve(strict=False).relative_to(root.resolve())
+     except ValueError as exc:
+         raise ApprovalRejected(
+diff --git a/tools/agentctl/tests/test_approve_output_containment.py b/tools/agentctl/tests/test_approve_output_containment.py
+new file mode 100644
+index 0000000..b9b4477
+--- /dev/null
++++ b/tools/agentctl/tests/test_approve_output_containment.py
+@@ -0,0 +1,58 @@
++"""Behavioral coverage for _contained_destination's alias and symlink handling."""
++
++from __future__ import annotations
++
++import pathlib
++import tempfile
++import unittest
++
++from agentctl.approval import ApprovalRejected
++from agentctl.commands.approve import _contained_destination
++
++
++class ContainedDestinationAliasTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self._tempdir = tempfile.TemporaryDirectory()
++        self.addCleanup(self._tempdir.cleanup)
++        self.base = pathlib.Path(self._tempdir.name).resolve()
++        self.repo_root = self.base / "real-repo"
++        self.repo_root.mkdir()
++
++    def test_symlinked_ancestor_alias_is_accepted(self) -> None:
++        """An --out path reaching the repo through a symlinked ancestor must be accepted."""
++        alias = self.base / "alias-repo"
++        alias.symlink_to(self.repo_root)
++        destination = _contained_destination(self.repo_root, str(alias / "sub" / "out.json"))
++        self.assertEqual(
++            destination.parent.resolve(strict=False),
++            (self.repo_root / "sub").resolve(),
++        )
++
++    def test_symlink_inside_repo_pointing_outside_is_rejected(self) -> None:
++        """A symlink that lives inside the repo but resolves outside must still be rejected."""
++        outside = self.base / "outside"
++        outside.mkdir()
++        link = self.repo_root / "escape-link"
++        link.symlink_to(outside)
++        with self.assertRaises(ApprovalRejected) as raised:
++            _contained_destination(self.repo_root, str(link / "out.json"))
++        self.assertEqual(raised.exception.code, "approval_output_outside_repository")
++
++    def test_final_component_symlink_is_rejected(self) -> None:
++        """A destination whose final component is itself a symlink must be rejected."""
++        target = self.repo_root / "real-target.json"
++        target.write_text("{}", encoding="utf-8")
++        link = self.repo_root / "final-link.json"
++        link.symlink_to(target)
++        with self.assertRaises(ApprovalRejected) as raised:
++            _contained_destination(self.repo_root, str(link))
++        self.assertEqual(raised.exception.code, "approval_output_invalid")
++
++    def test_relative_path_resolves_against_repository_root(self) -> None:
++        """A relative --out path must still resolve against the repository root."""
++        destination = _contained_destination(self.repo_root, "nested/out.json")
++        self.assertEqual(destination, self.repo_root / "nested" / "out.json")
++
++
++if __name__ == "__main__":
++    unittest.main()

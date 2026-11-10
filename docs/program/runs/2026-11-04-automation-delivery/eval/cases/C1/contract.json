@@ -1,0 +1,35 @@
+{
+  "artifact_type": "task-contract",
+  "intent": {
+    "acceptance_behavior": [
+      "verify_candidate with no deterministic checks records passed=false with a reason and does not advance to review",
+      "integrate refuses a task whose contract has no checks, without moving the branch",
+      "`agentctl verify` drops sensitive environment variables at process start",
+      "verify and integrate refuse high/critical risk before any transition",
+      "new behavior is covered by tests that fail on the old code"
+    ],
+    "objective": "Close three gaps found by the final architecture audit: (F3) verification of a task with no deterministic checks must FAIL instead of passing vacuously and integration must also refuse such tasks; (F1a) `agentctl verify` must drop sensitive environment variables like `integrate` does; (F1b) verification and integration must refuse risky tasks (high/critical) because candidate checks run unsandboxed."
+  },
+  "permissions": {
+    "enforcement_class": "proposal_only",
+    "may_modify_tests": "task_owned_only"
+  },
+  "routing": {
+    "capability_class": "standard_implementation",
+    "risk": "low"
+  },
+  "scope": {
+    "prohibited_paths": [
+      "agent-system/schemas/**",
+      "agent-system/policies/**",
+      "agent-system/routing/**",
+      "AppleBooks/**"
+    ],
+    "writable_paths": [
+      "tools/agentctl/agentctl/scheduler.py",
+      "tools/agentctl/agentctl/integrate.py",
+      "tools/agentctl/agentctl/commands/verify.py",
+      "tools/agentctl/tests/**"
+    ]
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "artifact_type": "review-verdict",
+  "attempt_id": "DEMO-001-attempt-1",
+  "context_hash": "84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6",
+  "contract_hash": "df44a08a51438d3404022c947751271d03185324e61d91e067f95c5d82a40ef6",
+  "declared_base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "diff_hash": "dfe61b8ad43346ee24f868bca5efbf3b66cd9f97f0877a57c6df1183ec19615f",
+  "fencing_token": "d7576806c476a122648075e9f0993219ee717a259568202bb16f1ae85e68bfa7",
+  "findings": [
+    {
+      "blocking": true,
+      "file": "tools/agentctl/agentctl/commands/approve.py",
+      "finding_id": "F1",
+      "location": "_contained_destination return value; run() recover_output branch and approval_id issuance branch (destination.relative_to(config.repo_root))",
+      "observed_behavior": "The helper accepts alias paths but returns an unnormalized path. The agentctl approve command then fails with an uncaught ValueError, after authentication or after the file write, for exactly the input the task is meant to support.",
+      "reproducible_evidence": "_contained_destination returns `destination = candidate.absolute()`, which is the path as written and never resolved. With the lexical `destination.relative_to(root)` check removed, an alias input such as `<base>/alias-repo/sub/out.json` (alias-repo -> real-repo) now passes the check and is returned as `<base>/alias-repo/sub/out.json`. Every caller in run() then does `destination.relative_to(config.repo_root).as_posix()`. In the issuance path that is the `register(record, path=...)` argument, and in the recovery path it is the final print. `PurePath.relative_to` is purely lexical, so `<base>/alias-repo/sub/out.json`.relative_to(`<base>/real-repo`) raises ValueError, and run() does not catch it. Result: (a) during issuance with --approval-id, the human has already authenticated and the record has been sealed when the command dies with a traceback, so nothing is registered or written; (b) with --recover-output, `_write_exclusive_json` creates the file first and then the print raises ValueError, leaving a written file and a crashed command; (c) --preflight reports status ok for a path the real run cannot complete. The new test test_symlinked_ancestor_alias_is_accepted only checks `destination.parent.resolve()` on the helper's return value and never goes through the run() paths that use relative_to, so it misses this.",
+      "required_behavior": "Return a destination anchored under the resolved repository, e.g. `destination.parent.resolve(strict=False) / destination.name` (checking for a final-component symlink on that path), and compute the paths callers relate to the root against a consistently resolved root. Alias --out paths must then work end to end in the issuance, recovery and preflight paths.",
+      "required_outcome": "`agentctl approve ... --approval-id <uuid> --out <alias>/sub/out.json` (and the --recover-output form) completes, registering and printing the repository-relative path `sub/out.json`. A test exercises a caller-level path (e.g. relative_to on the returned destination, or run() with real local components) rather than only the helper's resolved parent.",
+      "reviewer_confidence": "high",
+      "severity": "important",
+      "violated_criterion": "Acceptance: an --out path that reaches the repository through a symlinked alias of an ancestor directory is accepted (agentctl approve command behavior, not only the helper)"
+    },
+    {
+      "blocking": false,
+      "file": "tools/agentctl/tests/test_approve_output_containment.py",
+      "finding_id": "F2",
+      "location": "test_symlinked_ancestor_alias_is_accepted",
+      "observed_behavior": "The test passes even though the command-level behavior is broken (see F1).",
+      "reproducible_evidence": "The assertion re-applies `.parent.resolve()` to the returned value, which is the same operation the implementation uses for its check. It never checks that the returned destination can be related to the repository root, which is what the command needs.",
+      "required_behavior": "Assert on the property callers rely on, e.g. `destination.relative_to(repo_root) == Path('sub/out.json')`.",
+      "required_outcome": "The alias test would fail against the current candidate and pass once the destination is normalized.",
+      "reviewer_confidence": "high",
+      "severity": "minor",
+      "violated_criterion": "AGENTS.md \u00a78: each new test must protect a named behavior; tests should exercise real behavior"
+    }
+  ],
+  "independence_attestation": {
+    "author_run_id": "24a2741d-defd-44c4-9a48-a0105aada1c6",
+    "author_session_id": "542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f",
+    "distinct": true
+  },
+  "lease_epoch": 1,
+  "lease_id": "3f3024f6-3afc-425b-b87f-bac875166024",
+  "review_id": "DEMO-001-attempt-1-review-1",
+  "reviewed_result_commit": "93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2",
+  "reviewer_model": "claude-opus-5-5",
+  "reviewer_provider": "anthropic",
+  "reviewer_role": "complex_implementation",
+  "reviewer_run_id": "f356e2ee-6873-4d74-b247-527bc5277f9d",
+  "reviewer_session_id": "0797b363-5503-44b9-9d87-9c8c2889d8d0",
+  "task_id": "DEMO-001",
+  "tree_hash": "dfc69059b7dbe39b0eadfbe028ab01e86d793208",
+  "verdict": "blocking_findings",
+  "verification_evidence_hash": "021fa72dae1db0d50691fdbfda237c47eb80d005e3cee29c951a7c6451d31d6a"
+}

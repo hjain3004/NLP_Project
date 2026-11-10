@@ -1,0 +1,153 @@
+# commands.log -- DEMO operator, automation delivery acceptance run (2026-11-04)
+# Format: "=== [label] start=<epoch> end=<epoch> exit=<rc>" then the command, stdout, stderr.
+# Setup (before the first logged command), run once by the operator, all exit 0:
+#   git clone --no-hardlinks /home/user/NLP_Project /home/user/delivery
+#   cd /home/user/delivery && git checkout -b delivery-main     # BASE = 2df58e85e8fc3b8db8346791f2795bc67f21ccd2
+#   git remote remove origin                                     # so nothing can be pushed from the delivery clone
+#   python3 <scratchpad>/gen_contracts.py <BASE>                 # writes agent-system/work/DELIVERY-DEMO/** (see contracts/)
+#   cd /home/user/NLP_Project && git worktree add -b claude/demo-evidence /home/user/wt/demo HEAD
+# Environment variables are not recorded in this file.
+
+=== [validate-wp] start=1793774661.053253193 end=1793774661.468282864 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl validate agent-system/work/DELIVERY-DEMO/work-package.json && python3 -m agentctl validate agent-system/work/DELIVERY-DEMO/tasks/DEMO-001.json && python3 -m agentctl validate agent-system/work/DELIVERY-DEMO/tasks/DEMO-002.json
+--- stdout
+valid: agent-system/work/DELIVERY-DEMO/work-package.json
+valid: agent-system/work/DELIVERY-DEMO/tasks/DEMO-001.json
+valid: agent-system/work/DELIVERY-DEMO/tasks/DEMO-002.json
+--- stderr
+
+=== [plan-validate-real-registry] start=1793774661.478212483 end=1793774661.642644095 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl plan validate agent-system/work/DELIVERY-DEMO/work-package.json
+--- stdout
+{"status":"validated","tasks":[{"context_hash":"84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6","task_id":"DEMO-001"},{"context_hash":"62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53","task_id":"DEMO-002"}],"work_package_id":"DELIVERY-DEMO"}
+--- stderr
+
+=== [ready-real-registry] start=1793774661.649990035 end=1793774661.818770863 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl ready --json
+--- stdout
+{"blocked":[],"ready":[{"capability_class":"standard_implementation","locks":[],"risk":"medium","task_id":"DEMO-001"},{"capability_class":"standard_implementation","locks":[],"risk":"low","task_id":"DEMO-002"}]}
+--- stderr
+
+=== [negative-control-run-DEMO-001] start=1793774666.674161954 end=1793774667.176377212 exit=3
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl run DEMO-001 --timeout 600 --max-budget-usd 1.5
+--- stdout
+{"message":"the policy-required reviewer class 'complex_implementation' cannot be routed (unsupported_provider): complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path. No lease is issued, because the candidate could never receive an independent review. Nothing is substituted.","outcome":"refused","route":{"message":"the policy-required reviewer class 'complex_implementation' cannot be routed (unsupported_provider): complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path. No lease is issued, because the candidate could never receive an independent review. Nothing is substituted.","reviewer":{"adapter":null,"binding_type":"initial_prior","capability_class":"complex_implementation","executable":null,"message":"complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path.","model_id":"gpt-5.6-terra","model_version":"unpinned","provider":"openai","status":"unsupported_provider"},"status":"reviewer_unavailable","task_id":"DEMO-001","worker":{"adapter":"claude_cli","binding_type":"initial_prior","capability_class":"standard_implementation","executable":"/opt/node22/bin/claude","message":"standard_implementation -> anthropic/claude-sonnet-5 via claude_cli","model_id":"claude-sonnet-5","model_version":"unpinned","provider":"anthropic","status":"available"}},"status":"reviewer_unavailable","task_id":"DEMO-001"}
+--- stderr
+agentctl run: refused (reviewer_unavailable): the policy-required reviewer class 'complex_implementation' cannot be routed (unsupported_provider): complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path. No lease is issued, because the candidate could never receive an independent review. Nothing is substituted.
+
+=== [negative-control-run-DEMO-002] start=1793774667.183475856 end=1793774667.583567491 exit=3
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl run DEMO-002 --timeout 600 --max-budget-usd 1.5
+--- stdout
+{"message":"the policy-required reviewer class 'complex_implementation' cannot be routed (unsupported_provider): complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path. No lease is issued, because the candidate could never receive an independent review. Nothing is substituted.","outcome":"refused","route":{"message":"the policy-required reviewer class 'complex_implementation' cannot be routed (unsupported_provider): complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path. No lease is issued, because the candidate could never receive an independent review. Nothing is substituted.","reviewer":{"adapter":null,"binding_type":"initial_prior","capability_class":"complex_implementation","executable":null,"message":"complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path.","model_id":"gpt-5.6-terra","model_version":"unpinned","provider":"openai","status":"unsupported_provider"},"status":"reviewer_unavailable","task_id":"DEMO-002","worker":{"adapter":"claude_cli","binding_type":"initial_prior","capability_class":"standard_implementation","executable":"/opt/node22/bin/claude","message":"standard_implementation -> anthropic/claude-sonnet-5 via claude_cli","model_id":"claude-sonnet-5","model_version":"unpinned","provider":"anthropic","status":"available"}},"status":"reviewer_unavailable","task_id":"DEMO-002"}
+--- stderr
+agentctl run: refused (reviewer_unavailable): the policy-required reviewer class 'complex_implementation' cannot be routed (unsupported_provider): complex_implementation is bound to provider 'openai' (model 'gpt-5.6-terra') and agentctl has no adapter for it. No other provider or model is substituted. Implement and exercise an adapter, or change the binding in agent-system/routing/capability-registry.json through the normal approval path. No lease is issued, because the candidate could never receive an independent review. Nothing is substituted.
+
+=== [negative-control-status] start=1793774667.590296273 end=1793774667.726577944 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":null,"events":1,"lease_epoch":0,"locks":[],"orphan_evidence_count":0,"state":"ready","task_id":"DEMO-001"},{"attempt":null,"events":1,"lease_epoch":0,"locks":[],"orphan_evidence_count":0,"state":"ready","task_id":"DEMO-002"}]}
+--- stderr
+
+=== [plan-validate-profile] start=1793774682.019172734 end=1793774682.174846121 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl plan validate agent-system/work/DELIVERY-DEMO/work-package.json
+--- stdout
+{"status":"validated","tasks":[{"context_hash":"84026949889f91462a66bb925750007471d6bc7f29b9e715c25ac0199ceb64a6","task_id":"DEMO-001"},{"context_hash":"62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53","task_id":"DEMO-002"}],"work_package_id":"DELIVERY-DEMO"}
+--- stderr
+
+=== [ready-profile] start=1793774682.181942149 end=1793774682.330422335 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl ready --json
+--- stdout
+{"blocked":[],"ready":[{"capability_class":"standard_implementation","locks":[],"risk":"medium","task_id":"DEMO-001"},{"capability_class":"standard_implementation","locks":[],"risk":"low","task_id":"DEMO-002"}]}
+--- stderr
+
+=== [run-DEMO-001] (background, concurrent) start=1793774690.784847487 end=1793774872.366705104 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl run DEMO-001 --timeout 600 --max-budget-usd 1.5 --export evidence/demo/run-records/export-run-DEMO-001.json
+--- stdout
+{"artifact_id":"0473cb0b-92bf-4031-b207-c285a8ba186e","attempt_id":"DEMO-001-attempt-1","base_commit":"2df58e85e8fc3b8db8346791f2795bc67f21ccd2","branch":"agentctl/DEMO-001/attempt-1","cli_result_uuid":"20e09065-cd21-452a-a546-d50c21886b3e","extra_models":[],"files_changed":[{"change_type":"modified","path":"tools/agentctl/agentctl/commands/approve.py"},{"change_type":"added","path":"tools/agentctl/tests/test_approve_output_containment.py"}],"outcome":"candidate","provider":"anthropic","provider_run_id":"24a2741d-defd-44c4-9a48-a0105aada1c6","requested_model":"claude-sonnet-5","result_commit":"93d1ddcc42bf5ef3bbb2b1e0c11d73873a8331a2","run_record":"agent-system/runtime/runs/DEMO-001/attempt-1.json","served_model":"claude-sonnet-5","session_id":"542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f","state":"candidate","task_id":"DEMO-001","usage":{"cost_usd":0.38181,"input_tokens":41076,"latency_ms":179564,"output_tokens":21751},"worktree":"agent-system/runtime/worktrees/DEMO-001/attempt-1"}
+--- stderr
+
+=== [run-DEMO-002] (background, concurrent) start=1793774690.785103860 end=1793774823.935558215 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl run DEMO-002 --timeout 600 --max-budget-usd 1.5 --export evidence/demo/run-records/export-run-DEMO-002.json
+--- stdout
+{"artifact_id":"24c3b768-310b-4c95-80b3-5604da977215","attempt_id":"DEMO-002-attempt-1","base_commit":"2df58e85e8fc3b8db8346791f2795bc67f21ccd2","branch":"agentctl/DEMO-002/attempt-1","cli_result_uuid":"1db267a1-0ac5-4366-ba2f-2229c1e52c56","extra_models":[],"files_changed":[{"change_type":"modified","path":"tools/agentctl/agentctl/context.py"},{"change_type":"added","path":"tools/agentctl/tests/test_context_runtime_exclusion.py"}],"outcome":"candidate","provider":"anthropic","provider_run_id":"23f9f58c-fb7d-4443-b239-e79f98987de2","requested_model":"claude-sonnet-5","result_commit":"6a682e461f75eebd733ccf5937bf2f85da9d31c8","run_record":"agent-system/runtime/runs/DEMO-002/attempt-1.json","served_model":"claude-sonnet-5","session_id":"4a40799b-877c-40b4-9ab1-994e499b0968","state":"candidate","task_id":"DEMO-002","usage":{"cost_usd":0.3650108,"input_tokens":69855,"latency_ms":131258,"output_tokens":19665},"worktree":"agent-system/runtime/worktrees/DEMO-002/attempt-1"}
+--- stderr
+
+=== [status-after-run] start=1793774886.692195777 end=1793774886.848352056 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":6,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"candidate","task_id":"DEMO-001"},{"attempt":1,"events":6,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"candidate","task_id":"DEMO-002"}]}
+--- stderr
+
+=== [verify-DEMO-001] start=1793774886.857289276 end=1793774887.945151133 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl verify DEMO-001
+--- stdout
+{"state":"independent_review","task_id":"DEMO-001","verification_evidence_hash":"021fa72dae1db0d50691fdbfda237c47eb80d005e3cee29c951a7c6451d31d6a"}
+--- stderr
+
+=== [verify-DEMO-002] start=1793774887.951548900 end=1793774889.057808343 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl verify DEMO-002
+--- stdout
+{"state":"independent_review","task_id":"DEMO-002","verification_evidence_hash":"94b44ef8b35e6f50b345d026bd58ba9f7e25f8de8ef59a97fe4f674b87952d72"}
+--- stderr
+
+=== [review-DEMO-001] (background, concurrent) start=1793774898.440163757 end=1793774922.876047409 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl review run DEMO-001 --timeout 600 --max-budget-usd 1.5 --export evidence/demo/run-records/export-review-DEMO-001.json
+--- stdout
+{"attempt_id":"DEMO-001-attempt-1","author_session_id":"542ffc44-e9f6-4f9a-8418-a0d7f6a68e1f","blocking_findings":1,"findings":2,"outcome":"reviewed","review_id":"DEMO-001-attempt-1-review-1","reviewer_model":"claude-opus-5-5","reviewer_role":"complex_implementation","reviewer_run_id":"f356e2ee-6873-4d74-b247-527bc5277f9d","reviewer_session_id":"0797b363-5503-44b9-9d87-9c8c2889d8d0","run_record":"agent-system/runtime/runs/DEMO-001/review-1.json","state":"repair_required","task_id":"DEMO-001","usage":{"cost_usd":0.248248,"input_tokens":25572,"latency_ms":23118,"output_tokens":2184},"verdict":"blocking_findings"}
+--- stderr
+
+=== [review-DEMO-002] (background, concurrent) start=1793774898.439091326 end=1793774915.576743453 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl review run DEMO-002 --timeout 600 --max-budget-usd 1.5 --export evidence/demo/run-records/export-review-DEMO-002.json
+--- stdout
+{"attempt_id":"DEMO-002-attempt-1","author_session_id":"4a40799b-877c-40b4-9ab1-994e499b0968","blocking_findings":0,"findings":2,"outcome":"reviewed","review_id":"DEMO-002-attempt-1-review-1","reviewer_model":"claude-opus-5-5","reviewer_role":"complex_implementation","reviewer_run_id":"932538c4-c5e7-4751-a842-6a20486dfed3","reviewer_session_id":"a55f420c-0f56-4eb6-b1bd-0be6f8a7985d","run_record":"agent-system/runtime/runs/DEMO-002/review-1.json","state":"integration_ready","task_id":"DEMO-002","usage":{"cost_usd":0.237456,"input_tokens":25908,"latency_ms":15631,"output_tokens":1510},"verdict":"no_blocking_findings"}
+--- stderr
+
+=== [status-after-review] start=1793774949.165915619 end=1793774949.333849475 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl status --json
+--- stdout
+{"tasks":[{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"repair_required","task_id":"DEMO-001"},{"attempt":1,"events":12,"lease_epoch":1,"locks":[],"orphan_evidence_count":0,"state":"integration_ready","task_id":"DEMO-002"}]}
+--- stderr
+
+=== [ready-after-review] start=1793774949.341404959 end=1793774949.497310993 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl ready --json
+--- stdout
+{"blocked":[],"ready":[]}
+--- stderr
+
+=== [integrate-1] start=1793774949.503573621 end=1793774950.298592207 exit=1
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"details":{"gates":[{"gate":"integration:candidate-commit-preserved","result":"pass"},{"descendants_cleared":true,"duration_ms":120,"exit_code":0,"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_runtime_exclusion.py","gate_isolation":"user_pid_namespace","left_processes":0,"reason":null,"result":"pass","stderr_bytes":101,"stderr_hash":"41cee9cc70f8e2902ff4277cf9577cbdf05c130cf7652490990fd48efa2e4859","stdout_bytes":0,"stdout_hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","timed_out":false},{"descendants_cleared":true,"duration_ms":169,"exit_code":1,"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py","gate_isolation":"user_pid_namespace","left_processes":0,"reason":"exit_nonzero","result":"fail","stderr_bytes":2094,"stderr_hash":"31952a3cdc84a413c36049a923dc21d46ff451ea2d491467bc2fcf8b111330b4","stdout_bytes":0,"stdout_hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","timed_out":false},{"descendants_cleared":true,"duration_ms":119,"exit_code":1,"gate":"PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_plan_loading.py","gate_isolation":"user_pid_namespace","left_processes":0,"reason":"exit_nonzero","result":"fail","stderr_bytes":6030,"stderr_hash":"72cc9f338a0a6dc7435dec669e4dc8f4b47a4a40454a1aeb7ccd10444517dd83","stdout_bytes":0,"stdout_hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","timed_out":false}],"integration_head":"2df58e85e8fc3b8db8346791f2795bc67f21ccd2","planned_commit":"6a682e461f75eebd733ccf5937bf2f85da9d31c8"},"integration_branch_head":null,"integrator_run_id":"integrator-run:c37e40bc-4bbf-4fa0-8216-8179ee94b022","message":"an affected gate failed on the resulting integration tree","outcome":"rejected","reason_code":"affected_check_failed","rejection_artifact":"integration-rejection:DEMO-002:ae554851-5c6f-46a2-9002-11e680ba7829","rejection_outcome":"repair_required","task_id":"DEMO-002","task_state":"integration_ready"}
+--- stderr
+agentctl: integrate: rejected: affected_check_failed
+
+=== [integrate-2] start=1793774973.382037776 end=1793774973.507660034 exit=3
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl integrate
+--- stdout
+{"integrator_run_id":"integrator-run:3496d4a0-0fd2-4b8e-9ae1-2de42399f8d9","outcome":"queue_empty","parked_without_new_evidence":{"DEMO-002":"affected_check_failed"},"reason_code":"queue_empty","waiting_on_dependencies":{}}
+--- stderr
+agentctl: integrate: queue_empty: queue_empty
+
+=== [events-export] start=1793775147.189661541 end=1793775147.293125681 exit=0
+$ cd /home/user/delivery && PYTHONPATH=tools/agentctl python3 -m agentctl events export --work-package DELIVERY-DEMO --out /home/user/wt/demo/docs/program/runs/2026-11-04-automation-delivery/evidence/demo/run-records/events-export.json
+--- stdout
+{"chain_hash":"48b6c846ecd8b1ee901eb6c9f57f4cacdf9cd0bf276bb3caca2051e80225693c","events":26}
+--- stderr
+
+# ---------------------------------------------------------------------------
+# Operator diagnostics after the integrate rejection (read-only; none of these changes agentctl state or any candidate).
+# Output files are in outputs/. Timestamps were not captured for these; they are not part of the timing figures.
+#  D1  git archive 2df58e8 and 6a682e4 into two .git-less temp dirs; in each:
+#      env -i PATH=/usr/bin:/bin HOME=<tmp> PYTHONPATH=tools/agentctl python3 -m unittest discover -s tools/agentctl/tests -t tools/agentctl -p test_context_staleness.py
+#      (and -p test_plan_loading.py, -p 'test_approval*.py' on the base copy)
+#      -> every one of these existing suites ERRORS at BASE as well as on the candidate: they run `git rev-parse --show-toplevel`
+#         (test_context_staleness.py:24, test_plan_loading.py:21, test_approval*.py) and exit 128 with no .git.  Not a candidate defect.
+#  D2  git worktree add --detach <tmp> 93d1ddcc... and 6a682e46...  (removed again afterwards), then:
+#      PoC for review finding F1 on the DEMO-001 candidate (outputs/diag-demo001-F1-poc.txt): _contained_destination accepts the alias path
+#      but returns it unresolved; destination.relative_to(repo_root), which approve.py's run() performs, raises ValueError.  Finding confirmed.
+#  D3  full agentctl suite on each candidate commit, first run concurrently (2 gate_runner timing tests failed on both: contention between the
+#      two simultaneous suites), then each alone and sequentially:
+#        outputs/diag-fullsuite-cand-00{1,2}.log               concurrent: 395 / 394 tests, failures=2 (test_gate_runner descendant tests), skipped=1
+#        outputs/diag-gate-runner-alone-cand-00{1,2}.log       test_gate_runner.py alone: 15 tests OK on both
+#        outputs/diag-fullsuite-sequential-cand-00{2,1}.log    DEMO-002 candidate: 394 tests OK (skipped=1) 183 s; DEMO-001 candidate: 395 tests OK (skipped=1) 179 s
+#      These run on the candidate commits in detached worktrees (not on an integration head: none exists).

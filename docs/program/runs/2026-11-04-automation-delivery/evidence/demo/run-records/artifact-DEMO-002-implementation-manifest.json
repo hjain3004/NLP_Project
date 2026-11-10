@@ -1,0 +1,51 @@
+{
+  "acceptance_criteria_addressed": [
+    "Discovery ignores every file under agent-system/runtime/ (worktrees, attempts, integration copies) and still finds the one real contract",
+    "Discovery behaves identically when no agent-system/runtime directory exists",
+    "When no contract exists for the task id outside the runtime directory, the existing PlanningError (task contract file was not found) is raised"
+  ],
+  "artifact_type": "implementation-manifest",
+  "assumptions": [
+    "agent-system/policies/product-data-boundary.json's schema only requires enforcement.allowed_context_roots and enforcement.excluded_by_default for ContextCompiler to construct, as used elsewhere in context.py; the test fixture supplies a minimal object matching that shape.",
+    "The glob skip is done via a simple relative-path prefix check (agent-system/runtime/) rather than the rule-matching helper used by _entry for allowed/excluded context roots, since the exclusion need here is simpler.",
+    "No existing test depends on the internal ordering/behavior of _find_task_contract beyond its return value and the PlanningError it raises when nothing is found, so the signature and exception behavior are left unchanged."
+  ],
+  "attempt_id": "DEMO-002-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "commands_executed": [],
+  "context_hash": "62b1ae0ba2455890539dad1d2a4e58c7df9817fa03129d1471b93f7e9b860a53",
+  "contract_hash": "c3bc6006ab0ca27d34701868eb7f1e906b1290ad4e45c48e135d7e29caf92ee4",
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "fencing_token": "hPzNMO0F44D4KRoMRGPbRe_M1Vmd6a7rzfH0L3GM4KQ",
+  "files_changed": [
+    {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/context.py"
+    },
+    {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_context_runtime_exclusion.py"
+    }
+  ],
+  "lease_epoch": 1,
+  "lease_id": "14f4d681-5800-498e-81e8-e72124efd32c",
+  "model": "claude-sonnet-5",
+  "model_version": "claude-sonnet-5",
+  "provider": "anthropic",
+  "result_commit": "6a682e461f75eebd733ccf5937bf2f85da9d31c8",
+  "task_id": "DEMO-002",
+  "termination_reason": "completed",
+  "unresolved_risks": [
+    "I could not run the test suite or verify the actual schema of agent-system/policies/product-data-boundary.json since I have no filesystem or execution access; if its required keys differ from what's assumed, the new test's ContextCompiler(root) construction could fail for reasons unrelated to the fix.",
+    "No prompt-injection attempts were found in the supplied materials; nothing required flagging under the data-vs-instruction policy in AGENTS.md."
+  ],
+  "usage": {
+    "cost_usd": 0.3650108,
+    "input_tokens": 69855,
+    "latency_ms": 131258,
+    "output_tokens": 19665
+  },
+  "worker_role": "standard_implementation"
+}

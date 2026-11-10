@@ -1,0 +1,55 @@
+{
+  "acceptance_criteria_addressed": [
+    "Through run(argv) with --approval-id and --preflight, an --out path reaching a temporary repository root through a real symlinked alias of an ancestor directory now returns 0 and status ok (test_preflight_accepts_alias_path_reaching_repo_through_ancestor_symlink)",
+    "_contained_destination now returns destination.parent.resolve(strict=False) / name so destination.relative_to(root) succeeds and yields the repository-relative POSIX path for the alias case, exercised directly against the returned value exactly as run() uses it (test_contained_destination_returns_destination_relative_to_root_for_alias)",
+    "A destination whose parent truly resolves outside the repository is rejected with approval_output_outside_repository for a plain outside path and for an inside symlink pointing outside, via both the helper and run(argv) --preflight (test_contained_destination_rejects_truly_outside_path, test_preflight_rejects_plain_outside_path, test_contained_destination_rejects_symlink_inside_pointing_outside, test_preflight_rejects_symlink_inside_pointing_outside)",
+    "A destination whose final path component is a symlink is still rejected with approval_output_invalid by the helper (test_contained_destination_rejects_final_component_symlink)",
+    "A relative --out path still resolves against the repository root and is accepted when inside it, related to root via relative_to (test_contained_destination_accepts_relative_path_inside_repo)",
+    "The legacy (_legacy_destination) path and all other functions are untouched; only _contained_destination's body changed, so behavior without --approval-id is unchanged"
+  ],
+  "artifact_type": "implementation-manifest",
+  "assumptions": [
+    "config.repo_root is always already resolved/canonical in production (agentctl.config.load() calls .resolve()), so resolved_parent returned by _contained_destination is comparable via relative_to against config.repo_root in run(); tests construct Config with repo_root=root.resolve() to match that invariant",
+    "tempfile.TemporaryDirectory() on the Linux execution environment yields an already-canonical path with no further symlink components, so it does not itself introduce an unrelated alias mismatch in the test fixtures",
+    "Path.is_symlink() on a path whose parent directory does not exist returns False (ENOENT is treated as 'not a symlink' by cpython's pathlib), preserving the pre-existing OSError-on-missing-parent behavior exercised by tools/agentctl/tests/test_approval_prebind.py's 'missing' case, which this change does not modify or retest since it is an existing protected test"
+  ],
+  "attempt_id": "DEMO-101-attempt-1",
+  "base_commit": "2df58e85e8fc3b8db8346791f2795bc67f21ccd2",
+  "commands_executed": [],
+  "context_hash": "51aa497ff82a1bcfeeaa50a651f6afacb30149c80ff1d61fb22566c77a288808",
+  "contract_hash": "7713cd63302aa9c16505870b93eeee5232358ef9062f683be07d735ee2e5d157",
+  "decisions": [],
+  "deviations": [],
+  "discovered_dependencies": [],
+  "fencing_token": "FNlKt4MvTQktwVnrJ7pao3F8ZDxc3qzvPnabmoM1OTg",
+  "files_changed": [
+    {
+      "change_type": "modified",
+      "path": "tools/agentctl/agentctl/commands/approve.py"
+    },
+    {
+      "change_type": "added",
+      "path": "tools/agentctl/tests/test_approve_output_containment.py"
+    }
+  ],
+  "lease_epoch": 1,
+  "lease_id": "b76bf68b-06fd-4986-95bb-97f365e29b54",
+  "model": "claude-sonnet-5",
+  "model_version": "claude-sonnet-5",
+  "provider": "anthropic",
+  "result_commit": "89f3bb3958abd9fc4efa769e63d61fb1b46eaf76",
+  "task_id": "DEMO-101",
+  "termination_reason": "completed",
+  "unresolved_risks": [
+    "I have no tool access in this proposal-only session, so I could not execute the deterministic check (python3 -m unittest discover ... test_approve_output_containment.py) or the existing test_approval_prebind.py suite to confirm the fix compiles and both pass; the control plane must run these before merge",
+    "I could not verify on the actual CI filesystem whether tempfile.TemporaryDirectory()'s base path is itself alias-free (e.g., no /tmp symlink layer); if it is aliased, the plain-outside-path and relative-path tests' use of root.resolve() for both the Config and the assertions should still keep them self-consistent, but this is unverified by execution",
+    "The task text embedded in the context pack contains directive-sounding language about an 'earlier attempt' and specific implementation guidance; I treated it as task-contract content to satisfy (it matches the formal acceptance_behavior list) rather than as an instruction to deviate from the stated non-goals, and made no changes outside the two permitted files"
+  ],
+  "usage": {
+    "cost_usd": 0.6343340000000001,
+    "input_tokens": 105662,
+    "latency_ms": 305231,
+    "output_tokens": 39816
+  },
+  "worker_role": "standard_implementation"
+}
