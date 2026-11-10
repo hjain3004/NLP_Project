@@ -13,7 +13,7 @@ from unittest import mock
 
 from agentctl.approval import ApprovalManager, ApprovalRejected, create_approval
 from agentctl.errors import InvalidArtifact, PermissionViolation
-from agentctl.gate import GateEvaluator, ingest_audit, register_audit_dispatch
+from agentctl.gate import GateEvaluator, ingest_audit, register_audit_dispatch, seal_audit_dispatch
 from agentctl.hashing import sha256_hex, sha256_of_file, sha256_of_json
 from agentctl.store import EventStore
 
@@ -1400,13 +1400,17 @@ class AuditTests(unittest.TestCase):
             log.write_text("author_session_id: authored-session\n")
             store = EventStore(directory / "runtime.sqlite3", repository_root=self.root)
             audit = self._audit()
-            register_audit_dispatch(store, self._dispatch(audit), source_path="test-assignment.json")
+            register_audit_dispatch(
+                store, seal_audit_dispatch(self._dispatch(audit), b"g" * 32),
+                source_path="test-assignment.json", key=b"g" * 32,
+            )
             result = ingest_audit(
                 "G0",
                 audit,
                 construction_log=log,
                 store=store,
                 repository_root=self.root,
+                dispatch_key=b"g" * 32,
             )
             self.assertEqual(result["audit_id"], "AUDIT-1")
             self.assertEqual(store.scalar("SELECT COUNT(*) FROM artifacts"), 2)
@@ -1417,10 +1421,16 @@ class AuditTests(unittest.TestCase):
             log = directory / "CONSTRUCTION-LOG.md"
             log.write_text("author_session_id: authored-session\n")
             store = EventStore(directory / "runtime.sqlite3", repository_root=self.root)
+            audit = self._audit()
+            with self.assertRaises(PermissionViolation):
+                register_audit_dispatch(
+                    store, self._dispatch(audit), source_path="forged.json", key=b"g" * 32
+                )
             with self.assertRaises(PermissionViolation):
                 ingest_audit(
-                    "G0", self._audit(), construction_log=log, store=store,
+                    "G0", audit, construction_log=log, store=store,
                     repository_root=self.root,
+                    dispatch_key=b"g" * 32,
                 )
 
 

@@ -26,7 +26,10 @@ def run(argv: list[str]) -> int:
             source = path.relative_to(config.repo_root).as_posix()
         except ValueError:
             source = str(path)
-        result = register_audit_dispatch(EventStore(), assignment, source_path=source)
+        result = register_audit_dispatch(
+            EventStore(), assignment, source_path=source,
+            key=config.seal_key_path.read_bytes(),
+        )
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
         return 0
     if len(argv) != 3 or argv[0] != "ingest":
@@ -47,6 +50,7 @@ def run(argv: list[str]) -> int:
         store=EventStore(),
         source_path=source,
         repository_root=config.repo_root,
+        dispatch_key=config.seal_key_path.read_bytes(),
     )
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0

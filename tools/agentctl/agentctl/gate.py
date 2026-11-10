@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import hashlib
+import hmac
 import json
 import os
 import sqlite3
@@ -22,7 +24,7 @@ from .routing import load_registry
 from .store import EventStore
 from .validate import validate_artifact
 
-__all__ = ["GateEvaluator", "ingest_audit", "register_audit_dispatch"]
+__all__ = ["GateEvaluator", "ingest_audit", "register_audit_dispatch", "seal_audit_dispatch"]
 
 _G0_CLOSURE_PATHS = frozenset(
     {
@@ -47,6 +49,21 @@ def _timestamp() -> str:
 
 _AUDIT_DISPATCH_TYPE = "architecture-audit-dispatch"
 _AUDIT_OPERATIONAL_ROLE = "architectural_auditor"
+_AUDIT_DISPATCH_SEAL = "control_plane_seal"
+
+
+def seal_audit_dispatch(assignment: Mapping[str, Any], key: bytes) -> dict[str, Any]:
+    """Seal a dispatch in the controller boundary before it enters runtime state."""
+    if not isinstance(key, bytes) or not key:
+        raise ValueError("audit dispatch seal key must be nonempty bytes")
+    result = dict(assignment)
+    result.pop(_AUDIT_DISPATCH_SEAL, None)
+    result[_AUDIT_DISPATCH_SEAL] = hmac.new(
+        key,
+        json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return result
 
 
 def _parse_audit_time(value: object, *, field: str) -> dt.datetime:
@@ -62,7 +79,7 @@ def _parse_audit_time(value: object, *, field: str) -> dt.datetime:
 
 
 def _audit_dispatch_binding(
-    assignment: Mapping[str, Any], *, root: Path, now: dt.datetime | None = None
+    assignment: Mapping[str, Any], *, root: Path, key: bytes, now: dt.datetime | None = None
 ) -> dict[str, Any]:
     required = (
         "artifact_type", "dispatch_id", "audit_id", "task_id", "attempt_id",
@@ -70,13 +87,18 @@ def _audit_dispatch_binding(
         "audited_tree_hash", "capability_class", "operational_role", "auditor_role", "auditor_provider",
         "auditor_model", "auditor_session_id", "auditor_run_id", "identity_evidence_ref",
         "identity_evidence_hash", "author_identities", "unknown_author_identities",
-        "state", "issued_at", "expires_at",
+        "state", "issued_at", "expires_at", _AUDIT_DISPATCH_SEAL,
     )
     missing = [field for field in required if field not in assignment]
     if missing:
         raise PermissionViolation("audit dispatch evidence is incomplete", missing=missing)
     if assignment["artifact_type"] != _AUDIT_DISPATCH_TYPE:
         raise PermissionViolation("audit dispatch evidence has the wrong artifact type")
+    unsigned = dict(assignment)
+    supplied_seal = unsigned.pop(_AUDIT_DISPATCH_SEAL, None)
+    expected_seal = seal_audit_dispatch(unsigned, key)[_AUDIT_DISPATCH_SEAL]
+    if not isinstance(supplied_seal, str) or not hmac.compare_digest(supplied_seal, expected_seal):
+        raise PermissionViolation("audit dispatch is not sealed by the control plane")
     if assignment["state"] != "active":
         raise PermissionViolation("audit dispatch assignment is not active", state=assignment["state"])
     if (
@@ -126,10 +148,10 @@ def _audit_dispatch_binding(
 
 
 def register_audit_dispatch(
-    store: EventStore, assignment: Mapping[str, Any], *, source_path: str = ""
+    store: EventStore, assignment: Mapping[str, Any], *, source_path: str = "", key: bytes
 ) -> dict[str, Any]:
     """Record one controller-owned, identity-bound manual audit assignment."""
-    binding = _audit_dispatch_binding(assignment, root=store.repository_root)
+    binding = _audit_dispatch_binding(assignment, root=store.repository_root, key=key)
     current_head = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=store.repository_root, text=True
     ).strip()
@@ -146,6 +168,13 @@ def register_audit_dispatch(
     )
 
     def mutation(connection: sqlite3.Connection) -> dict[str, Any]:
+        existing = connection.execute(
+            "SELECT artifact_id FROM artifacts WHERE artifact_type = ? AND integrable = 1 "
+            "AND json_extract(payload_json, '$.audit_id') = ?",
+            (_AUDIT_DISPATCH_TYPE, binding["audit_id"]),
+        ).fetchone()
+        if existing:
+            raise PermissionViolation("an active controller dispatch already exists for this audit")
         connection.execute(
             "INSERT INTO artifacts(artifact_id, artifact_type, task_id, attempt_id, content_hash, path, integrable, payload_json) "
             "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
@@ -971,6 +1000,7 @@ def ingest_audit(
     store: EventStore | None = None,
     source_path: str = "",
     repository_root: str | os.PathLike[str] | None = None,
+    dispatch_key: bytes | None = None,
 ) -> dict[str, Any]:
     """Reject construction authors and optionally persist an architecture audit."""
     if audit.get("artifact_type") != "architecture-audit" or audit.get("gate_id") != gate_id:
@@ -1074,7 +1104,8 @@ def ingest_audit(
             )
     if store is not None:
         dispatch_rows = store.rows(
-            "SELECT payload_json FROM artifacts WHERE artifact_type = ? AND integrable = 1",
+            "SELECT payload_json FROM artifacts WHERE artifact_type = ? AND integrable = 1 "
+            "ORDER BY rowid DESC",
             (_AUDIT_DISPATCH_TYPE,),
         )
         assignments = [
@@ -1084,8 +1115,10 @@ def ingest_audit(
         ]
         if not assignments:
             raise PermissionViolation("architecture audit has no trusted controller dispatch assignment")
+        if dispatch_key is None:
+            raise PermissionViolation("controller dispatch verification key is required")
         assignment = _audit_dispatch_binding(
-            assignments[-1], root=Path(repository_root or store.repository_root)
+            assignments[0], root=Path(repository_root or store.repository_root), key=dispatch_key
         )
         for field in (
             "audit_id", "gate_id", "pass_id", "auditor_role", "auditor_provider", "auditor_model",
