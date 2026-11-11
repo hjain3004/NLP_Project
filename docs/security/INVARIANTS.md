@@ -1,21 +1,14 @@
 # CashBooks Release-Blocking Invariants
 
-**Status:** Level 1 authority. Human-approved at G0.
+**Status:** Active. This file is the single authoritative home of the invariants.
 **Written:** P0 Task 5, 2026-09-01.
-**Approval binding:** the SHA-256 of this file is sealed by the G0 scope approval.
 
 Twenty-six properties. Each is release-blocking: a build that violates one does not ship,
 regardless of what else works.
 
-This catalogue has three homes that must agree exactly — this file,
-`agent-system/policies/invariants.json`, and `AGENTS.md` §3. A set-equality check enforces
-that in P0 Task 7 and again at the final verification. **Where the prose here disagrees with
-the JSON, the JSON governs** and this file is the defect (see `docs/DOCUMENT_AUTHORITY.md`,
-level 1b).
-
-`Protected test` is `unassigned` throughout at P0. Oracles are written at P2-H, and each
-entry's owning test is recorded then. An invariant with no protected test is an intention;
-an invariant with one is a guarantee.
+`AGENTS.md` repeats the invariant statements for workers; this file governs.
+Protected tests are assigned as each invariant is implemented through the milestones in
+`docs/ENGINE_BUILD_PLAN.md`. An invariant with no protected test remains an intention.
 
 ## Financial
 
@@ -65,13 +58,11 @@ an invariant with one is a guarantee.
 
 ## Changing one of these
 
-Any change requires human approval — `change_requires_human_approval` is `true` for all
-twenty-six in the policy file. A change is a separate task with explicit rationale, stronger
-independent review, and a control-plane hash update. Protected tests belonging to an
-invariant may not be modified by the task whose implementation they judge.
+Any change requires the owner's explicit decision in a dedicated pull request with
+rationale and independent review. Protected tests belonging to an invariant may not be
+weakened, renamed, skipped, or removed in a feature pull request.
 
 ## Related
 
-- `agent-system/policies/invariants.json` — the machine-enforced form (governs)
-- `AGENTS.md` §3 — the worker-facing statement
+- `AGENTS.md` — the worker-facing statement
 - `docs/security/PRIVACY_BOUNDARY.md` — the two privacy boundaries and why they differ

@@ -6,7 +6,7 @@ ADR-0003 — Bounded standard-library schema validation
 
 ## Status
 
-status: accepted
+status: superseded by ADR-0006
 
 ## Context
 

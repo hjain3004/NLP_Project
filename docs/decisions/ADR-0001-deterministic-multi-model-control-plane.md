@@ -6,7 +6,7 @@ ADR-0001 — Deterministic multi-model control plane
 
 ## Status
 
-status: accepted
+status: superseded by ADR-0006
 
 Accepted 2026-08-31 with the canonical engineering design; recorded here 2026-09-01.
 

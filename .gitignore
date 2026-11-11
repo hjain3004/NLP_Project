@@ -26,13 +26,6 @@ docs/money1.md
 docs/silo.md
 docs/22365_19_Agents_v8.md
 
-# Control-plane runtime state (never authoritative; rebuildable from Git artifacts)
-agent-system/runtime/
-agent-system/work/**/dispatch/
-*.sqlite3
-*.sqlite3-wal
-*.sqlite3-shm
-
 # Python development tooling
 __pycache__/
 *.py[cod]

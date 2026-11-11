@@ -6,7 +6,7 @@ ADR-0002 — Python development CLI beside a Swift product
 
 ## Status
 
-status: accepted
+status: superseded by ADR-0006
 
 ## Context
 

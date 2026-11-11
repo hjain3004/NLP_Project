@@ -1,22 +1,12 @@
 # CashBooks Active Scope
 
-**Status:** Level 1 authority. Human-approved at G0.
+**Status:** Active product scope; Milestone 0 changes approved by owner merge.
 **Written:** P0 Task 5, 2026-09-01.
-**Approval binding:** the SHA-256 of this file is recorded in
-`agent-system/work/P0/gates/G0-scope-statement.json` and sealed by the G0 scope approval.
-Editing this file invalidates that approval.
 
 ## What is authorized
 
-One program: the **headless local-intelligence engine**, from P0 through gate G3.
-
-```text
-P0  Multi-model control plane            → G0
-P1  Repository, naming, build foundation → G1
-P2  Contract and oracle freeze           → G2
-P3  Parallel subsystem implementation    → G3-B
-                                           G3-L  (additive live-model claim)
-```
+One program: the **headless local-intelligence engine**, built through the milestones in
+`docs/ENGINE_BUILD_PLAN.md`, ending at G3-B with the additive G3-L live-model claim.
 
 Nothing beyond G3 is authorized by this document. The user experience, the recruiter
 release, Plaid, a backend, a Share Extension, and broader accounting each require a new
@@ -50,26 +40,19 @@ behaviour become observable *before* anyone designs screens around imagined vers
 exists because the development machine can run the model and the phone in question cannot.
 
 **visionOS is removed from the milestone-one support matrix.** The generated Xcode project
-lists it; P1-B removes it. It may be reconsidered only after the recruiter release, and only
-with an explicit product reason. Carrying a third platform through P1–P3 costs build matrix,
-test matrix, and review attention, and buys nothing the milestone needs.
+lists it; app-shell changes are deferred by the engine build plan. It may be reconsidered
+only after the recruiter release, and only with an explicit product reason. Carrying a third
+platform through the engine milestones costs build matrix, test matrix, and review attention,
+and buys nothing the milestone needs.
 
 The current milestone does **not** claim a complete user product on either platform. It
 proves the local engine behind the future iOS experience.
 
 ## What "done" means at each gate
 
-Gate conditions are defined in `docs/program/PHASE_GATES.md`, generated from
-`agent-system/work/**/gates/*-criteria.json`. They are not restated here, because a gate
-condition with two homes is a gate condition with two answers.
+The implementation milestones and their demonstrations are defined in
+`docs/ENGINE_BUILD_PLAN.md`.
 
-In summary:
-
-- **G0** — a deterministic engineering control plane exists and has been exercised.
-- **G1** — the repository builds as CashBooks on iOS and macOS, with `CashBooksCore` compiling
-  and testing independently and its import boundary enforced.
-- **G2** — shared contracts and protected test oracles are frozen; after this, an interface
-  change is a replanning event rather than an incidental edit.
 - **G3-B** — the full headless pipeline runs on synthetic fixtures, with persistence,
   cancellation, privacy, and fallback all evidenced, and Foundation Models integration tested
   against fakes.
@@ -83,8 +66,6 @@ What may be said about this project is bounded by gate, and the boundary is not 
 it is the difference between a defensible engineering claim and an overclaim a reviewer can
 puncture in one question.
 
-At G0: an engineering control plane exists. No part of the product works yet.
-
 At G3-B: a headless local-intelligence engine is implemented and deterministically tested,
 including a Foundation Models adapter tested against fake sessions. Not that live Foundation
 Models is supported. Not that a finished app exists.
@@ -92,8 +73,7 @@ Models is supported. Not that a finished app exists.
 At G3-L: live Foundation Models compatibility is evidenced on the named configuration, with
 its limitations stated.
 
-The full statement lives in `docs/program/ROADMAP.md` and binds every README line, resume
-line, demo script, and conversation.
+This claims discipline binds every README line, resume line, demo script, and conversation.
 
 ## Related
 
