@@ -6,8 +6,7 @@ ADR-0005 — Symmetric approval seal at Level 1
 
 ## Status
 
-status: proposed
-
+status: superseded by ADR-0006
 ## Context
 
 Human authorization in this system is a typed record bound to an exact target hash, with a
@@ -86,6 +85,7 @@ Level 1 implementations.
 ## Required approvals
 
 Human approval, as an invariant-adjacent security decision. Recorded at G0.
+Approval artifact: `agent-system/work/P0/approvals/ADR-0005-acceptance.json` (approval_id `f2e48068-d473-4f1d-9046-a72f3303e9ec`).
 
 ## References
 

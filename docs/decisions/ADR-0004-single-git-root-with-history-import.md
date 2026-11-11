@@ -6,7 +6,7 @@ ADR-0004 — Single Git root with history import
 
 ## Status
 
-status: accepted
+status: superseded by ADR-0006
 
 ## Context
 

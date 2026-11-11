@@ -1,14 +1,13 @@
 # CashBooks Non-Goals
 
-**Status:** Level 1 authority. Human-approved at G0.
+**Status:** Active. This file is the single home of the non-goals.
 **Written:** P0 Task 5, 2026-09-01.
-**Approval binding:** the SHA-256 of this file is sealed by the G0 scope approval.
 
 These are not "later" in the sense of "soon" or "if there's time". Each is **blocked** for the
 authorized program, and unblocking one requires a new product decision, a written design, an
 implementation plan, and human approval — not a worker deciding it would be easy.
 
-A task contract that requires any of these is mis-planned. Say so and stop.
+A milestone slice that requires any of these is mis-planned. Say so and stop.
 
 ## Blocked for the active program
 
@@ -57,9 +56,9 @@ product yet.
 **Any recruiter-facing claim of a finished product.** G3 produces a verified headless engine.
 Describing it as a shipped app is not an exaggeration to be walked back later — it is a claim
 a competent interviewer will test, and failing that test costs more than the claim ever
-bought. See the claims discipline in `docs/program/ROADMAP.md`.
+bought. See the claims discipline in `docs/product/ACTIVE_SCOPE.md`.
 
 ## Related
 
 - `docs/product/ACTIVE_SCOPE.md` — what *is* authorized
-- `docs/program/ROADMAP.md` — the deferred programs and what each would need
+- `docs/ENGINE_BUILD_PLAN.md` — the implementation milestones

@@ -1,13 +1,12 @@
 # CashBooks Concurrency Decisions
 
-**Status:** Level 3 authority.
+**Status:** Active engine architecture.
 **Written:** P0 Task 5, 2026-09-01.
 
-This records an architectural decision, not a signature. The binding Swift signature is frozen at P2 against a real interface hash and may differ in spelling; a divergence in spelling is not a defect, a divergence in meaning is.
+This records an architectural decision, not a signature. The binding Swift signature is frozen at Milestone 1B and may differ in spelling; a divergence in spelling is not a defect, a divergence in meaning is.
 
-This file exists in P0 — unlike the other architecture documents, which move to P1 — because
-P1 makes structural decisions that these constrain. Without it written down, the platform
-migration would be free to pick an actor model by accident.
+These decisions constrain the package structure and actor boundaries in the engine build
+milestones.
 
 ## Ownership
 
@@ -49,7 +48,7 @@ with evidence provenance, and request confirmation authorization through a trust
 boundary. It may not call PDFKit, Vision, Foundation Models, or SwiftData directly.
 
 Isolation choices *inside* a future client are a decision for the UI program. They are not a
-G1 or G3 gate, and nothing here constrains them.
+condition of the headless engine milestones, and nothing here constrains them.
 
 ## Cancellation
 
@@ -69,9 +68,9 @@ SwiftData model instances never do. `CashBooksCore` itself compiles without Foun
 Models, PDFKit, Vision, SwiftUI, SwiftData, or networking, which is enforced by a
 forbidden-import check rather than by convention. (PLAT-01)
 
-## What P1 must not do
+## What structural work must not do
 
-P1 sets the platform matrix and the project's actor defaults. It may not:
+Structural work sets the platform matrix and the project's actor defaults. It may not:
 
 - adopt a default isolation that forces framework objects across actors;
 - introduce a shared mutable document cache;
