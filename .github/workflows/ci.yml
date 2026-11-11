@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main, product/engine]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+      - name: Check engine package
+        run: make check

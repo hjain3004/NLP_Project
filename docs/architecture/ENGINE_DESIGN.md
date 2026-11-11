@@ -425,4 +425,3 @@ stays open.
 
 Neither G3-B nor G3-L proves product usability,
 visual quality, accessibility presentation, or recruiter-demo readiness.
-
